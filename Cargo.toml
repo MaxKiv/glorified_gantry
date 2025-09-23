@@ -1,0 +1,10 @@
+[workspace]
+members = [
+    "gantry_nanotec_canopen",
+    "gantry_cia402",
+    "gantry_ros2",
+    "gantry_gui",
+    "gantry_demo",
+]
+
+resolver = "2"
