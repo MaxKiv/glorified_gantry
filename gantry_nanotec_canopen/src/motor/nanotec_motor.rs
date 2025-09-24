@@ -4,7 +4,7 @@ use crate::{
     error::MotorError,
     motor::manager::MotorManager,
     od::ObjectDictionary,
-    pdo::{PdoMapping, calculate_pdo_index_offset},
+    pdo::mapping::{PdoMapping, PdoType, calculate_pdo_index_offset},
 };
 use anyhow::Result;
 use oze_canopen::sdo_client::SdoClient;
@@ -65,9 +65,24 @@ impl<'a> NanotecMotor<'a> {
         todo!();
     }
 
-    /// Configure given PDO mapping
+    /// Configure the devicde with the given set of PDO mappings
+    pub async fn configure_pdo_mappings(&self, pdo_mappings: &[&PdoMapping<'_>]) -> Result<()> {
+        trace!("configure_pdo_mappings for nodeId {}", self.node_id);
+        for (mapping_number, pdo_mapping) in pdo_mappings.iter().enumerate() {
+            self.set_pdo_mapping(pdo_mapping, mapping_number as u8)
+                .await?;
+        }
+
+        Ok(())
+    }
+
+    /// Apply the given PDO mapping to the device
     /// This follows steps listed at page 118 of PD4C_CANopen_Technical_Manual_v3.3
-    pub async fn set_pdo_mapping(&self, pdo_mapping: &PdoMapping<'_>) -> Result<()> {
+    async fn set_pdo_mapping(
+        &self,
+        pdo_mapping: &PdoMapping<'_>,
+        mapping_number: u8,
+    ) -> Result<()> {
         trace!(
             "set_pdo_mapping for nodeId {} to {:?}",
             self.node_id, pdo_mapping
@@ -75,13 +90,13 @@ impl<'a> NanotecMotor<'a> {
 
         // 1. Deactivate the PDO by setting the Valid Bit (bit 31) of subindex 01h of the corresponding communication parameter (e.g., 1400h:01h) to "1".
         let communication_index = match pdo_mapping.kind {
-            crate::pdo::PdoType::RPDO => calculate_pdo_index_offset(
+            PdoType::RPDO => calculate_pdo_index_offset(
                 ObjectDictionary::RPDO_COMMUNICATION_PARAMETER_BASE_INDEX,
-                pdo_mapping.number,
+                mapping_number,
             ),
-            crate::pdo::PdoType::TPDO => calculate_pdo_index_offset(
+            PdoType::TPDO => calculate_pdo_index_offset(
                 ObjectDictionary::TPDO_COMMUNICATION_PARAMETER_BASE_INDEX,
-                pdo_mapping.number,
+                mapping_number,
             ),
         };
         trace!(
@@ -99,13 +114,13 @@ impl<'a> NanotecMotor<'a> {
 
         // 2. Deactivate the mapping by setting subindex 00h of the corresponding mapping parameter to \"0\".,
         let mapping_index = match pdo_mapping.kind {
-            crate::pdo::PdoType::RPDO => calculate_pdo_index_offset(
+            PdoType::RPDO => calculate_pdo_index_offset(
                 ObjectDictionary::RPDO_MAPPING_PARAMETER_BASE_INDEX,
-                pdo_mapping.number,
+                mapping_number,
             ),
-            crate::pdo::PdoType::TPDO => calculate_pdo_index_offset(
+            PdoType::TPDO => calculate_pdo_index_offset(
                 ObjectDictionary::TPDO_MAPPING_PARAMETER_BASE_INDEX,
-                pdo_mapping.number,
+                mapping_number,
             ),
         };
         trace!(
@@ -141,7 +156,7 @@ impl<'a> NanotecMotor<'a> {
         trace!(
             "4. Activate the mapping by writing the number of objects that are to be mapped in subindex 00h of the corresponding mapping parameter (e.g., 1600h:00h)."
         );
-        let data = [pdo_mapping.number];
+        let data = [pdo_mapping.mappings.len() as u8];
         self.sdo
             .lock()
             .await

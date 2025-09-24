@@ -9,7 +9,7 @@ use oze_canopen::{
 };
 use tracing::*;
 
-use crate::{error::MotorError, motor::nanotec_motor::NanotecMotor};
+use crate::{error::MotorError, motor::nanotec_motor::NanotecMotor, pdo::mapping::PdoMapping};
 
 const DEFAULT_BAUDRATE: u32 = 1_000_000;
 const DEFAULT_SYNC_PERIOD: Duration = Duration::from_millis(10);
@@ -63,7 +63,12 @@ impl MotorManager {
         motor.parametrize().await?;
 
         trace!("Configure PDO for motor {node_id}");
-        motor.configure_pdo().await?;
+        motor
+            .configure_pdo_mappings(PdoMapping::CUSTOM_RPDOS)
+            .await?;
+        motor
+            .configure_pdo_mappings(PdoMapping::CUSTOM_TPDOS)
+            .await?;
 
         Ok(motor)
     }

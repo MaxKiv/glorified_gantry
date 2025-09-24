@@ -26,26 +26,28 @@ pub struct ObjectDictionary {}
 
 impl ObjectDictionary {
     // General
-
     pub const CONTROL_WORD: ODEntry = ODEntry::new(0x6040, 0x0);
-
     pub const STATUS_WORD: ODEntry = ODEntry::new(0x6041, 0x0);
 
     /// Heartbeat produce time in milliseconds
     pub const PRODUCER_HEARTBEAT_TIME: ODEntry = ODEntry::new(0x1017, 0x0);
+
+    // Feedback related
+    pub const POSITION_ACTUAL_VALUE: ODEntry = ODEntry::new(0x6064, 0x00);
+    pub const VELOCITY_ACTUAL_VALUE: ODEntry = ODEntry::new(0x6044, 0x00);
+    pub const TORQUE_ACTUAL_VALUE: ODEntry = ODEntry::new(0x6077, 0x00);
 
     /// Mode of operation related
     /// 1 = Profile Position, 3 = Profile Velocity, 4 = Profile Torque, 6 = Homing
     pub const SET_OPERATION_MODE: ODEntry = ODEntry::new(0x6060, 0x0);
     pub const GET_OPERATION_MODE: ODEntry = ODEntry::new(0x6061, 0x0);
 
-    // Position mode related
-
-    pub const POSITION_ACTUAL_VALUE: ODEntry = ODEntry::new(0x6064, 0x00);
-
-    // Set target position
+    /// Targets
     pub const SET_TARGET_POSITION: ODEntry = ODEntry::new(0x607A, 0x00);
+    pub const SET_TARGET_VELOCITY: ODEntry = ODEntry::new(0x60FF, 0x00);
+    pub const SET_TARGET_TORQUE: ODEntry = ODEntry::new(0x6071, 0x00);
 
+    // Position mode related
     pub const SOFTWARE_POSITION_LIMIT: ODEntry = ODEntry::new(0x607D, 0x00);
 
     pub const HOME_OFFSET: ODEntry = ODEntry::new(0x607C, 0x00);
@@ -93,4 +95,22 @@ impl ObjectDictionary {
     /// Combines the velocity mode units for position and time, and the exponent
     /// Default value is 'revolutions per minute'
     pub const SI_UNIT_SPEED: ODEntry = ODEntry::with_default(0x60A9, 0x0, 0x00B44700);
+
+    pub const POSITION_MODE_MINIMUM_PARAMS: &[ODEntry] = &[
+        Self::SET_TARGET_POSITION,
+        Self::SOFTWARE_POSITION_LIMIT,
+        Self::HOME_OFFSET,
+        Self::POSITION_RANGE_LIMIT,
+        Self::POLARITY,
+        Self::PROFILE_VELOCITY,
+        Self::END_VELOCITY,
+        Self::PROFILE_ACCELERATION,
+        Self::PROFILE_DECELERATION,
+        Self::QUICK_STOP_DECELERATION,
+        Self::MOTION_PROFILE_TYPE,
+        Self::MAX_ACCELERATION,
+        Self::MAX_DECELERATION,
+        Self::PROFILE_JERK,
+        Self::POSITIONING_OPTION_CODE,
+    ];
 }
