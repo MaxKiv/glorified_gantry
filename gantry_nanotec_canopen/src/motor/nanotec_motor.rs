@@ -1,7 +1,10 @@
 use std::sync::Arc;
 
 use crate::{
-    error::MotorError, motor::manager::MotorManager, od::ObjectDictionary, pdo::PdoMapping,
+    error::MotorError,
+    motor::manager::MotorManager,
+    od::ObjectDictionary,
+    pdo::{PdoMapping, calculate_pdo_index_offset},
 };
 use anyhow::Result;
 use oze_canopen::sdo_client::SdoClient;
@@ -49,6 +52,7 @@ impl<'a> NanotecMotor<'a> {
         sdo: Arc<Mutex<SdoClient>>,
         motor_manager: &'a MotorManager,
     ) -> Self {
+        trace!("constructing NanotecMotor with node id {node_id}");
         Self {
             node_id,
             sdo,
@@ -63,51 +67,62 @@ impl<'a> NanotecMotor<'a> {
 
     /// Configure given PDO mapping
     /// This follows steps listed at page 118 of PD4C_CANopen_Technical_Manual_v3.3
-    pub async fn set_pdo_mapping(&self, pdo_mapping: &PdoMapping) -> Result<()> {
+    pub async fn set_pdo_mapping(&self, pdo_mapping: &PdoMapping<'_>) -> Result<()> {
         trace!(
             "set_pdo_mapping for nodeId {} to {:?}",
             self.node_id, pdo_mapping
         );
 
         // 1. Deactivate the PDO by setting the Valid Bit (bit 31) of subindex 01h of the corresponding communication parameter (e.g., 1400h:01h) to "1".
-        trace!(
-            "1. Deactivate the PDO by setting the Valid Bit (bit 31) of subindex 01h of the corresponding communication parameter (e.g., 1400h:01h) to \"1\".",
-        );
-        let communication_param = match pdo_mapping.kind {
-            crate::pdo::PdoType::RPDO => {
-                ObjectDictionary::RPDO_COMMUNICATION_PARAMETER_BASE_INDEX + (pdo_mapping.number - 1)
-            }
-            crate::pdo::PdoType::TPDO => {
-                ObjectDictionary::TPDO_COMMUNICATION_PARAMETER_BASE_INDEX + (pdo_mapping.number - 1)
-            }
+        let communication_index = match pdo_mapping.kind {
+            crate::pdo::PdoType::RPDO => calculate_pdo_index_offset(
+                ObjectDictionary::RPDO_COMMUNICATION_PARAMETER_BASE_INDEX,
+                pdo_mapping.number,
+            ),
+            crate::pdo::PdoType::TPDO => calculate_pdo_index_offset(
+                ObjectDictionary::TPDO_COMMUNICATION_PARAMETER_BASE_INDEX,
+                pdo_mapping.number,
+            ),
         };
+        trace!(
+            "1. Deactivate the PDO by setting the Valid Bit (bit 31) of subindex 01h of the
+                corresponding communication parameter ({}) to \"1\".",
+            communication_index
+        );
         let data = [0xFF, 0xFF, 0xFF, 0xFF];
         self.sdo
             .lock()
             .await
-            .download(communication_param, 0x1, &data)
+            .download(communication_index, 0x1, &data)
             .await
             .map_err(MotorError::CanOpen)?;
 
-        // 2. Deactivate the mapping by setting subindex 00h of the corresponding mapping parameter (e.g., 1600h:00h) to "0".
-        let mapping_param = match pdo_mapping.kind {
-            crate::pdo::PdoType::RPDO => {
-                ObjectDictionary::RPDO_MAPPING_PARAMETER_BASE_INDEX + (pdo_mapping.number - 1)
-            }
-            crate::pdo::PdoType::TPDO => {
-                ObjectDictionary::TPDO_MAPPING_PARAMETER_BASE_INDEX + (pdo_mapping.number - 1)
-            }
+        // 2. Deactivate the mapping by setting subindex 00h of the corresponding mapping parameter to \"0\".,
+        let mapping_index = match pdo_mapping.kind {
+            crate::pdo::PdoType::RPDO => calculate_pdo_index_offset(
+                ObjectDictionary::RPDO_MAPPING_PARAMETER_BASE_INDEX,
+                pdo_mapping.number,
+            ),
+            crate::pdo::PdoType::TPDO => calculate_pdo_index_offset(
+                ObjectDictionary::TPDO_MAPPING_PARAMETER_BASE_INDEX,
+                pdo_mapping.number,
+            ),
         };
+        trace!(
+            "2. Deactivate the mapping by setting subindex 00h of the corresponding mapping parameter ({}) to \"0\".",
+            mapping_index
+        );
         let data = [0];
         self.sdo
             .lock()
             .await
-            .download(mapping_param, 0x0, &data)
+            .download(mapping_index, 0x0, &data)
             .await
             .map_err(MotorError::CanOpen)?;
 
-        // 3. Change the mapping in the desired subindices (e.g., 1600h:01h).
+        trace!("3. Change the mapping in the desired subindices.");
         for (number, mapping) in pdo_mapping.mappings.iter().enumerate() {
+            // Construct the payload: 2 bytes of OD entry to be mapped, 1 byte subindex, 1 byte with number of bits to be mapped
             let index_be: [u8; 2] = mapping.index.to_be_bytes();
             let data: [u8; 4] = [
                 index_be[0],
@@ -118,24 +133,36 @@ impl<'a> NanotecMotor<'a> {
             self.sdo
                 .lock()
                 .await
-                .download(mapping_param, number, &index_be)
+                .download(mapping_index, number as u8, &data)
                 .await
                 .map_err(MotorError::CanOpen)?;
         }
 
-        // 4. Activate the mapping by writing the number of objects that are to be mapped in subindex 00h of the corresponding mapping parameter (e.g., 1600h:00h).
+        trace!(
+            "4. Activate the mapping by writing the number of objects that are to be mapped in subindex 00h of the corresponding mapping parameter (e.g., 1600h:00h)."
+        );
         let data = [pdo_mapping.number];
         self.sdo
             .lock()
             .await
-            .download(mapping_param, 0x0, &data)
+            .download(mapping_index, 0x0, &data)
             .await
             .map_err(MotorError::CanOpen)?;
 
         Ok(())
     }
 
+    /// Parametrize this NanotecMotor
+    /// parametrisation is the process of setting important parameters like maximum velocity or
+    /// torque to known values at boot
+    /// The motor usually does not commit these changes to nv memory, so this has to run on every
+    /// new boot cycle of the device
     pub async fn parametrize(&self) -> Result<()> {
+        trace!(
+            "Starting parametrisation of NanotecMotor with node id {}",
+            self.node_id
+        );
+        // parametrisation is done through a series of SDO calls, perform these in order
         for action in NANOTEC_PARAMETERS {
             trace!("parametrizing nodeId {}: {action:?}", self.node_id);
             match action {

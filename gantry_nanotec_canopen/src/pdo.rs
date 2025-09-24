@@ -1,16 +1,19 @@
 use crate::od::ObjectDictionary;
 
+#[derive(Debug)]
 pub enum PdoType {
     RPDO,
     TPDO,
 }
 
+#[derive(Debug)]
 pub struct PdoMapping<'a> {
     pub kind: PdoType,
     pub number: u8,
     pub mappings: &'a [PdoMappingSource],
 }
 
+#[derive(Debug)]
 pub struct PdoMappingSource {
     // OD index to use as source
     pub index: u16,
@@ -81,4 +84,16 @@ impl<'a> PdoMapping<'a> {
             number_of_bits: 32,
         }],
     };
+}
+
+/// Calculates pdo index offset from given base and pdo mapping number
+/// For example SDO for Node Id 3 = 0x500 + 3 = 0x503
+pub fn calculate_pdo_index_offset(base: u16, pdo_mapping_number: u8) -> u16 {
+    base
+        .checked_add(
+            pdo_mapping_number
+            .checked_sub(1)
+            .expect(&format!( "Underflow in RPDO mapping parameter index calculation -> pdo_mapping.number {} should be <= 1", pdo_mapping_number))
+            .try_into().expect(&format!("u8 doesn't fit u16 in calculate_pdo_index_offset for base {base} - pdo_mapping_number {pdo_mapping_number}"))
+        ).expect("Overflow in RPDO mapping parameter index calculation")
 }
