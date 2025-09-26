@@ -1,11 +1,14 @@
 use anyhow::Result;
 use tokio::task;
 
-pub async fn manage_pdo(pdo_mappings: _) -> Result<()> {
+use crate::comms::pdo::mapping::PdoMapping;
+
+pub async fn manage_pdo(pdo_mappings: &'_ [&'_ PdoMapping<'_>]) -> Result<()> {
     configure_pdo_mapping(pdo_mappings);
 
     task::spawn(manage_tpdo());
-    task::spawn(manage_rpdo());
+
+    Ok(())
 }
 
 /// Configures the CiA402 PDO mapping
@@ -14,16 +17,6 @@ pub async fn manage_pdo(pdo_mappings: _) -> Result<()> {
 pub async fn manage_tpdo() -> Result<()> {
     loop {
         // await changes that need to be reflected in TPDO
-    }
-}
-
-pub async fn manage_rpdo() -> Result<()> {
-    loop {
-        // await changes that need to be reflected in TPDO
-        tokio::select! {
-            _ = ctrl_c() => return,
-            _ = sleep(Duration::from_millis(100)) => {},
-        };
     }
 }
 

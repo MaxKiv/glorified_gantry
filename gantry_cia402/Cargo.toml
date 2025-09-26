@@ -10,3 +10,4 @@ oze-canopen = "0.1.0"
 tokio = { version = "1", features = ["full"] }
 async-trait = "0.1.88"
 tracing = "0.1.41"
+bitflags = "2.9.4"

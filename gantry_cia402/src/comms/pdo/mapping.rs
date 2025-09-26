@@ -1,4 +1,4 @@
-use crate::od::ObjectDictionary;
+use crate::{comms::pdo, od::ObjectDictionary};
 
 #[derive(Debug)]
 pub enum PdoType {
@@ -17,7 +17,7 @@ pub struct PdoMappingSource {
     // OD index to use as source
     pub index: u16,
     // OD subindex to use as source
-    pub subindex: u8,
+    pub sub_index: u8,
     // Number of bits of the source to include in the pdo, commonly 16 or 32
     pub number_of_bits: u8,
 }
@@ -27,15 +27,23 @@ impl<'a> PdoMapping<'a> {
     pub const DEFAULT_TPDOS: &'a [PdoMapping<'a>] = &[Self::TPDO_DEFAULT_1, Self::TPDO_DEFAULT_2];
 
     pub const CUSTOM_RPDOS: &'a [&'a PdoMapping<'a>] = &[
-        &Self::RPDO_CUSTOM_1,
-        &Self::RPDO_CUSTOM_2,
-        &Self::RPDO_CUSTOM_3,
-        &Self::RPDO_CUSTOM_4,
+        &Self::RPDO_CONTROL_OPMODE,
+        &Self::RPDO_TARGET_POS,
+        &Self::RPDO_TARGET_VEL,
+        &Self::RPDO_TARGET_TORQUE,
     ];
+    // I didn't know of a better const method to do this, seems rust const fn are lacking compared
+    // to c++ templates, this never changes anyway
+    pub const RPDO_NUM_CONTROL_WORD: usize = 1;
+    pub const RPDO_NUM_OPMODE: usize = 1;
+    pub const RPDO_NUM_TARGET_POS: usize = 2;
+    pub const RPDO_NUM_TARGET_VEL: usize = 3;
+    pub const RPDO_NUM_TARGET_TORQUE: usize = 4;
+
     pub const CUSTOM_TPDOS: &'a [&'a PdoMapping<'a>] = &[
-        &Self::TPDO_CUSTOM_1,
-        &Self::TPDO_CUSTOM_2,
-        &Self::TPDO_CUSTOM_3,
+        &Self::TPDO_STATUS_OPMODE,
+        &Self::TPDO_POS_VEL_ACTUAL,
+        &Self::TPDO_TORQUE_ACTUAL,
     ];
 
     pub const RPDO_DEFAULT_1: PdoMapping<'a> = PdoMapping {
@@ -43,12 +51,12 @@ impl<'a> PdoMapping<'a> {
         mappings: &[
             PdoMappingSource {
                 index: ObjectDictionary::CONTROL_WORD.index,
-                subindex: 0x0,
+                sub_index: 0x0,
                 number_of_bits: 16,
             },
             PdoMappingSource {
                 index: ObjectDictionary::SET_OPERATION_MODE.index,
-                subindex: 0x0,
+                sub_index: 0x0,
                 number_of_bits: 8,
             },
         ],
@@ -59,12 +67,12 @@ impl<'a> PdoMapping<'a> {
         mappings: &[
             PdoMappingSource {
                 index: ObjectDictionary::SET_TARGET_POSITION.index,
-                subindex: 0x0,
+                sub_index: 0x0,
                 number_of_bits: 32,
             },
             PdoMappingSource {
                 index: ObjectDictionary::PROFILE_VELOCITY.index,
-                subindex: 0x0,
+                sub_index: 0x0,
                 number_of_bits: 32,
             },
         ],
@@ -75,12 +83,12 @@ impl<'a> PdoMapping<'a> {
         mappings: &[
             PdoMappingSource {
                 index: ObjectDictionary::STATUS_WORD.index,
-                subindex: 0x0,
+                sub_index: 0x0,
                 number_of_bits: 16,
             },
             PdoMappingSource {
                 index: ObjectDictionary::GET_OPERATION_MODE.index,
-                subindex: 0x0,
+                sub_index: 0x0,
                 number_of_bits: 8,
             },
         ],
@@ -90,106 +98,116 @@ impl<'a> PdoMapping<'a> {
         kind: PdoType::TPDO,
         mappings: &[PdoMappingSource {
             index: ObjectDictionary::POSITION_ACTUAL_VALUE.index,
-            subindex: 0x0,
+            sub_index: 0x0,
             number_of_bits: 32,
         }],
     };
 
-    pub const RPDO_CUSTOM_1: PdoMapping<'a> = PdoMapping {
+    pub const RPDO_CONTROL_OPMODE: PdoMapping<'a> = PdoMapping {
         kind: PdoType::RPDO,
         mappings: &[
             PdoMappingSource {
                 index: ObjectDictionary::CONTROL_WORD.index,
-                subindex: 0x0,
+                sub_index: ObjectDictionary::CONTROL_WORD.sub_index,
                 number_of_bits: 16,
             },
             PdoMappingSource {
                 index: ObjectDictionary::SET_OPERATION_MODE.index,
-                subindex: 0x0,
+                sub_index: ObjectDictionary::SET_OPERATION_MODE.sub_index,
                 number_of_bits: 8,
             },
         ],
     };
 
-    pub const RPDO_CUSTOM_2: PdoMapping<'a> = PdoMapping {
+    pub const RPDO_TARGET_POS: PdoMapping<'a> = PdoMapping {
         kind: PdoType::RPDO,
         mappings: &[
             PdoMappingSource {
-                index: ObjectDictionary::CONTROL_WORD.index,
-                subindex: 0x0,
+                index: ObjectDictionary::SET_TARGET_POSITION.index,
+                sub_index: ObjectDictionary::SET_TARGET_POSITION.sub_index,
                 number_of_bits: 16,
             },
             PdoMappingSource {
-                index: ObjectDictionary::SET_OPERATION_MODE.index,
-                subindex: 0x0,
+                index: ObjectDictionary::PROFILE_VELOCITY.index,
+                sub_index: ObjectDictionary::PROFILE_VELOCITY.sub_index,
                 number_of_bits: 8,
             },
         ],
     };
 
-    pub const RPDO_CUSTOM_3: PdoMapping<'a> = PdoMapping {
+    pub const RPDO_TARGET_VEL: PdoMapping<'a> = PdoMapping {
         kind: PdoType::RPDO,
         mappings: &[PdoMappingSource {
             index: ObjectDictionary::SET_TARGET_VELOCITY.index,
-            subindex: 0x0,
+            sub_index: ObjectDictionary::SET_TARGET_VELOCITY.sub_index,
             number_of_bits: 32,
         }],
     };
 
-    pub const RPDO_CUSTOM_4: PdoMapping<'a> = PdoMapping {
+    pub const RPDO_TARGET_TORQUE: PdoMapping<'a> = PdoMapping {
         kind: PdoType::RPDO,
         mappings: &[PdoMappingSource {
             index: ObjectDictionary::SET_TARGET_TORQUE.index,
-            subindex: 0x0,
+            sub_index: ObjectDictionary::SET_TARGET_TORQUE.sub_index,
             number_of_bits: 32,
         }],
     };
 
-    pub const TPDO_CUSTOM_1: PdoMapping<'a> = PdoMapping {
+    pub const TPDO_STATUS_OPMODE: PdoMapping<'a> = PdoMapping {
         kind: PdoType::TPDO,
         mappings: &[
             PdoMappingSource {
                 index: ObjectDictionary::STATUS_WORD.index,
-                subindex: 0x0,
+                sub_index: ObjectDictionary::STATUS_WORD.sub_index,
                 number_of_bits: 32,
             },
             PdoMappingSource {
                 index: ObjectDictionary::GET_OPERATION_MODE.index,
-                subindex: 0x0,
+                sub_index: ObjectDictionary::GET_OPERATION_MODE.sub_index,
                 number_of_bits: 32,
             },
         ],
     };
 
-    pub const TPDO_CUSTOM_2: PdoMapping<'a> = PdoMapping {
+    pub const TPDO_POS_VEL_ACTUAL: PdoMapping<'a> = PdoMapping {
         kind: PdoType::TPDO,
         mappings: &[
             PdoMappingSource {
                 index: ObjectDictionary::POSITION_ACTUAL_VALUE.index,
-                subindex: 0x0,
+                sub_index: ObjectDictionary::POSITION_ACTUAL_VALUE.sub_index,
                 number_of_bits: 32,
             },
             PdoMappingSource {
                 index: ObjectDictionary::VELOCITY_ACTUAL_VALUE.index,
-                subindex: 0x0,
+                sub_index: ObjectDictionary::VELOCITY_ACTUAL_VALUE.sub_index,
                 number_of_bits: 32,
             },
         ],
     };
 
-    pub const TPDO_CUSTOM_3: PdoMapping<'a> = PdoMapping {
+    pub const TPDO_TORQUE_ACTUAL: PdoMapping<'a> = PdoMapping {
         kind: PdoType::TPDO,
         mappings: &[PdoMappingSource {
             index: ObjectDictionary::TORQUE_ACTUAL_VALUE.index,
-            subindex: 0x0,
+            sub_index: ObjectDictionary::TORQUE_ACTUAL_VALUE.sub_index,
             number_of_bits: 32,
         }],
     };
 }
 
-/// Calculates pdo index offset from given base and pdo mapping number
-/// For example SDO for Node Id 3 = 0x500 + 3 = 0x503
-pub fn calculate_pdo_index_offset(base: u16, pdo_mapping_number: u8) -> u16 {
-    base.checked_add(pdo_mapping_number.into())
-        .expect("Overflow in RPDO mapping parameter index calculation")
+/// Returns the COB Id for the given pdo num and type
+/// See https://en.wikipedia.org/wiki/CANopen#Process_Data_Object_(PDO)_protocol
+pub fn get_pdo_cob_id(pdo_num: usize, kind: PdoType) -> Option<u16> {
+    let cob_id = match pdo_num {
+        1 => 0x180,
+        2 => 0x280,
+        3 => 0x380,
+        4 => 0x480,
+        _ => return None,
+    } + pdo_num;
+
+    Some(match kind {
+        PdoType::RPDO => cob_id,
+        PdoType::TPDO => cob_id + 0x20,
+    })
 }

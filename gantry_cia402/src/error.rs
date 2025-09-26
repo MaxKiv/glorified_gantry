@@ -1,5 +1,6 @@
-use oze_canopen::error::CoError;
+use oze_canopen::{error::CoError, transmitter::TxPacket};
 use thiserror::Error;
+use tokio::sync::mpsc::error::SendTimeoutError;
 
 use crate::state::Cia402State;
 
@@ -9,6 +10,10 @@ pub enum DriveError {
     InvalidTransition(Cia402State, Cia402State),
     #[error("CANopen communication error: {0:?}")]
     CanOpen(CoError),
+    #[error("Timeout Sending CANopen packet {0:?}")]
+    Timeout(SendTimeoutError<TxPacket>),
     #[error("Invalid conversion of {0:?} into integer")]
     Conversion(Vec<u8>),
+    #[error("Invariant violated: {0}")]
+    ViolatedInvariant(String),
 }

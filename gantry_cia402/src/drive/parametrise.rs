@@ -1,74 +1,20 @@
-use std::sync::Arc;
+use anyhow::Result;
+use tracing::*;
 
 use crate::{
     comms::{
-        pdo::mapping::{PdoMapping, PdoType, calculate_pdo_index_offset},
+        accessor::ObjectDictionaryAccessor,
+        pdo::mapping::{PdoMapping, PdoType},
         sdo::SdoAction,
-        transport::Cia402Transport,
     },
+    drive::CiA402Drive,
     error::DriveError,
     od::ObjectDictionary,
-    state::{Cia402State, Cia402StateMachine},
 };
 
-use anyhow::Result;
-use oze_canopen::sdo_client::SdoClient;
-use tokio::sync::{Mutex, mpsc};
-use tracing::*;
-
-/// CiA-402 driver built on top of a CANopen protocol manager
-pub struct Drive<T: Cia402Transport> {
-    pub node_id: u8,
-    state_machine: Cia402StateMachine,
-    transport: T,               // SDO or PDO based CANopen control/statusword manager
-    sdo: Arc<Mutex<SdoClient>>, // Used for parametrisation
-}
-
-impl<T: Cia402Transport> Drive<T> {
-    pub fn new(node_id: u8, transport: T, sdo: Arc<Mutex<SdoClient>>) -> Self {
-        // TODO: move this up the stack
-        let (state_sender, state_receiver): (
-            mpsc::Sender<Cia402State>,
-            mpsc::Receiver<Cia402State>,
-        ) = tokio::sync::mpsc::channel(10);
-
-        Drive {
-            node_id,
-            state_machine: Cia402StateMachine::new(state_sender),
-            transport,
-            sdo,
-        }
-    }
-
-    /// Read the Statusword (0x6041) and update internal state
-    pub fn poll_state(&mut self) -> Result<Cia402State, DriveError> {
-        let data = self.canopen.sdo_upload(0x6041, 0x00)?;
-        let sw = u16::from_le_bytes([data[0], data[1]]);
-        self.state = decode_statusword(sw);
-        Ok(self.state)
-    }
-
-    /// Example: switch on + enable operation
-    pub fn enable_operation(&mut self) -> Result<(), DriveError> {
-        // Controlword sequence (0x6040) according to CiA-402
-        self.canopen
-            .sdo_download(0x6040, 0x00, &0x0006u16.to_le_bytes())?; // shutdown
-        self.canopen
-            .sdo_download(0x6040, 0x00, &0x0007u16.to_le_bytes())?; // switch on
-        self.canopen
-            .sdo_download(0x6040, 0x00, &0x000Fu16.to_le_bytes())?; // enable op
-        self.poll_state()?;
-        if self.state != Cia402State::OperationEnabled {
-            return Err(DriveError::InvalidTransition(
-                self.state,
-                Cia402State::OperationEnabled,
-            ));
-        }
-        Ok(())
-    }
-
+impl CiA402Drive {
     /// Configure the devicde with the given set of PDO mappings
-    pub async fn configure_pdo_mappings(&self, pdo_mappings: &[&PdoMapping<'_>]) -> Result<()> {
+    async fn configure_pdo_mappings(&self, pdo_mappings: &[&PdoMapping<'_>]) -> Result<()> {
         trace!("configure_pdo_mappings for nodeId {}", self.node_id);
         for (mapping_number, pdo_mapping) in pdo_mappings.iter().enumerate() {
             self.set_pdo_mapping(pdo_mapping, mapping_number as u8)
@@ -144,7 +90,7 @@ impl<T: Cia402Transport> Drive<T> {
             let data: [u8; 4] = [
                 index_be[0],
                 index_be[1],
-                mapping.subindex,
+                mapping.sub_index,
                 mapping.number_of_bits,
             ];
             self.sdo
@@ -174,7 +120,7 @@ impl<T: Cia402Transport> Drive<T> {
     /// torque to known values at boot
     /// The motor usually does not commit these changes to nv memory, so this has to run on every
     /// new boot cycle of the device
-    pub async fn parametrize(&self, parameters: &[SdoAction<'_>]) -> Result<()> {
+    async fn parametrize(&self, parameters: &[SdoAction<'_>]) -> Result<()> {
         trace!(
             "Starting parametrisation of NanotecMotor with node id {}",
             self.node_id
@@ -210,6 +156,9 @@ impl<T: Cia402Transport> Drive<T> {
     }
 }
 
-fn decode_statusword(sw: u16) -> Cia402State {
-    todo!()
+/// Calculates pdo index offset from given base and pdo mapping number
+/// For example SDO for Node Id 3 = 0x500 + 3 = 0x503
+pub fn calculate_pdo_index_offset(base: u16, pdo_mapping_number: u8) -> u16 {
+    base.checked_add(pdo_mapping_number.into())
+        .expect("Overflow in RPDO mapping parameter index calculation")
 }
