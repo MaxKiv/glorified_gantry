@@ -3,10 +3,7 @@ use std::sync::Arc;
 use tokio::sync::{Mutex, mpsc::Sender};
 use tracing::*;
 
-use crate::{
-    comms::accessor::ObjectDictionaryAccessor,
-    od::{err::FaultMessage, state::Cia402State},
-};
+use crate::od::state::Cia402State;
 
 bitflags::bitflags! {
     #[derive(Clone, Copy, Debug, PartialEq)]

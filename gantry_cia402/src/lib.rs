@@ -1,5 +1,5 @@
 pub mod comms;
-pub mod drive;
+pub mod driver;
 pub mod error;
 pub mod od;
 

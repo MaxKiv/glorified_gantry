@@ -1,4 +1,4 @@
-use crate::{comms::pdo, od::ObjectDictionary};
+use crate::od::ObjectDictionary;
 
 #[derive(Debug)]
 pub enum PdoType {
@@ -7,9 +7,9 @@ pub enum PdoType {
 }
 
 #[derive(Debug)]
-pub struct PdoMapping<'a> {
+pub struct PdoMapping {
     pub kind: PdoType,
-    pub mappings: &'a [PdoMappingSource],
+    pub mappings: &'static [PdoMappingSource],
 }
 
 #[derive(Debug)]
@@ -22,11 +22,11 @@ pub struct PdoMappingSource {
     pub number_of_bits: u8,
 }
 
-impl<'a> PdoMapping<'a> {
-    pub const DEFAULT_RPDOS: &'a [PdoMapping<'a>] = &[Self::RPDO_DEFAULT_1, Self::RPDO_DEFAULT_2];
-    pub const DEFAULT_TPDOS: &'a [PdoMapping<'a>] = &[Self::TPDO_DEFAULT_1, Self::TPDO_DEFAULT_2];
+impl PdoMapping {
+    pub const DEFAULT_RPDOS: &'static [PdoMapping] = &[Self::RPDO_DEFAULT_1, Self::RPDO_DEFAULT_2];
+    pub const DEFAULT_TPDOS: &'static [PdoMapping] = &[Self::TPDO_DEFAULT_1, Self::TPDO_DEFAULT_2];
 
-    pub const CUSTOM_RPDOS: &'a [&'a PdoMapping<'a>] = &[
+    pub const CUSTOM_RPDOS: &'static [PdoMapping] = &[
         &Self::RPDO_CONTROL_OPMODE,
         &Self::RPDO_TARGET_POS,
         &Self::RPDO_TARGET_VEL,
@@ -40,13 +40,13 @@ impl<'a> PdoMapping<'a> {
     pub const RPDO_NUM_TARGET_VEL: usize = 3;
     pub const RPDO_NUM_TARGET_TORQUE: usize = 4;
 
-    pub const CUSTOM_TPDOS: &'a [&'a PdoMapping<'a>] = &[
+    pub const CUSTOM_TPDOS: &'static [PdoMapping] = &[
         &Self::TPDO_STATUS_OPMODE,
         &Self::TPDO_POS_VEL_ACTUAL,
         &Self::TPDO_TORQUE_ACTUAL,
     ];
 
-    pub const RPDO_DEFAULT_1: PdoMapping<'a> = PdoMapping {
+    pub const RPDO_DEFAULT_1: PdoMapping = PdoMapping {
         kind: PdoType::RPDO,
         mappings: &[
             PdoMappingSource {
@@ -62,7 +62,7 @@ impl<'a> PdoMapping<'a> {
         ],
     };
 
-    pub const RPDO_DEFAULT_2: PdoMapping<'a> = PdoMapping {
+    pub const RPDO_DEFAULT_2: PdoMapping = PdoMapping {
         kind: PdoType::RPDO,
         mappings: &[
             PdoMappingSource {
@@ -78,7 +78,7 @@ impl<'a> PdoMapping<'a> {
         ],
     };
 
-    pub const TPDO_DEFAULT_1: PdoMapping<'a> = PdoMapping {
+    pub const TPDO_DEFAULT_1: PdoMapping = PdoMapping {
         kind: PdoType::TPDO,
         mappings: &[
             PdoMappingSource {
@@ -94,7 +94,7 @@ impl<'a> PdoMapping<'a> {
         ],
     };
 
-    pub const TPDO_DEFAULT_2: PdoMapping<'a> = PdoMapping {
+    pub const TPDO_DEFAULT_2: PdoMapping = PdoMapping {
         kind: PdoType::TPDO,
         mappings: &[PdoMappingSource {
             index: ObjectDictionary::POSITION_ACTUAL_VALUE.index,
@@ -103,7 +103,7 @@ impl<'a> PdoMapping<'a> {
         }],
     };
 
-    pub const RPDO_CONTROL_OPMODE: PdoMapping<'a> = PdoMapping {
+    pub const RPDO_CONTROL_OPMODE: PdoMapping = PdoMapping {
         kind: PdoType::RPDO,
         mappings: &[
             PdoMappingSource {
@@ -119,7 +119,7 @@ impl<'a> PdoMapping<'a> {
         ],
     };
 
-    pub const RPDO_TARGET_POS: PdoMapping<'a> = PdoMapping {
+    pub const RPDO_TARGET_POS: PdoMapping = PdoMapping {
         kind: PdoType::RPDO,
         mappings: &[
             PdoMappingSource {
@@ -135,7 +135,7 @@ impl<'a> PdoMapping<'a> {
         ],
     };
 
-    pub const RPDO_TARGET_VEL: PdoMapping<'a> = PdoMapping {
+    pub const RPDO_TARGET_VEL: PdoMapping = PdoMapping {
         kind: PdoType::RPDO,
         mappings: &[PdoMappingSource {
             index: ObjectDictionary::SET_TARGET_VELOCITY.index,
@@ -144,7 +144,7 @@ impl<'a> PdoMapping<'a> {
         }],
     };
 
-    pub const RPDO_TARGET_TORQUE: PdoMapping<'a> = PdoMapping {
+    pub const RPDO_TARGET_TORQUE: PdoMapping = PdoMapping {
         kind: PdoType::RPDO,
         mappings: &[PdoMappingSource {
             index: ObjectDictionary::SET_TARGET_TORQUE.index,
@@ -153,23 +153,23 @@ impl<'a> PdoMapping<'a> {
         }],
     };
 
-    pub const TPDO_STATUS_OPMODE: PdoMapping<'a> = PdoMapping {
+    pub const TPDO_STATUS_OPMODE: PdoMapping = PdoMapping {
         kind: PdoType::TPDO,
         mappings: &[
             PdoMappingSource {
                 index: ObjectDictionary::STATUS_WORD.index,
                 sub_index: ObjectDictionary::STATUS_WORD.sub_index,
-                number_of_bits: 32,
+                number_of_bits: 16,
             },
             PdoMappingSource {
                 index: ObjectDictionary::GET_OPERATION_MODE.index,
                 sub_index: ObjectDictionary::GET_OPERATION_MODE.sub_index,
-                number_of_bits: 32,
+                number_of_bits: 8,
             },
         ],
     };
 
-    pub const TPDO_POS_VEL_ACTUAL: PdoMapping<'a> = PdoMapping {
+    pub const TPDO_POS_VEL_ACTUAL: PdoMapping = PdoMapping {
         kind: PdoType::TPDO,
         mappings: &[
             PdoMappingSource {
@@ -185,7 +185,7 @@ impl<'a> PdoMapping<'a> {
         ],
     };
 
-    pub const TPDO_TORQUE_ACTUAL: PdoMapping<'a> = PdoMapping {
+    pub const TPDO_TORQUE_ACTUAL: PdoMapping = PdoMapping {
         kind: PdoType::TPDO,
         mappings: &[PdoMappingSource {
             index: ObjectDictionary::TORQUE_ACTUAL_VALUE.index,

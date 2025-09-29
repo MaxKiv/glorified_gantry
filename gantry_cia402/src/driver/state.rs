@@ -1,9 +1,10 @@
 use tokio::sync::mpsc::Sender;
 
-use crate::error::DriveError;
+use crate::{driver::update::Update, error::DriveError};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Default, Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Cia402State {
+    #[default]
     NotReadyToSwitchOn,
     SwitchOnDisabled,
     ReadyToSwitchOn,
@@ -43,11 +44,12 @@ impl Cia402StateMachine {
         }
     }
 
-    pub async fn transition_to(&mut self, new_state: Cia402State) -> Result<(), DriveError> {
+    pub async fn transition_to(&mut self, new_state: Cia402State) -> Result<Update, DriveError> {
         if self.state.allowed_transitions().contains(&new_state) {
             self.new_state_sender.send(new_state).await;
             self.state = new_state;
-            Ok(())
+
+            Ok(Update::from_state(new_state))
         } else {
             Err(DriveError::InvalidTransition(self.state, new_state))
         }
