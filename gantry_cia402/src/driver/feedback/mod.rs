@@ -1,9 +1,6 @@
 use std::time::Duration;
 
-use oze_canopen::{
-    canopen::{RxMessage, RxMessageToStringFormat},
-    interface::CanOpenInterface,
-};
+use oze_canopen::{canopen::RxMessage, interface::CanOpenInterface};
 use tokio::{
     sync::{broadcast, watch},
     time::Instant,
@@ -31,16 +28,17 @@ const COB_ID_HEARTBEAT: u16 = 0x700;
 
 const COMMS_TIMEOUT: Duration = Duration::from_secs(1);
 
-pub async fn handle_frame(
+pub async fn handle_feedback(
     node_id: u8,
-    canopen: CanOpenInterface,
+    mut canopen: CanOpenInterface,
     tpdo_mapping: &'static [PdoMapping],
     event_tx: broadcast::Sender<MotorEvent>,
     state_tx: watch::Sender<Cia402State>,
-) -> _ {
-    let mut last_seen: Instant::now();
+) {
+    let mut last_seen = Instant::now();
+    let node_id = node_id as u16;
 
-    if let Some(frame) = canopen.rx.recv().await {
+    if let Ok(frame) = canopen.rx.recv().await {
         match frame.cob_id {
             id if id == COB_ID_SYNC => { /* SYNC */ }
             id if id == COB_ID_TPDO1 + node_id => {

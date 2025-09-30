@@ -1,3 +1,5 @@
+use thiserror::Error;
+
 use crate::{driver::state::Cia402State, od::oms::Setpoint};
 
 #[derive(Debug, Error)]
@@ -49,7 +51,7 @@ bitflags::bitflags! {
 }
 const DEFAULT_CONTROL: ControlWord = ControlWord::empty();
 
-const DEFAULT_UPDATE: Update = Update {
+pub const DEFAULT_UPDATE: Update = Update {
     controlword: None,
     setpoint: None,
     state: None,

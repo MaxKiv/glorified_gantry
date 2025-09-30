@@ -43,9 +43,6 @@ impl Pdo {
         }
     }
 
-
-    pub async fn (&self) -> Result<u16, DriveError> {
-
     // Write the given controlword to the motor
     pub async fn write_controlword(&self, control_word: u16) -> Result<(), DriveError> {
         // TODO this is kinda ugly, get it from the self object
