@@ -161,6 +161,27 @@
         "type": "github"
       }
     },
+    "fenix": {
+      "inputs": {
+        "nixpkgs": [
+          "nixpkgs"
+        ],
+        "rust-analyzer-src": "rust-analyzer-src"
+      },
+      "locked": {
+        "lastModified": 1759251341,
+        "narHash": "sha256-0vt4IQnTLyAhaeom3h9GOCpO2+av+wK4zP7O8BSKr6I=",
+        "owner": "nix-community",
+        "repo": "fenix",
+        "rev": "af8a7505a1c62fab493157ea380a05c094bb63af",
+        "type": "github"
+      },
+      "original": {
+        "owner": "nix-community",
+        "repo": "fenix",
+        "type": "github"
+      }
+    },
     "firefox-addons": {
       "inputs": {
         "nixpkgs": [
@@ -1279,12 +1300,30 @@
     },
     "root": {
       "inputs": {
+        "fenix": "fenix",
         "flake-utils": "flake-utils",
         "nixpkgs": [
           "your-nixos-flake",
           "nixpkgs"
         ],
         "your-nixos-flake": "your-nixos-flake"
+      }
+    },
+    "rust-analyzer-src": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1759134797,
+        "narHash": "sha256-YPi+jL3tx/yC5J5l7/OB7Lnlr9BMTzYnZtm7tRJzUNg=",
+        "owner": "rust-lang",
+        "repo": "rust-analyzer",
+        "rev": "062ac7a5451e8e92a32e22a60d86882d6a034f3f",
+        "type": "github"
+      },
+      "original": {
+        "owner": "rust-lang",
+        "ref": "nightly",
+        "repo": "rust-analyzer",
+        "type": "github"
       }
     },
     "rust-overlay": {
