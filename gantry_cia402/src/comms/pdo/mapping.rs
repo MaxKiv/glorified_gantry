@@ -125,12 +125,12 @@ impl PdoMapping {
             PdoMappingSource {
                 index: ObjectDictionary::SET_TARGET_POSITION.index,
                 sub_index: ObjectDictionary::SET_TARGET_POSITION.sub_index,
-                number_of_bits: 16,
+                number_of_bits: 32,
             },
             PdoMappingSource {
                 index: ObjectDictionary::PROFILE_VELOCITY.index,
                 sub_index: ObjectDictionary::PROFILE_VELOCITY.sub_index,
-                number_of_bits: 8,
+                number_of_bits: 32,
             },
         ],
     };

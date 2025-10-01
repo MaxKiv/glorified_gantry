@@ -1,10 +1,8 @@
 use tracing::*;
 
-use crate::od::{
-    drive_publisher::ControlWord,
-    err::FaultMessage,
-    oms::{PositionModeFlags, PositionSetpoint, Setpoint},
-    state::Cia402State,
+use crate::{
+    driver::{state::Cia402State, update::ControlWord},
+    od::oms::{PositionModeFlags, PositionSetpoint, Setpoint},
 };
 
 /// Indicates the controlword bits that need to be set and cleared for Cia402State transitions

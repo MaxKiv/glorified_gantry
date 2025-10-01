@@ -1,17 +1,6 @@
+pub mod receiver;
+
 use std::time::Duration;
-
-use oze_canopen::{canopen::RxMessage, interface::CanOpenInterface};
-use tokio::{
-    sync::{broadcast, watch},
-    time::Instant,
-};
-use tracing::*;
-
-use crate::{
-    comms::pdo::mapping::{PdoMapping, PdoMappingSource, PdoType},
-    driver::{event::MotorEvent, state::Cia402State, update::ControlWord},
-    od::drive_subscriber::StatusWord,
-};
 
 const COB_ID_SYNC: u16 = 0x80;
 const COB_ID_TPDO1: u16 = 0x180;
@@ -28,54 +17,48 @@ const COB_ID_HEARTBEAT: u16 = 0x700;
 
 const COMMS_TIMEOUT: Duration = Duration::from_secs(1);
 
-pub async fn handle_feedback(
-    node_id: u8,
-    mut canopen: CanOpenInterface,
-    tpdo_mapping: &'static [PdoMapping],
-    event_tx: broadcast::Sender<MotorEvent>,
-    state_tx: watch::Sender<Cia402State>,
-) {
-    let mut last_seen = Instant::now();
-    let node_id = node_id as u16;
+bitflags::bitflags! {
+    #[derive(Clone, Copy, Debug, PartialEq)]
+    pub struct StatusWord: u16 {
+        /// Bit 0: Ready to switch on
+        const READY_TO_SWITCH_ON   = 1 << 0;
+        /// Bit 1: Switched on
+        const SWITCHED_ON          = 1 << 1;
+        /// Bit 2: Operation enabled
+        const OPERATION_ENABLED    = 1 << 2;
+        /// Bit 3: Fault
+        const FAULT                = 1 << 3;
+        /// Bit 4: Voltage enabled
+        const VOLTAGE_ENABLED      = 1 << 4;
+        /// Bit 5: Quick stop
+        const QUICK_STOP           = 1 << 5;
+        /// Bit 6: Switch on disabled
+        const SWITCH_ON_DISABLED   = 1 << 6;
+        /// Bit 7: Warning
+        const WARNING              = 1 << 7;
 
-    if let Ok(frame) = canopen.rx.recv().await {
-        match frame.cob_id {
-            id if id == COB_ID_SYNC => { /* SYNC */ }
-            id if id == COB_ID_TPDO1 + node_id => {
-                /* TPDO1 */
-                handle_tpdo1(frame, tpdo_mapping[1].mappings, event_tx, state_tx).await;
-            }
-            id if id == COB_ID_RPDO1 + node_id => { /* RPDO1 */ }
-            id if id == COB_ID_TPDO2 + node_id => { /* TPDO2 */ }
-            id if id == COB_ID_RPDO2 + node_id => { /* RPDO2 */ }
-            id if id == COB_ID_TPDO3 + node_id => { /* TPDO3 */ }
-            id if id == COB_ID_RPDO3 + node_id => { /* RPDO3 */ }
-            id if id == COB_ID_TPDO4 + node_id => { /* TPDO4 */ }
-            id if id == COB_ID_RPDO4 + node_id => { /* RPDO4 */ }
-            id if id == COB_ID_SDO_TX + node_id => { /* SDO response */ }
-            id if id == COB_ID_SDO_RX + node_id => { /* SDO request */ }
-            id if id == COB_ID_HEARTBEAT + node_id => {
-                /* Heartbeat */
-                last_seen = Instant::now();
-            }
-            _ => { /* ignore */ }
-        }
-    }
+        /// Bit 8: Manufacturer specific
+        const MANUFACTURER_1       = 1 << 8;
+        /// Bit 9: Remote (drive is under control via fieldbus)
+        const REMOTE               = 1 << 9;
+        /// Bit 10: Target reached (depends on operation mode)
+        const TARGET_REACHED       = 1 << 10;
+        /// Bit 11: Internal limit active
+        const INTERNAL_LIMIT       = 1 << 11;
 
-    if Instant::now() - last_seen > COMMS_TIMEOUT {
-        event_tx.send(MotorEvent::CommunicationLost);
+        /// Bit 12: Manufacturer specific
+        const MANUFACTURER_2       = 1 << 12;
+        /// Bit 13: Manufacturer specific
+        const MANUFACTURER_3       = 1 << 13;
+        /// Bit 14: Manufacturer specific
+        const MANUFACTURER_4       = 1 << 14;
+        /// Bit 15: Manufacturer specific
+        const MANUFACTURER_5       = 1 << 15;
     }
 }
 
-async fn handle_tpdo1(
-    frame: RxMessage,
-    tpdo1_mappings: &'static [PdoMappingSource],
-    event_tx: broadcast::Sender<MotorEvent>,
-    state_tx: watch::Sender<Cia402State>,
-) {
-    let raw_statusword = u16::from_be_bytes(frame.data[0..=1]);
-    let statusword = StatusWord::from_bits(raw_statusword).expect("unable to decode statusword");
-
-    let raw_mode = i8::from_be_bytes(frame.data[3]);
-    let mode = OperationMode::try_from(raw)?;
+impl Default for StatusWord {
+    fn default() -> Self {
+        StatusWord::empty()
+    }
 }

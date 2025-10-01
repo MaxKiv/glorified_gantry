@@ -1,11 +1,9 @@
-use std::sync::mpsc::Receiver;
-
 use oze_canopen::{
     canopen,
     interface::CanOpenInterface,
     proto::nmt::{NmtCommand, NmtCommandSpecifier},
 };
-use tokio::task;
+use tokio::{sync::mpsc::Receiver, task};
 
 use crate::error::DriveError;
 

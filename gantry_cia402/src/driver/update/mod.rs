@@ -2,7 +2,10 @@ pub mod publisher;
 
 use thiserror::Error;
 
-use crate::{driver::state::Cia402State, od::oms::Setpoint};
+use crate::driver::{
+    oms::{PositionModeFlags, Setpoint},
+    state::{Cia402Flags, Cia402State},
+};
 
 #[derive(Debug, Error)]
 pub enum UpdateError {
@@ -51,19 +54,42 @@ bitflags::bitflags! {
         const MANUFACTURER_4         = 1 << 15;
     }
 }
-const DEFAULT_CONTROL: ControlWord = ControlWord::empty();
 
-pub const DEFAULT_UPDATE: Update = Update {
-    controlword: None,
-    setpoint: None,
-    state: None,
-};
+impl ControlWord {
+    pub fn with_position_flags(self, flags: PositionModeFlags) -> Self {
+        let mask = PositionModeFlags::all().bits();
+        let new_bits = (self.bits() & !mask) | (flags.bits() & mask);
+        ControlWord::from_bits_truncate(new_bits)
+    }
+
+    pub fn with_cia402_flags(self, flags: Cia402Flags) -> Self {
+        let mask = Cia402Flags::all().bits();
+        let new_bits = (self.bits() & !mask) | (flags.bits() & mask);
+        ControlWord::from_bits_truncate(new_bits)
+    }
+}
+
+impl Default for ControlWord {
+    fn default() -> Self {
+        Self::empty()
+    }
+}
 
 #[derive(Debug, Clone)]
 pub struct Update {
     pub controlword: Option<ControlWord>,
     pub setpoint: Option<Setpoint>,
     pub state: Option<Cia402State>,
+}
+
+impl Default for Update {
+    fn default() -> Self {
+        Self {
+            controlword: None,
+            setpoint: None,
+            state: None,
+        }
+    }
 }
 
 impl Update {
@@ -97,5 +123,31 @@ impl Update {
             setpoint: None,
             state,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_with_position_flags() {
+        let simple_cw = ControlWord::from_bits_truncate(0b0101010101010101);
+        let flags = PositionModeFlags::empty();
+        let simple_combined = simple_cw.with_position_flags(flags);
+        let result = assert_eq!(simple_combined.bits(), 0b0101010000000101);
+
+        let cw = ControlWord::from_bits_truncate(0b101010101001);
+        let flags = PositionModeFlags::default();
+        let combined = cw.with_position_flags(flags);
+        let result = assert_eq!(combined.bits(), 0b0101010011010);
+    }
+
+    #[test]
+    fn test_with_cia402_flags() {
+        let cw = ControlWord::from_bits_truncate(0b1111111111111111);
+        let flags = Cia402Flags::empty();
+        let combined = cw.with_cia402_flags(flags);
+        let result = assert_eq!(combined.bits(), 0b1111111110111000);
     }
 }

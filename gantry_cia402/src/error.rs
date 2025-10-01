@@ -2,7 +2,7 @@ use oze_canopen::{error::CoError, transmitter::TxPacket};
 use thiserror::Error;
 use tokio::sync::mpsc::error::SendTimeoutError;
 
-use crate::state::Cia402State;
+use crate::driver::state::Cia402State;
 
 #[derive(Debug, Error)]
 pub enum DriveError {

@@ -6,12 +6,9 @@ use tracing::*;
 
 use crate::{
     comms::pdo::Pdo,
-    driver::{
-        state::Cia402State,
-        update::{DEFAULT_UPDATE, Update},
-    },
+    driver::{oms::Setpoint, state::Cia402State, update::Update},
     error::DriveError,
-    od::{bitmask::BitMask, oms::Setpoint},
+    od::bitmask::BitMask,
 };
 
 /// Responsible for all CANopen communication to the drive
@@ -23,7 +20,7 @@ pub async fn publish_updates(
     state_update_rx: mpsc::Receiver<Cia402State>,
     setpoint_update_rx: mpsc::Receiver<Setpoint>,
 ) {
-    let mut update = DEFAULT_UPDATE;
+    let mut update = Update::default();
     let mut controlword_mask = BitMask { set: 0, clear: 0 };
     update.setpoint = None;
 
@@ -57,7 +54,7 @@ pub async fn publish_updates(
         update.controlword = BitMask::apply_controlword_mask(controlword_mask, update.controlword);
 
         trace!(
-            "3. Sent updated controlword: {:?} to the motor",
+            "3. Send updated controlword: {:?} to the motor",
             update.controlword
         );
         if let Err(e) = write_update(&mut pdo, update.clone())

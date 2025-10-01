@@ -14,20 +14,11 @@ use crate::{
         sdo::SdoAction,
     },
     driver::{
-        command::MotorCommand,
-        event::MotorEvent,
-        nmt::Nmt,
-        oms::OmsHandler,
-        router::command_router,
-        startup::motor_startup_task,
-        state::{Cia402State, Cia402StateMachine},
-        update::publisher::publish_updates,
+        command::MotorCommand, event::MotorEvent, feedback::receiver::handle_feedback, nmt::Nmt,
+        oms::OmsHandler, router::command_router, startup::motor_startup_task,
+        state::Cia402StateMachine, update::publisher::publish_updates,
     },
     error::DriveError,
-    od::oms::{
-        DEFAULT_POSITIONMODE_FLAGS, PositionModeFlags, PositionSetpoint, Setpoint, TorqueSetpoint,
-        VelocitySetpoint,
-    },
 };
 
 use anyhow::Result;
@@ -58,8 +49,8 @@ impl Cia402Driver {
         node_id: u8,
         canopen: CanOpenInterface,
         parameters: &[SdoAction<'_>],
-        rpdo_mapping: &'static [PdoMapping],
-        tpdo_mapping: &'static [PdoMapping],
+        rpdo_mapping_set: &'static [PdoMapping],
+        tpdo_mapping_set: &'static [PdoMapping],
     ) -> Result<Self, DriveError> {
         // Initialize input interfaces
         let (cmd_tx, cmd_rx): (mpsc::Sender<MotorCommand>, mpsc::Receiver<MotorCommand>) =
@@ -72,11 +63,11 @@ impl Cia402Driver {
         ) = tokio::sync::broadcast::channel(10);
 
         // Get the SDO client for this node id, we use this to make SDO read/writes
-        let sdo = canopen.get_sdo_client(node_id).expect(format!(
-            "Unable to construct SDO client for node id {node_id}"
-        ));
+        let sdo = canopen
+            .get_sdo_client(node_id)
+            .expect("Unable to construct SDO client for node id {node_id}");
         // Get the PDO client for this node id, we use this to manage R/TPDOs
-        let pdo = Pdo::new(canopen, node_id, tpdo_mapping, rpdo_mapping);
+        let pdo = Pdo::new(canopen, node_id, rpdo_mapping_set);
 
         // Track task handles that we are about to spawn
         let handles = Vec::new();
@@ -96,8 +87,8 @@ impl Cia402Driver {
             node_id,
             sdo,
             parameters,
-            rpdo_mapping,
-            tpdo_mapping,
+            rpdo_mapping_set,
+            tpdo_mapping_set,
             event_tx.clone(),
             startup_completed_tx,
         ));
@@ -153,13 +144,13 @@ impl Cia402Driver {
             setpoint_update_rx,
         )));
 
-        // Start teh device feedback task responsible for receiving and parsing device feedback,
+        // Start the device feedback task responsible for receiving and parsing device feedback,
         // and broadcasting these as events
         trace!("Starting device feedback handler for motor with node id {node_id}");
-        handles.push(task::spawn(feedback::handle_feedback(
+        handles.push(task::spawn(handle_feedback(
             node_id,
             canopen,
-            tpdo_mapping,
+            tpdo_mapping_set,
             event_tx,
             state_feedback_tx,
         )));
