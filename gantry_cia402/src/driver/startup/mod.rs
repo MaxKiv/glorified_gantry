@@ -16,6 +16,7 @@ use crate::{
         event::MotorEvent,
         startup::{parametrise::parametrise_motor, pdo_mapping::configure_pdo_mappings},
     },
+    error::DriveError,
 };
 
 const PARAMETRISATION_RETRY_DURATION: Duration = Duration::from_secs(1);
@@ -29,7 +30,7 @@ pub async fn motor_startup_task(
     tpdo_mapping: &'static [PdoMapping],
     event_tx: broadcast::Sender<MotorEvent>,
     startup_completed_tx: oneshot::Sender<bool>,
-) {
+) -> Result<(), DriveError> {
     trace!("Starting up motor at node id {node_id}");
     loop {
         trace!("Attempting to parametrise motor at node id {node_id}");
@@ -96,4 +97,5 @@ pub async fn motor_startup_task(
     }
 
     startup_completed_tx.send(true);
+    Ok(())
 }

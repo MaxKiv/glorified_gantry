@@ -1,3 +1,5 @@
+pub mod publisher;
+
 use thiserror::Error;
 
 use crate::{driver::state::Cia402State, od::oms::Setpoint};

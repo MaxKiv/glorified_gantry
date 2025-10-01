@@ -1,4 +1,4 @@
-use crate::od::{drive_subscriber::StatusWord, state::Cia402State};
+use crate::{driver::state::Cia402State, od::drive_subscriber::StatusWord};
 
 /// Events broadcast by a motor driver (status updates, transitions, errors).
 #[derive(Debug, Clone)]

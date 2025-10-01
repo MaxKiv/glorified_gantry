@@ -1,17 +1,23 @@
-/// Commands that can be sent to the motor
+// Commands that can be sent to the motor
 #[derive(Debug)]
 pub enum MotorCommand {
     /// Move to an absolute position (in device units, e.g. encoder ticks)
-    MoveAbsolute { target: i32, velocity: Option<u32> },
+    MoveAbsolute {
+        target: i32,
+        profile_velocity: Option<u32>,
+    },
 
     /// Move relative to current position
-    MoveRelative { delta: i32, velocity: Option<u32> },
+    MoveRelative {
+        delta: i32,
+        profile_velocity: Option<u32>,
+    },
 
     /// Set continuous velocity
-    SetVelocity { velocity: i32 },
+    SetVelocity { target_velocity: i32 },
 
     /// Set continuous velocity
-    SetTorque { torque: i32 },
+    SetTorque { target_torque: i32 },
 
     /// Halt immediately (stop but remain enabled)
     Halt,

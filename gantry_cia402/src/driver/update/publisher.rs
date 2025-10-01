@@ -20,8 +20,8 @@ use crate::{
 /// It then sends these changes out on the CANopen bus using the accessor
 pub async fn publish_updates(
     mut pdo: Pdo,
-    state_transition_rx: mpsc::Receiver<Cia402State>,
-    setpoint_rx: mpsc::Receiver<Setpoint>,
+    state_update_rx: mpsc::Receiver<Cia402State>,
+    setpoint_update_rx: mpsc::Receiver<Setpoint>,
 ) {
     let mut update = DEFAULT_UPDATE;
     let mut controlword_mask = BitMask { set: 0, clear: 0 };
@@ -38,13 +38,13 @@ pub async fn publish_updates(
     loop {
         trace!("1. Wait for a relevant change that requires a controlword or OD object update");
         select! {
-            maybe_state = state_transition_rx.recv() => {
+            maybe_state = state_update_rx.recv() => {
                 if let Some(new_state) = maybe_state {
                     trace!("state change received: {new_state:?}, updating controlword");
                     controlword_mask = BitMask::get_controlword_mask_for_state(&new_state);
                 }
             }
-            maybe_oms = setpoint_rx.recv() => {
+            maybe_oms = setpoint_update_rx.recv() => {
                 if let Some(oms_setpoint) = maybe_oms {
                     trace!("operational mode specific change received: {oms_setpoint:?}, updating controlword and setpoint");
                     controlword_mask = BitMask::get_controlword_mask_for_oms_setpoint(&oms_setpoint);
@@ -89,7 +89,7 @@ pub async fn write_update(pdo: &mut Pdo, update: Update) -> Result<(), DriveErro
         Some(controlword) => {
             pdo.write_controlword(update.controlword).await?;
         }
-        None => {}
+        _ => {}
     }
 
     Ok(())
