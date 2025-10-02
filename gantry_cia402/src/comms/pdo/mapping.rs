@@ -26,24 +26,34 @@ impl PdoMapping {
     pub const DEFAULT_RPDOS: &'static [PdoMapping] = &[Self::RPDO_DEFAULT_1, Self::RPDO_DEFAULT_2];
     pub const DEFAULT_TPDOS: &'static [PdoMapping] = &[Self::TPDO_DEFAULT_1, Self::TPDO_DEFAULT_2];
 
-    pub const CUSTOM_RPDOS: &'static [PdoMapping] = &[
-        &Self::RPDO_CONTROL_OPMODE,
-        &Self::RPDO_TARGET_POS,
-        &Self::RPDO_TARGET_VEL,
-        &Self::RPDO_TARGET_TORQUE,
+    pub const CUSTOM_RPDOS: &'static [PdoMapping; 4] = &[
+        Self::RPDO_CONTROL_OPMODE,
+        Self::RPDO_TARGET_POS,
+        Self::RPDO_TARGET_VEL,
+        Self::RPDO_TARGET_TORQUE,
     ];
     // I didn't know of a better const method to do this, seems rust const fn are lacking compared
     // to c++ templates, this never changes anyway
     pub const RPDO_NUM_CONTROL_WORD: usize = 1;
-    pub const RPDO_NUM_OPMODE: usize = 1;
-    pub const RPDO_NUM_TARGET_POS: usize = 2;
-    pub const RPDO_NUM_TARGET_VEL: usize = 3;
-    pub const RPDO_NUM_TARGET_TORQUE: usize = 4;
+    pub const CONTROL_WORD_OFFSET: usize = 0;
 
-    pub const CUSTOM_TPDOS: &'static [PdoMapping] = &[
-        &Self::TPDO_STATUS_OPMODE,
-        &Self::TPDO_POS_VEL_ACTUAL,
-        &Self::TPDO_TORQUE_ACTUAL,
+    pub const RPDO_NUM_OPMODE: usize = 1;
+    pub const OPMODE_OFFSET: usize = 16;
+
+    pub const RPDO_NUM_TARGET_POS: usize = 2;
+    pub const POS_TARGET_OFFSET: usize = 0;
+    pub const POS_VEL_OFFSET: usize = 16;
+
+    pub const RPDO_NUM_TARGET_VEL: usize = 3;
+    pub const VEL_TARGET_OFFSET: usize = 0;
+
+    pub const RPDO_NUM_TARGET_TORQUE: usize = 4;
+    pub const TORQUE_TARGET_OFFSET: usize = 0;
+
+    pub const CUSTOM_TPDOS: &'static [PdoMapping; 3] = &[
+        Self::TPDO_STATUS_OPMODE,
+        Self::TPDO_POS_VEL_ACTUAL,
+        Self::TPDO_TORQUE_ACTUAL,
     ];
 
     pub const RPDO_DEFAULT_1: PdoMapping = PdoMapping {
@@ -206,8 +216,14 @@ pub fn get_pdo_cob_id(pdo_num: usize, kind: PdoType) -> Option<u16> {
         _ => return None,
     } + pdo_num;
 
-    Some(match kind {
-        PdoType::RPDO => cob_id,
-        PdoType::TPDO => cob_id + 0x20,
-    })
+    Some(
+        match kind {
+            PdoType::RPDO => cob_id,
+            PdoType::TPDO => cob_id + 0x20,
+        }
+        .try_into()
+        .expect(
+            "cob_id doesn't want to be coerced into usize -> fed wrong pdo_num into get_pdo_cob_id",
+        ),
+    )
 }

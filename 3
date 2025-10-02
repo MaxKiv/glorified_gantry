@@ -16,7 +16,7 @@ use crate::{
     },
     driver::{
         oms::{OperationMode, PositionSetpoint, TorqueSetpoint, VelocitySetpoint},
-        state::Cia402Flags,
+        state::{Cia402Flags, Cia402State, Cia402Transition},
         update::ControlWord,
     },
     error::DriveError,
@@ -29,39 +29,43 @@ use crate::{
 pub struct Pdo {
     canopen: CanOpenInterface,
     node_id: u8,
-    rpdo_mapping_set: &'static [PdoMapping],
+    rpdo_mapping: &'static PdoMapping,
     rpdos: [PdoFrame; 4],
 }
 
 impl Pdo {
+    const CW_PDO_NUM: usize = PdoMapping::RPDO_NUM_CONTROL_WORD;
+
     pub fn new(
         canopen: CanOpenInterface,
         node_id: u8,
-        rpdo_mapping_set: &'static [PdoMapping],
+        rpdo_mapping: &'static PdoMapping,
     ) -> Result<Self, DriveError> {
         // Check if all required mappings are present
-        Pdo::check_required_rpdo_mappings(rpdo_mapping_set)?;
+        Pdo::check_required_rpdo_mappings(&rpdo_mapping)?;
 
         Ok(Self {
             canopen,
             node_id,
-            rpdo_mapping_set,
+            rpdo_mapping,
             rpdos: core::array::from_fn(|_| PdoFrame::zero()),
         })
     }
 
-    // Perform the given cia402 state transition by writing the corresponding controlword flags and
-    // sending the PDO that has controlword mapped out to the device
+    // Write the given controlword to the motor
     pub async fn write_cia402_state_transition(
         &mut self,
         flags: Cia402Flags,
     ) -> Result<(), DriveError> {
+        const CW_OFFSET: usize = 0;
+
         // Set the cia402 controlword bits to represent the requested state
         let cw = self.get_current_controlword();
         cw.with_cia402_flags(flags);
-        self.set_controlword(cw);
 
-        self.send_rpdo(PdoMapping::RPDO_NUM_CONTROL_WORD).await?;
+        self.rpdos[Self::CW_PDO_NUM].set(CW_OFFSET, &cw.bits().to_be_bytes());
+
+        self.send_rpdo(Self::CW_PDO_NUM).await?;
 
         Ok(())
     }
@@ -77,30 +81,30 @@ impl Pdo {
         }: PositionSetpoint,
     ) -> Result<(), DriveError> {
         // 1. Construct RPDO1: Set opmode to position and toggle control_word OMS bits
+        const CW_OFFSET: usize = 0;
+        const OPMODE_OFFSET: usize = 16;
 
-        // Set Controlword
-        let cw = self.get_current_controlword();
+        // calculate Controlword
+        let cw_bytes = [self.rpdos[PDO_NUM].data[0], self.rpdos[PDO_NUM].data[1]];
+        let cw = ControlWord::from_bits(u16::from_be_bytes(cw_bytes)).expect(
+            "unable to fetch current controlword from saved RPDO1 in write_position_setpoint",
+        );
         cw.with_position_flags(flags);
-        self.set_controlword(cw);
-
-        // Set Position Mode
-        self.set_operational_mode(OperationMode::ProfilePosition);
-
+        self.rpdos[PDO_NUM].set(CW_OFFSET, &cw.bits().to_be_bytes());
+        // Calculate opmode
+        self.rpdos[PDO_NUM].set(OPMODE_OFFSET, &[OperationMode::ProfilePosition as u8]);
         // Send RPDO1
-        self.send_rpdo(PdoMapping::RPDO_NUM_OPMODE).await?;
+        self.send_rpdo(PDO_NUM).await?;
 
         // 2. Construct RPDO2: Set position and velocity target
-        self.rpdos[PdoMapping::RPDO_NUM_TARGET_POS].set(
-            PdoMapping::POS_TARGET_OFFSET,
-            &(target as u32).to_be_bytes(),
-        );
-        self.rpdos[PdoMapping::RPDO_NUM_TARGET_POS].set(
-            PdoMapping::POS_VEL_OFFSET,
-            &(profile_velocity.to_be_bytes()),
-        );
+        const POS_TARGET_PDO_NUM: usize = PdoMapping::RPDO_NUM_TARGET_POS;
+        const POS_TARGET_OFFSET: usize = 0;
+        const VEL_TARGET_OFFSET: usize = 16;
 
+        self.rpdos[POS_TARGET_PDO_NUM].set(POS_TARGET_OFFSET, &(target as u32).to_be_bytes());
+        self.rpdos[POS_TARGET_PDO_NUM].set(VEL_TARGET_OFFSET, &(profile_velocity.to_be_bytes()));
         // Send RPDO2
-        self.send_rpdo(PdoMapping::RPDO_NUM_TARGET_POS).await?;
+        self.send_rpdo(POS_TARGET_PDO_NUM).await?;
 
         Ok(())
     }
@@ -109,16 +113,19 @@ impl Pdo {
         &mut self,
         VelocitySetpoint { target }: VelocitySetpoint,
     ) -> Result<(), DriveError> {
-        // Set Velocity Mode
-        self.set_operational_mode(OperationMode::ProfileVelocity);
+        // Set opmode to position
+        const OPMODE_PDO_NUM: usize = PdoMapping::RPDO_NUM_OPMODE;
+        const OPMODE_OFFSET: usize = 0;
 
-        self.send_rpdo(PdoMapping::RPDO_NUM_OPMODE).await?;
+        self.rpdos[OPMODE_PDO_NUM].set(OPMODE_OFFSET, &[OperationMode::ProfileVelocity as u8]);
+        self.send_rpdo(OPMODE_PDO_NUM).await?;
 
         // Set position and velocity target
-        self.rpdos[PdoMapping::RPDO_NUM_TARGET_VEL]
-            .set(PdoMapping::VEL_TARGET_OFFSET, &target.to_be_bytes());
+        const VEL_TARGET_PDO_NUM: usize = PdoMapping::RPDO_NUM_TARGET_VEL;
+        const VEL_TARGET_OFFSET: usize = 0;
 
-        self.send_rpdo(PdoMapping::RPDO_NUM_TARGET_VEL).await?;
+        self.rpdos[VEL_TARGET_PDO_NUM].set(VEL_TARGET_OFFSET, &target.to_be_bytes());
+        self.send_rpdo(VEL_TARGET_PDO_NUM).await?;
 
         Ok(())
     }
@@ -127,45 +134,44 @@ impl Pdo {
         &mut self,
         TorqueSetpoint { target }: TorqueSetpoint,
     ) -> Result<(), DriveError> {
-        // Set Torque Mode
-        self.set_operational_mode(OperationMode::ProfileTorque);
+        // Set opmode to position
+        const OPMODE_PDO_NUM: usize = PdoMapping::RPDO_NUM_OPMODE;
+        const OPMODE_OFFSET: usize = 0;
 
-        self.send_rpdo(PdoMapping::RPDO_NUM_OPMODE).await?;
+        self.rpdos[OPMODE_PDO_NUM].set(OPMODE_OFFSET, &[OperationMode::ProfileTorque as u8]);
+        self.send_rpdo(OPMODE_PDO_NUM).await?;
 
         // Set position and torque target
-        self.rpdos[PdoMapping::RPDO_NUM_TARGET_TORQUE]
-            .set(PdoMapping::VEL_TARGET_OFFSET, &target.to_be_bytes());
+        const TORQUE_TARGET_PDO_NUM: usize = PdoMapping::RPDO_NUM_TARGET_TORQUE;
+        const TORQUE_TARGET_OFFSET: usize = 0;
 
-        self.send_rpdo(PdoMapping::RPDO_NUM_TARGET_TORQUE).await?;
+        self.rpdos[TORQUE_TARGET_PDO_NUM].set(TORQUE_TARGET_OFFSET, &target.to_be_bytes());
+        self.send_rpdo(TORQUE_TARGET_PDO_NUM).await?;
 
         Ok(())
     }
 
     // Check if these rpdo mappings contain a controlword
     // TODO: move this into type system
-    fn check_required_rpdo_mappings(
-        rpdo_mapping_set: &'static [PdoMapping],
-    ) -> Result<(), DriveError> {
-        if Self::check_if_mapped(rpdo_mapping_set, &ObjectDictionary::CONTROL_WORD)
-            && Self::check_if_mapped(rpdo_mapping_set, &ObjectDictionary::SET_OPERATION_MODE)
+    fn check_required_rpdo_mappings(rpdo_mapping: &PdoMapping) -> Result<(), DriveError> {
+        if Self::check_if_mapped(rpdo_mapping, &ObjectDictionary::CONTROL_WORD)
+            && Self::check_if_mapped(rpdo_mapping, &ObjectDictionary::SET_OPERATION_MODE)
         {
             Ok(())
         } else {
             Err(DriveError::ViolatedInvariant(
                 format!(
-                    "RPDO mapping check failed for {rpdo_mapping_set:?} - control word is not present"
+                    "RPDO mapping check failed for {rpdo_mapping:?} - control word is not present"
                 )
                 .to_string(),
             ))
         }
     }
 
-    fn check_if_mapped(rpdo_mapping_set: &'static [PdoMapping], entry: &ODEntry) -> bool {
-        for rpdo in rpdo_mapping_set {
-            for map in rpdo.mappings {
-                if map.index == entry.index {
-                    return true;
-                }
+    fn check_if_mapped(rpdo_mapping: &PdoMapping, entry: &ODEntry) -> bool {
+        for map in rpdo_mapping.mappings.iter() {
+            if map.index == entry.index {
+                return true;
             }
         }
         false
@@ -174,8 +180,8 @@ impl Pdo {
     /// Gets current control word
     fn get_current_controlword(&self) -> ControlWord {
         let cw_bytes = [
-            self.rpdos[PdoMapping::RPDO_NUM_CONTROL_WORD].data[0],
-            self.rpdos[PdoMapping::RPDO_NUM_CONTROL_WORD].data[1],
+            self.rpdos[Self::CW_PDO_NUM].data[0],
+            self.rpdos[Self::CW_PDO_NUM].data[1],
         ];
         ControlWord::from_bits(u16::from_be_bytes(cw_bytes)).expect(
             "unable to fetch current controlword from saved RPDO1 in write_position_setpoint",
@@ -201,14 +207,5 @@ impl Pdo {
             .map_err(DriveError::Timeout)?;
 
         Ok(())
-    }
-
-    fn set_controlword(&mut self, cw: ControlWord) {
-        self.rpdos[PdoMapping::RPDO_NUM_CONTROL_WORD]
-            .set(PdoMapping::CONTROL_WORD_OFFSET, &cw.bits().to_be_bytes());
-    }
-
-    fn set_operational_mode(&mut self, mode: OperationMode) {
-        self.rpdos[PdoMapping::RPDO_NUM_OPMODE].set(PdoMapping::OPMODE_OFFSET, &[mode as u8]);
     }
 }

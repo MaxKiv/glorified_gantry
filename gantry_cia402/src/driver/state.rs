@@ -53,7 +53,7 @@ bitflags::bitflags! {
         /// Bit 2: Quick stop
         /// 0 = initiate quick stop according to deceleration parameters.
         /// 1 = allow operation.
-        const QUICK_STOP       = 1 << 2;
+        const DISABLE_QUICK_STOP       = 1 << 2;
 
         /// Bit 3: Enable operation
         /// Allows motion commands when set, completing transition into "Operation Enabled".
@@ -72,72 +72,67 @@ impl Default for Cia402Flags {
 }
 
 impl Cia402Flags {
-    fn from_transition(Cia402Transition { from, to }: Cia402Transition) -> Self {
+    /// Returns the controlword bits matching the given Cia402Transition
+    /// Follows page 46 of the PD4C_CANopen_Technical_Manual_v3.3
+    fn from_transition(Cia402Transition { from, to }: Cia402Transition) -> Option<Self> {
+        // TODO: check unit transitions (enabled -> enabled) should they be in here?
         match (from, to) {
-            (Cia402State::NotReadyToSwitchOn, Cia402State::NotReadyToSwitchOn) => todo!(),
-            (Cia402State::NotReadyToSwitchOn, Cia402State::SwitchOnDisabled) => todo!(),
-            (Cia402State::NotReadyToSwitchOn, Cia402State::ReadyToSwitchOn) => todo!(),
-            (Cia402State::NotReadyToSwitchOn, Cia402State::SwitchedOn) => todo!(),
-            (Cia402State::NotReadyToSwitchOn, Cia402State::OperationEnabled) => todo!(),
-            (Cia402State::NotReadyToSwitchOn, Cia402State::QuickStopActive) => todo!(),
-            (Cia402State::NotReadyToSwitchOn, Cia402State::FaultReactionActive) => todo!(),
-            (Cia402State::NotReadyToSwitchOn, Cia402State::Fault) => todo!(),
-            (Cia402State::SwitchOnDisabled, Cia402State::NotReadyToSwitchOn) => todo!(),
-            (Cia402State::SwitchOnDisabled, Cia402State::SwitchOnDisabled) => todo!(),
-            (Cia402State::SwitchOnDisabled, Cia402State::ReadyToSwitchOn) => todo!(),
-            (Cia402State::SwitchOnDisabled, Cia402State::SwitchedOn) => todo!(),
-            (Cia402State::SwitchOnDisabled, Cia402State::OperationEnabled) => todo!(),
-            (Cia402State::SwitchOnDisabled, Cia402State::QuickStopActive) => todo!(),
-            (Cia402State::SwitchOnDisabled, Cia402State::FaultReactionActive) => todo!(),
-            (Cia402State::SwitchOnDisabled, Cia402State::Fault) => todo!(),
-            (Cia402State::ReadyToSwitchOn, Cia402State::NotReadyToSwitchOn) => todo!(),
-            (Cia402State::ReadyToSwitchOn, Cia402State::SwitchOnDisabled) => todo!(),
-            (Cia402State::ReadyToSwitchOn, Cia402State::ReadyToSwitchOn) => todo!(),
-            (Cia402State::ReadyToSwitchOn, Cia402State::SwitchedOn) => todo!(),
-            (Cia402State::ReadyToSwitchOn, Cia402State::OperationEnabled) => todo!(),
-            (Cia402State::ReadyToSwitchOn, Cia402State::QuickStopActive) => todo!(),
-            (Cia402State::ReadyToSwitchOn, Cia402State::FaultReactionActive) => todo!(),
-            (Cia402State::ReadyToSwitchOn, Cia402State::Fault) => todo!(),
-            (Cia402State::SwitchedOn, Cia402State::NotReadyToSwitchOn) => todo!(),
-            (Cia402State::SwitchedOn, Cia402State::SwitchOnDisabled) => todo!(),
-            (Cia402State::SwitchedOn, Cia402State::ReadyToSwitchOn) => todo!(),
-            (Cia402State::SwitchedOn, Cia402State::SwitchedOn) => todo!(),
-            (Cia402State::SwitchedOn, Cia402State::OperationEnabled) => todo!(),
-            (Cia402State::SwitchedOn, Cia402State::QuickStopActive) => todo!(),
-            (Cia402State::SwitchedOn, Cia402State::FaultReactionActive) => todo!(),
-            (Cia402State::SwitchedOn, Cia402State::Fault) => todo!(),
-            (Cia402State::OperationEnabled, Cia402State::NotReadyToSwitchOn) => todo!(),
-            (Cia402State::OperationEnabled, Cia402State::SwitchOnDisabled) => todo!(),
-            (Cia402State::OperationEnabled, Cia402State::ReadyToSwitchOn) => todo!(),
-            (Cia402State::OperationEnabled, Cia402State::SwitchedOn) => todo!(),
-            (Cia402State::OperationEnabled, Cia402State::OperationEnabled) => todo!(),
-            (Cia402State::OperationEnabled, Cia402State::QuickStopActive) => todo!(),
-            (Cia402State::OperationEnabled, Cia402State::FaultReactionActive) => todo!(),
-            (Cia402State::OperationEnabled, Cia402State::Fault) => todo!(),
-            (Cia402State::QuickStopActive, Cia402State::NotReadyToSwitchOn) => todo!(),
-            (Cia402State::QuickStopActive, Cia402State::SwitchOnDisabled) => todo!(),
-            (Cia402State::QuickStopActive, Cia402State::ReadyToSwitchOn) => todo!(),
-            (Cia402State::QuickStopActive, Cia402State::SwitchedOn) => todo!(),
-            (Cia402State::QuickStopActive, Cia402State::OperationEnabled) => todo!(),
-            (Cia402State::QuickStopActive, Cia402State::QuickStopActive) => todo!(),
-            (Cia402State::QuickStopActive, Cia402State::FaultReactionActive) => todo!(),
-            (Cia402State::QuickStopActive, Cia402State::Fault) => todo!(),
-            (Cia402State::FaultReactionActive, Cia402State::NotReadyToSwitchOn) => todo!(),
-            (Cia402State::FaultReactionActive, Cia402State::SwitchOnDisabled) => todo!(),
-            (Cia402State::FaultReactionActive, Cia402State::ReadyToSwitchOn) => todo!(),
-            (Cia402State::FaultReactionActive, Cia402State::SwitchedOn) => todo!(),
-            (Cia402State::FaultReactionActive, Cia402State::OperationEnabled) => todo!(),
-            (Cia402State::FaultReactionActive, Cia402State::QuickStopActive) => todo!(),
-            (Cia402State::FaultReactionActive, Cia402State::FaultReactionActive) => todo!(),
-            (Cia402State::FaultReactionActive, Cia402State::Fault) => todo!(),
-            (Cia402State::Fault, Cia402State::NotReadyToSwitchOn) => todo!(),
-            (Cia402State::Fault, Cia402State::SwitchOnDisabled) => todo!(),
-            (Cia402State::Fault, Cia402State::ReadyToSwitchOn) => todo!(),
-            (Cia402State::Fault, Cia402State::SwitchedOn) => todo!(),
-            (Cia402State::Fault, Cia402State::OperationEnabled) => todo!(),
-            (Cia402State::Fault, Cia402State::QuickStopActive) => todo!(),
-            (Cia402State::Fault, Cia402State::FaultReactionActive) => todo!(),
-            (Cia402State::Fault, Cia402State::Fault) => todo!(),
+            (Cia402State::SwitchOnDisabled, Cia402State::ReadyToSwitchOn) => {
+                Some(Cia402Flags::ENABLE_VOLTAGE | Cia402Flags::DISABLE_QUICK_STOP)
+            }
+            (Cia402State::ReadyToSwitchOn, Cia402State::SwitchOnDisabled) => {
+                Some(Cia402Flags::empty())
+            }
+            (Cia402State::ReadyToSwitchOn, Cia402State::SwitchedOn) => Some(
+                Cia402Flags::SWITCH_ON
+                    | Cia402Flags::ENABLE_VOLTAGE
+                    | Cia402Flags::DISABLE_QUICK_STOP,
+            ),
+            (Cia402State::SwitchedOn, Cia402State::SwitchOnDisabled) => Some(Cia402Flags::empty()),
+            (Cia402State::SwitchedOn, Cia402State::ReadyToSwitchOn) => {
+                Some(Cia402Flags::ENABLE_VOLTAGE | { Cia402Flags::DISABLE_QUICK_STOP })
+            }
+            (Cia402State::SwitchedOn, Cia402State::OperationEnabled) => Some(
+                Cia402Flags::SWITCH_ON
+                    | Cia402Flags::ENABLE_VOLTAGE
+                    | Cia402Flags::DISABLE_QUICK_STOP
+                    | Cia402Flags::ENABLE_OPERATION,
+            ),
+            (Cia402State::OperationEnabled, Cia402State::SwitchOnDisabled) => {
+                // TODO: check this
+                Some(Cia402Flags::empty())
+            }
+            (Cia402State::OperationEnabled, Cia402State::ReadyToSwitchOn) => {
+                Some(Cia402Flags::ENABLE_VOLTAGE | { Cia402Flags::DISABLE_QUICK_STOP })
+            }
+
+            (Cia402State::OperationEnabled, Cia402State::SwitchedOn) => Some(
+                Cia402Flags::SWITCH_ON
+                    | Cia402Flags::ENABLE_VOLTAGE
+                    | Cia402Flags::DISABLE_QUICK_STOP,
+            ),
+            (Cia402State::OperationEnabled, Cia402State::QuickStopActive) => Some(
+                Cia402Flags::SWITCH_ON
+                    | Cia402Flags::ENABLE_VOLTAGE
+                    | Cia402Flags::DISABLE_QUICK_STOP
+                    | Cia402Flags::ENABLE_OPERATION,
+            ),
+            (Cia402State::QuickStopActive, Cia402State::SwitchOnDisabled) => {
+                // Seems the device performs this automatically when halted? Unclear
+                None
+            }
+            (Cia402State::QuickStopActive, Cia402State::OperationEnabled) => Some(
+                Cia402Flags::SWITCH_ON
+                    | Cia402Flags::ENABLE_VOLTAGE
+                    | Cia402Flags::DISABLE_QUICK_STOP
+                    | Cia402Flags::ENABLE_OPERATION,
+            ),
+            (Cia402State::Fault, Cia402State::SwitchOnDisabled) => Some(Cia402Flags::FAULT_RESET),
+            (Cia402State::FaultReactionActive, _) => {
+                // performed automatically by the device
+                None
+            }
+            _ => None,
         }
     }
 }
@@ -152,7 +147,7 @@ pub struct Cia402StateMachine {
 
     state_cmd_rx: mpsc::Receiver<Cia402State>,
     state_feedback_rx: mpsc::Receiver<Cia402State>,
-    state_update_tx: mpsc::Sender<Cia402Transition>,
+    state_update_tx: mpsc::Sender<Cia402Flags>,
 }
 
 impl Cia402StateMachine {
@@ -162,9 +157,9 @@ impl Cia402StateMachine {
         canopen: CanOpenInterface,
         state_cmd_rx: mpsc::Receiver<Cia402State>,
         state_feedback_rx: mpsc::Receiver<Cia402State>,
-        state_update_tx: mpsc::Sender<Cia402Transition>,
+        state_update_tx: mpsc::Sender<Cia402Flags>,
     ) -> JoinHandle<()> {
-        let mut cia402 = Self {
+        let cia402 = Self {
             node_id,
             canopen,
             current_state: Cia402State::NotReadyToSwitchOn,
@@ -201,12 +196,11 @@ impl Cia402StateMachine {
                     // Check if the requested transition is valid
                     if self.transition_is_valid(new_state) {
 
-                        let x = Cia402Flags::from_transition(Cia402Transition {
-                            from:self.current_state, to:
-                            new_state
-                        });
+                        let flags = Cia402Flags::from_transition(Cia402Transition {
+                            from:self.current_state, to: new_state
+                        }).expect("Unable to get cia402 state transition flags");
 
-                        self.state_update_tx.send().await;
+                        self.state_update_tx.send(flags).await;
                     } else {
                         error!(
                             "Invalid Cia402 state update requested, old -> new state: {:?} -> {new_state:?}",

@@ -10,10 +10,8 @@
 - ! Merge the update publisher + Pdo struct into 1, when writing PDO's we have
   access to everything (eg. controlword + setpoint & flags), so we should construct the PDO there
 
-- Make Specific RPDO/TPDO mappings required, encode them into the type system
-  somehow. Building something that can work with any generic mapping is hard and
-  not efficient use of my time. Plus our current R/TPDO mapping is always
-  required if you want to run a tight setup
+- Parse R/TPDO mapping at configuration time or encode into type system. current
+  hardcode setup is brittle
 
 # Set up physical CAN
 

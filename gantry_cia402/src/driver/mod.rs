@@ -63,16 +63,18 @@ impl Cia402Driver {
         ) = tokio::sync::broadcast::channel(10);
 
         // Get the SDO client for this node id, we use this to make SDO read/writes
-        let sdo = canopen
-            .get_sdo_client(node_id)
-            .expect("Unable to construct SDO client for node id {node_id}");
+        let sdo = canopen.get_sdo_client(node_id).expect(&format!(
+            "Unable to construct SDO client for node id {node_id}"
+        ));
         // Get the PDO client for this node id, we use this to manage R/TPDOs
-        let pdo = Pdo::new(canopen, node_id, rpdo_mapping_set);
+        let pdo = Pdo::new(canopen, node_id, rpdo_mapping_set).expect(&format!(
+            "unable to construct PDO client for node id {node_id}"
+        ));
 
         // Track task handles that we are about to spawn
-        let handles = Vec::new();
+        let handles: Vec<JoinHandle<()>> = Vec::new();
 
-        // Start the NMT task, this continously attempts to put this motor into NMT::Operational
+        // Start the NMT task, this continously attempts to put the motor into NMT::Operational
         trace!("Starting NMT State Machine task for motor with node id {node_id}");
         let (nmt_feedback_tx, nmt_feedback_rx) = tokio::sync::mpsc::channel(10);
         handles.push(Nmt::init(node_id, canopen, nmt_feedback_rx));

@@ -1,13 +1,13 @@
 use oze_canopen::{
-    canopen,
     interface::CanOpenInterface,
     proto::nmt::{NmtCommand, NmtCommandSpecifier},
 };
 use tokio::{sync::mpsc::Receiver, task};
+use tracing::*;
 
 use crate::error::DriveError;
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum NmtState {
     Stopped,
     PreOperational,
@@ -26,8 +26,8 @@ impl Nmt {
         node_id: u8,
         canopen: CanOpenInterface,
         nmt_rx: Receiver<NmtState>,
-    ) -> task::JoinHandle<Result<(), DriveError>> {
-        let mut nmt = Self {
+    ) -> task::JoinHandle<()> {
+        let nmt = Self {
             node_id,
             canopen,
             current_state: NmtState::PreOperational,
@@ -39,18 +39,24 @@ impl Nmt {
         nmt_handler
     }
 
-    pub async fn run(&mut self) -> Result<(), DriveError> {
+    pub async fn run(mut self) {
         loop {
             // Process NMT state updates from handle_feedback
             if let Some(new_state) = self.nmt_rx.recv().await {
                 trace!(
-                    "NMT state update received, old -> new state: {self.current_state:?} -> {new_state:?}",
+                    "NMT state update received, old -> new state: {:?} -> {new_state:?}",
+                    self.current_state
                 );
                 self.current_state = new_state;
             }
 
             // Continously attempt to put the motor in NmtState::Operational
-            let _ = self.transition_to_operational().await;
+            if let Err(err) = self.transition_to_operational().await {
+                error!(
+                    "Error transitioning device with node id {} to NMT::Operational: {err}",
+                    self.node_id
+                );
+            }
         }
     }
 
@@ -77,11 +83,11 @@ impl Nmt {
                 }
                 Err(err) => {
                     error!(
-                        "Error setting motor {} to NMT Operational: {err}",
+                        "Error setting motor {} to NMT Operational: {err:?}",
                         self.node_id
                     );
 
-                    return DriveError::CanOpen(err);
+                    return Err(DriveError::CanOpen(err));
                 }
             }
         }
