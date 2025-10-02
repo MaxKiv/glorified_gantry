@@ -2,6 +2,8 @@ pub mod receiver;
 
 use std::time::Duration;
 
+use oze_canopen::canopen::RxMessage;
+
 const COB_ID_SYNC: u16 = 0x80;
 const COB_ID_TPDO1: u16 = 0x180;
 const COB_ID_RPDO1: u16 = 0x200;

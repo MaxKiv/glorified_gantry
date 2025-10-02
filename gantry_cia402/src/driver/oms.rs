@@ -1,7 +1,4 @@
-use crate::od::oms::Setpoint;
-use crate::{driver::update::Update, error::DriveError, od::drive_publisher::Update};
 use oze_canopen::interface::CanOpenInterface;
-use tokio::sync::mpsc::Sender;
 use tokio::task::JoinHandle;
 use tokio::{
     sync::mpsc::{self},
@@ -68,13 +65,11 @@ bitflags::bitflags! {
 
 impl Default for PositionModeFlags {
     fn default() -> Self {
-        PositionModeFlags::from_bits_truncate(
-            PositionModeFlags::NEW_SETPOINT// By default start movement when new setpoint is given
+        PositionModeFlags::NEW_SETPOINT// By default start movement when new setpoint is given
         | PositionModeFlags::CHANGE_IMMEDIATELY  // By default instantly adopt new setpoint, overriding old
         | !(PositionModeFlags::RELATIVE)         // By default interpret target position as absolute position
         | !(PositionModeFlags::HALT)             // By default do not halt
-        | PositionModeFlags::CHANGE_ON_SETPOINT, // By default have zero velocity when reaching setpoint
-        )
+        | PositionModeFlags::CHANGE_ON_SETPOINT // By default have zero velocity when reaching setpoint
     }
 }
 
@@ -118,7 +113,7 @@ impl OmsHandler {
         setpoint_cmd_rx: mpsc::Receiver<Setpoint>,
         setpoint_update_tx: mpsc::Sender<Setpoint>,
     ) -> JoinHandle<()> {
-        let mut oms_handler = Self {
+        let oms_handler = Self {
             node_id,
             canopen,
             setpoint_cmd_rx,
@@ -130,7 +125,7 @@ impl OmsHandler {
         oms_handle
     }
 
-    pub async fn run(&mut self) {
+    pub async fn run(mut self) {
         loop {
             // Process Setpoint updates
             if let Some(new_setpoint) = self.setpoint_cmd_rx.recv().await {

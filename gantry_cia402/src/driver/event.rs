@@ -1,4 +1,4 @@
-use crate::{driver::state::Cia402State, od::drive_subscriber::StatusWord};
+use crate::driver::{feedback::StatusWord, oms::OperationMode, state::Cia402State};
 
 /// Events broadcast by a motor driver (status updates, transitions, errors).
 #[derive(Debug, Clone)]
@@ -8,6 +8,9 @@ pub enum MotorEvent {
 
     /// New statusword received from device
     StatusWord(StatusWord),
+
+    /// Operational mode of the device
+    OperationMode(OperationMode),
 
     /// Position feedback (encoder units or user-scaled units)
     PositionFeedback { actual_position: i32 },

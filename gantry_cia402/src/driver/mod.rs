@@ -133,7 +133,6 @@ impl Cia402Driver {
             cmd_rx,
             state_cmd_tx,
             setpoint_cmd_tx,
-            event_tx,
         )));
 
         // Start the update publisher which is responsible for aggregating the validated device

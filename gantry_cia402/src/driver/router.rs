@@ -13,7 +13,6 @@ pub async fn command_router(
     cmd_rx: mpsc::Receiver<MotorCommand>,
     state_cmd_tx: tokio::sync::mpsc::Sender<Cia402State>,
     setpoint_cmd_tx: tokio::sync::mpsc::Sender<Setpoint>,
-    event_tx: tokio::sync::broadcast::Sender<MotorEvent>,
 ) {
     if let Some(cmd) = cmd_rx.recv().await {
         trace!(
