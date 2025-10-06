@@ -2,16 +2,10 @@
 #[derive(Debug)]
 pub enum MotorCommand {
     /// Move to an absolute position (in device units, e.g. encoder ticks)
-    MoveAbsolute {
-        target: i32,
-        profile_velocity: Option<u32>,
-    },
+    MoveAbsolute { target: i32, profile_velocity: u32 },
 
     /// Move relative to current position
-    MoveRelative {
-        delta: i32,
-        profile_velocity: Option<u32>,
-    },
+    MoveRelative { delta: i32, profile_velocity: u32 },
 
     /// Set continuous velocity
     SetVelocity { target_velocity: i32 },

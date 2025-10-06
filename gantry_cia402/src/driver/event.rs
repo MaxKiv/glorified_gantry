@@ -19,7 +19,7 @@ pub enum MotorEvent {
     VelocityFeedback { actual_velocity: i32 },
 
     /// Torque feedback
-    TorqueFeedback { actual_torque: i32 },
+    TorqueFeedback { actual_torque: i16 },
 
     /// Fault detected (e.g. fault bit set in statusword)
     Fault { code: u16, description: String },

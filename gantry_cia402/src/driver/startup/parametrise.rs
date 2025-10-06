@@ -5,14 +5,7 @@ use oze_canopen::sdo_client::SdoClient;
 use tokio::sync::Mutex;
 use tracing::*;
 
-use crate::{
-    comms::{
-        pdo::mapping::{PdoMapping, PdoType},
-        sdo::SdoAction,
-    },
-    error::DriveError,
-    od::ObjectDictionary,
-};
+use crate::comms::sdo::SdoAction;
 
 /// Parametrize the motor at given node id
 /// parametrisation is the process of setting important parameters like

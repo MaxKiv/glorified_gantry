@@ -3,7 +3,7 @@ pub mod publisher;
 use thiserror::Error;
 
 use crate::driver::{
-    oms::{PositionModeFlags, Setpoint},
+    oms::PositionModeFlags,
     state::{Cia402Flags, Cia402State},
 };
 
@@ -72,57 +72,6 @@ impl ControlWord {
 impl Default for ControlWord {
     fn default() -> Self {
         Self::empty()
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct Update {
-    pub controlword: Option<ControlWord>,
-    pub setpoint: Option<Setpoint>,
-    pub state: Option<Cia402State>,
-}
-
-impl Default for Update {
-    fn default() -> Self {
-        Self {
-            controlword: None,
-            setpoint: None,
-            state: None,
-        }
-    }
-}
-
-impl Update {
-    pub fn new(controlword: ControlWord, setpoint: Setpoint, state: Cia402State) -> Self {
-        Self {
-            controlword,
-            setpoint,
-            state,
-        }
-    }
-
-    pub fn from_controlword(controlword: ControlWord) -> Self {
-        Self {
-            controlword,
-            setpoint: None,
-            state: None,
-        }
-    }
-
-    pub fn from_setpoint(setpoint: Setpoint) -> Self {
-        Self {
-            controlword: None,
-            setpoint,
-            state: None,
-        }
-    }
-
-    pub fn from_state(state: Cia402State) -> Self {
-        Self {
-            controlword: None,
-            setpoint: None,
-            state,
-        }
     }
 }
 

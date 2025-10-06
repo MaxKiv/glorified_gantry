@@ -33,7 +33,7 @@ use tracing::*;
 pub struct Cia402Driver {
     pub node_id: u8,
     cmd_tx: mpsc::Sender<MotorCommand>,
-    event_rx: broadcast::Receiver<MotorEvent>,
+    pub event_rx: broadcast::Receiver<MotorEvent>,
     handles: Vec<JoinHandle<()>>,
 }
 
@@ -48,7 +48,7 @@ impl Cia402Driver {
     pub async fn init(
         node_id: u8,
         canopen: CanOpenInterface,
-        parameters: &[SdoAction<'_>],
+        parameters: &'static [SdoAction<'_>],
         rpdo_mapping_set: &'static [PdoMapping],
         tpdo_mapping_set: &'static [PdoMapping],
     ) -> Result<Self, DriveError> {
@@ -67,17 +67,17 @@ impl Cia402Driver {
             "Unable to construct SDO client for node id {node_id}"
         ));
         // Get the PDO client for this node id, we use this to manage R/TPDOs
-        let pdo = Pdo::new(canopen, node_id, rpdo_mapping_set).expect(&format!(
+        let pdo = Pdo::new(canopen.clone(), node_id, rpdo_mapping_set).expect(&format!(
             "unable to construct PDO client for node id {node_id}"
         ));
 
         // Track task handles that we are about to spawn
-        let handles: Vec<JoinHandle<()>> = Vec::new();
+        let mut handles: Vec<JoinHandle<()>> = Vec::new();
 
         // Start the NMT task, this continously attempts to put the motor into NMT::Operational
         trace!("Starting NMT State Machine task for motor with node id {node_id}");
         let (nmt_feedback_tx, nmt_feedback_rx) = tokio::sync::mpsc::channel(10);
-        handles.push(Nmt::init(node_id, canopen, nmt_feedback_rx));
+        handles.push(Nmt::init(node_id, canopen.clone(), nmt_feedback_rx));
 
         // Start the startup task for this motor, this does parametrisation and sets pdo mapping
         trace!("Starting Startup Task for motor with node id {node_id}");
@@ -94,6 +94,7 @@ impl Cia402Driver {
             event_tx.clone(),
             startup_completed_tx,
         ));
+
         // Wait for the startup task to finish to make sure the motor is in a known state before
         // proceeding
         if let Err(err) = startup.await {
@@ -108,7 +109,7 @@ impl Cia402Driver {
         let (state_feedback_tx, state_feedback_rx) = tokio::sync::mpsc::channel(10);
         handles.push(Cia402StateMachine::init(
             node_id,
-            canopen,
+            canopen.clone(),
             state_cmd_rx,
             state_feedback_rx,
             state_update_tx,
@@ -121,7 +122,7 @@ impl Cia402Driver {
         let (setpoint_update_tx, setpoint_update_rx) = tokio::sync::mpsc::channel(10);
         handles.push(OmsHandler::init(
             node_id,
-            canopen,
+            canopen.clone(),
             setpoint_cmd_rx,
             setpoint_update_tx,
         ));
@@ -153,7 +154,6 @@ impl Cia402Driver {
             canopen,
             tpdo_mapping_set,
             event_tx,
-            state_feedback_tx,
         )));
 
         Ok(Cia402Driver {

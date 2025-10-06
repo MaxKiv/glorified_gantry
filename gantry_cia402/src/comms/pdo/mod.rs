@@ -61,7 +61,7 @@ impl Pdo {
         cw.with_cia402_flags(flags);
         self.set_controlword(cw);
 
-        self.send_rpdo(PdoMapping::RPDO_NUM_CONTROL_WORD).await?;
+        self.send_rpdo(PdoMapping::RPDO_IDX_CONTROL_WORD).await?;
 
         Ok(())
     }
@@ -87,56 +87,60 @@ impl Pdo {
         self.set_operational_mode(OperationMode::ProfilePosition);
 
         // Send RPDO1
-        self.send_rpdo(PdoMapping::RPDO_NUM_OPMODE).await?;
+        self.send_rpdo(PdoMapping::RPDO_IDX_OPMODE).await?;
 
         // 2. Construct RPDO2: Set position and velocity target
-        self.rpdos[PdoMapping::RPDO_NUM_TARGET_POS].set(
+        self.rpdos[PdoMapping::RPDO_IDX_TARGET_POS].set(
             PdoMapping::POS_TARGET_OFFSET,
             &(target as u32).to_be_bytes(),
         );
-        self.rpdos[PdoMapping::RPDO_NUM_TARGET_POS].set(
+        self.rpdos[PdoMapping::RPDO_IDX_TARGET_POS].set(
             PdoMapping::POS_VEL_OFFSET,
             &(profile_velocity.to_be_bytes()),
         );
 
         // Send RPDO2
-        self.send_rpdo(PdoMapping::RPDO_NUM_TARGET_POS).await?;
+        self.send_rpdo(PdoMapping::RPDO_IDX_TARGET_POS).await?;
 
         Ok(())
     }
 
     pub async fn write_velocity_setpoint(
         &mut self,
-        VelocitySetpoint { target }: VelocitySetpoint,
+        VelocitySetpoint {
+            target_velocity: target,
+        }: VelocitySetpoint,
     ) -> Result<(), DriveError> {
         // Set Velocity Mode
         self.set_operational_mode(OperationMode::ProfileVelocity);
 
-        self.send_rpdo(PdoMapping::RPDO_NUM_OPMODE).await?;
+        self.send_rpdo(PdoMapping::RPDO_IDX_OPMODE).await?;
 
         // Set position and velocity target
-        self.rpdos[PdoMapping::RPDO_NUM_TARGET_VEL]
+        self.rpdos[PdoMapping::RPDO_IDX_TARGET_VEL]
             .set(PdoMapping::VEL_TARGET_OFFSET, &target.to_be_bytes());
 
-        self.send_rpdo(PdoMapping::RPDO_NUM_TARGET_VEL).await?;
+        self.send_rpdo(PdoMapping::RPDO_IDX_TARGET_VEL).await?;
 
         Ok(())
     }
 
     pub async fn write_torque_setpoint(
         &mut self,
-        TorqueSetpoint { target }: TorqueSetpoint,
+        TorqueSetpoint {
+            target_torque: target,
+        }: TorqueSetpoint,
     ) -> Result<(), DriveError> {
         // Set Torque Mode
         self.set_operational_mode(OperationMode::ProfileTorque);
 
-        self.send_rpdo(PdoMapping::RPDO_NUM_OPMODE).await?;
+        self.send_rpdo(PdoMapping::RPDO_IDX_OPMODE).await?;
 
         // Set position and torque target
-        self.rpdos[PdoMapping::RPDO_NUM_TARGET_TORQUE]
+        self.rpdos[PdoMapping::RPDO_IDX_TARGET_TORQUE]
             .set(PdoMapping::VEL_TARGET_OFFSET, &target.to_be_bytes());
 
-        self.send_rpdo(PdoMapping::RPDO_NUM_TARGET_TORQUE).await?;
+        self.send_rpdo(PdoMapping::RPDO_IDX_TARGET_TORQUE).await?;
 
         Ok(())
     }
@@ -174,8 +178,8 @@ impl Pdo {
     /// Gets current control word
     fn get_current_controlword(&self) -> ControlWord {
         let cw_bytes = [
-            self.rpdos[PdoMapping::RPDO_NUM_CONTROL_WORD].data[0],
-            self.rpdos[PdoMapping::RPDO_NUM_CONTROL_WORD].data[1],
+            self.rpdos[PdoMapping::RPDO_IDX_CONTROL_WORD].data[0],
+            self.rpdos[PdoMapping::RPDO_IDX_CONTROL_WORD].data[1],
         ];
         ControlWord::from_bits(u16::from_be_bytes(cw_bytes)).expect(
             "unable to fetch current controlword from saved RPDO1 in write_position_setpoint",
@@ -204,11 +208,11 @@ impl Pdo {
     }
 
     fn set_controlword(&mut self, cw: ControlWord) {
-        self.rpdos[PdoMapping::RPDO_NUM_CONTROL_WORD]
+        self.rpdos[PdoMapping::RPDO_IDX_CONTROL_WORD]
             .set(PdoMapping::CONTROL_WORD_OFFSET, &cw.bits().to_be_bytes());
     }
 
     fn set_operational_mode(&mut self, mode: OperationMode) {
-        self.rpdos[PdoMapping::RPDO_NUM_OPMODE].set(PdoMapping::OPMODE_OFFSET, &[mode as u8]);
+        self.rpdos[PdoMapping::RPDO_IDX_OPMODE].set(PdoMapping::OPMODE_OFFSET, &[mode as u8]);
     }
 }

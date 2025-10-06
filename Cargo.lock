@@ -265,6 +265,7 @@ dependencies = [
 name = "gantry_demo"
 version = "0.1.0"
 dependencies = [
+ "gantry_cia402",
  "oze-canopen",
  "tokio",
  "tracing",

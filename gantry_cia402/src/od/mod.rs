@@ -28,6 +28,7 @@ pub struct ObjectDictionary {}
 
 impl ObjectDictionary {
     // General
+    pub const DEVICE_TYPE: ODEntry = ODEntry::new(0x1000, 0x0);
     pub const CONTROL_WORD: ODEntry = ODEntry::new(0x6040, 0x0);
     pub const STATUS_WORD: ODEntry = ODEntry::new(0x6041, 0x0);
 
@@ -36,7 +37,7 @@ impl ObjectDictionary {
 
     // Feedback related
     pub const POSITION_ACTUAL_VALUE: ODEntry = ODEntry::new(0x6064, 0x00);
-    pub const VELOCITY_ACTUAL_VALUE: ODEntry = ODEntry::new(0x6044, 0x00);
+    pub const VELOCITY_ACTUAL_VALUE: ODEntry = ODEntry::new(0x606C, 0x00);
     pub const TORQUE_ACTUAL_VALUE: ODEntry = ODEntry::new(0x6077, 0x00);
 
     /// Mode of operation related

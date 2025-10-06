@@ -34,10 +34,11 @@ pub async fn motor_startup_task(
     trace!("Starting up motor at node id {node_id}");
     loop {
         trace!("Attempting to parametrise motor at node id {node_id}");
-        if let Err(err) = parametrise_motor(node_id, parameters, sdo).await {
+        if let Err(err) = parametrise_motor(node_id, parameters, sdo.clone()).await {
+            warn!("Failed to parametrise motor for {node_id}: {err}");
             if let Err(err) = event_tx.send(MotorEvent::Fault {
-                code: todo!(),
-                description: format!("Failed to parametrise motor at node id {node_id}")
+                code: 0,
+                description: format!("Failed to parametrise motor at node id {node_id}: {err}")
                     .to_string(),
             }) {
                 error!("Failed to send Event: {err} - We are on our own",);
@@ -55,8 +56,9 @@ pub async fn motor_startup_task(
     trace!("Configuring RPDO_mapping of motor at node id {node_id}");
     loop {
         if let Err(err) = configure_pdo_mappings(node_id, sdo.clone(), rpdo_mapping).await {
+            warn!("Failed to configure_pdo_mappings for {node_id}: {err}");
             if let Err(err) = event_tx.send(MotorEvent::Fault {
-                code: todo!(),
+                code: 0,
                 description: format!(
                     "Failed to configure RPDO mapping for motor at node id {node_id}"
                 )
@@ -77,8 +79,9 @@ pub async fn motor_startup_task(
     trace!("Configuring PPDO_mapping of motor at node id {node_id}");
     loop {
         if let Err(err) = configure_pdo_mappings(node_id, sdo.clone(), tpdo_mapping).await {
+            warn!("Failed to configure_pdo_mappings for {node_id}: {err}");
             if let Err(err) = event_tx.send(MotorEvent::Fault {
-                code: todo!(),
+                code: 0,
                 description: format!(
                     "Failed to configure TPDO mapping for motor at node id {node_id}"
                 )

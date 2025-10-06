@@ -1,8 +1,8 @@
 use tracing::*;
 
 use crate::{
-    driver::{state::Cia402State, update::ControlWord},
-    od::oms::{PositionModeFlags, PositionSetpoint, Setpoint},
+    driver::oms::{PositionModeFlags, PositionSetpoint, Setpoint},
+    driver::state::Cia402State,
 };
 
 /// Indicates the controlword bits that need to be set and cleared for Cia402State transitions
@@ -70,13 +70,5 @@ impl BitMask {
         let set = flags.bits();
         let clear = Self::POSITION_MASK & !flags.bits();
         Self { set, clear }
-    }
-
-    /// Modify the controlword by setting and clearing the appropriate controlword bits
-    /// Follows page 46 of PD4C_CANopen_Technical-Manual_V3.3.0
-    pub fn apply_controlword_mask(mask: BitMask, mut controlword: ControlWord) -> ControlWord {
-        controlword &= !(mask.clear);
-        controlword |= mask.set;
-        controlword
     }
 }

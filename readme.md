@@ -4,14 +4,9 @@
 
 - Orchestrate task spawning, at least make startup task run first
 
-- Move setpoint generation functionality into OMS handler. e.g. flags and
-  specifics, change the setpoint_cmd_tx to pass MotorCommand?
+- Parse R/TPDO mapping at configuration time or encode into type system. current hardcode setup is brittle
 
-- ! Merge the update publisher + Pdo struct into 1, when writing PDO's we have
-  access to everything (eg. controlword + setpoint & flags), so we should construct the PDO there
-
-- Parse R/TPDO mapping at configuration time or encode into type system. current
-  hardcode setup is brittle
+- Refactor the feedback task to be more generic
 
 # Set up physical CAN
 

@@ -2,7 +2,6 @@ pub mod receiver;
 
 use std::time::Duration;
 
-use oze_canopen::canopen::RxMessage;
 
 const COB_ID_SYNC: u16 = 0x80;
 const COB_ID_TPDO1: u16 = 0x180;
@@ -63,4 +62,16 @@ impl Default for StatusWord {
     fn default() -> Self {
         StatusWord::empty()
     }
+}
+
+pub struct ActualPosition {
+    pub value: i32,
+}
+
+pub struct ActualVelocity {
+    pub value: i32,
+}
+
+pub struct ActualTorque {
+    pub value: i16,
 }

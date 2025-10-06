@@ -34,20 +34,20 @@ impl PdoMapping {
     ];
     // I didn't know of a better const method to do this, seems rust const fn are lacking compared
     // to c++ templates, this never changes anyway
-    pub const RPDO_NUM_CONTROL_WORD: usize = 1;
+    pub const RPDO_IDX_CONTROL_WORD: usize = 0;
     pub const CONTROL_WORD_OFFSET: usize = 0;
 
-    pub const RPDO_NUM_OPMODE: usize = 1;
+    pub const RPDO_IDX_OPMODE: usize = 0;
     pub const OPMODE_OFFSET: usize = 16;
 
-    pub const RPDO_NUM_TARGET_POS: usize = 2;
+    pub const RPDO_IDX_TARGET_POS: usize = 1;
     pub const POS_TARGET_OFFSET: usize = 0;
     pub const POS_VEL_OFFSET: usize = 16;
 
-    pub const RPDO_NUM_TARGET_VEL: usize = 3;
+    pub const RPDO_IDX_TARGET_VEL: usize = 2;
     pub const VEL_TARGET_OFFSET: usize = 0;
 
-    pub const RPDO_NUM_TARGET_TORQUE: usize = 4;
+    pub const RPDO_IDX_TARGET_TORQUE: usize = 3;
     pub const TORQUE_TARGET_OFFSET: usize = 0;
 
     pub const CUSTOM_TPDOS: &'static [PdoMapping; 3] = &[
@@ -200,7 +200,7 @@ impl PdoMapping {
         mappings: &[PdoMappingSource {
             index: ObjectDictionary::TORQUE_ACTUAL_VALUE.index,
             sub_index: ObjectDictionary::TORQUE_ACTUAL_VALUE.sub_index,
-            number_of_bits: 32,
+            number_of_bits: 16,
         }],
     };
 }

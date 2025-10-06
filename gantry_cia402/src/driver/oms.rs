@@ -90,13 +90,13 @@ pub struct PositionSetpoint {
 #[derive(Clone, Debug)]
 pub struct VelocitySetpoint {
     // TODO uom?
-    pub target: u32,
+    pub target_velocity: i32,
 }
 
 #[derive(Clone, Debug)]
 pub struct TorqueSetpoint {
     // TODO uom?
-    pub target: u32,
+    pub target_torque: i32,
 }
 
 pub struct OmsHandler {
