@@ -10,9 +10,7 @@ pub enum MotorEvent {
     },
 
     // NMT state update
-    NmtStateUpdate {
-        new: NmtState,
-    },
+    NmtStateUpdate(NmtState),
 
     /// New statusword received from device
     StatusWord(StatusWord),

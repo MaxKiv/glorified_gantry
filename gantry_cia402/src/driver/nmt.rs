@@ -4,10 +4,7 @@ use oze_canopen::{
     interface::CanOpenInterface,
     proto::nmt::{NmtCommand, NmtCommandSpecifier},
 };
-use tokio::{
-    sync::{broadcast, mpsc::Receiver},
-    task,
-};
+use tokio::{sync::broadcast, task, time};
 use tracing::*;
 
 use crate::{
@@ -75,6 +72,7 @@ impl Nmt {
         mut event_rx: broadcast::Receiver<MotorEvent>,
     ) {
         let mut current_state = NmtState::PreOperational;
+        let mut interval = time::interval(Duration::from_millis(250));
 
         loop {
             tokio::select! {
@@ -89,12 +87,15 @@ impl Nmt {
                         current_state = new_state;
                     }
                 }
-                // Continously attempt to put the motor in NmtState::Operational
-                Err(err) = Nmt::transition_to_operational(node_id, canopen.clone(), &current_state)=> {
-                    error!(
-                        "Error transitioning device with node id {} to NMT::Operational: {err}",
-                        node_id
-                    );
+                _ = interval.tick() => {
+                    // Continously attempt to put the motor in NmtState::Operational
+                    if let Err(err) = Nmt::transition_to_operational(node_id, canopen.clone(),
+                            &current_state).await {
+                        error!(
+                            "Error transitioning device with node id {} to NMT::Operational: {err}",
+                            node_id
+                        );
+                    }
                 }
             }
             tokio::time::sleep(Duration::from_millis(250)).await;

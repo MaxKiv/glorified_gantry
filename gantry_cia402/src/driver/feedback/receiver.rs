@@ -10,6 +10,7 @@ use crate::{
         nmt::{HeartBeat, NmtState},
         oms::OperationMode,
     },
+    format_frame,
 };
 
 pub async fn handle_feedback(
@@ -25,9 +26,10 @@ pub async fn handle_feedback(
 
     loop {
         if let Ok(frame) = canopen.rx.recv().await {
-            trace!("Received feedback: {frame:?}");
+            trace!("Received frame: {}", format_frame(&frame));
+
             match frame.cob_id {
-                id if id == COB_ID_SYNC => { /* SYNC */ }
+                id if id == COB_ID_SYNC => { /* master SYNC request */ }
                 id if id == COB_ID_TPDO1 + node_id => {
                     /* TPDO1 */
                     trace!("Received TPDO1: {frame:?}");
@@ -49,8 +51,8 @@ pub async fn handle_feedback(
                 id if id == COB_ID_TPDO4 + node_id => { /* TPDO4 */ }
                 id if id == COB_ID_RPDO4 + node_id => {
                     /* RPDO4 */
-                    trace!(
-                        "Received TPDO4: {frame:?} - This is strange because we are only mapping 3, is the mapping done correctly?"
+                    panic!(
+                        "Received TPDO4: {frame:?} - This is strange because we are only mapping 3 RPDOs, is the mapping done correctly?"
                     );
                 }
                 id if id == COB_ID_SDO_TX + node_id => { /* SDO response */ }
@@ -75,9 +77,7 @@ pub async fn handle_feedback(
 }
 
 async fn handle_heartbeat(frame: RxMessage, event_tx: &broadcast::Sender<MotorEvent>) {
-    if frame.dlc != 1 {
-        error!("Received heartbeat with DLC != 1");
-    }
+    assert!(frame.dlc == 1);
 
     let heartbeat = HeartBeat {
         data: frame.data[0],
@@ -85,19 +85,7 @@ async fn handle_heartbeat(frame: RxMessage, event_tx: &broadcast::Sender<MotorEv
 
     let new_nmt_state: NmtState = heartbeat.into();
 
-    match event_tx.send(MotorEvent::NmtStateUpdate {
-        new: new_nmt_state.clone(),
-    }) {
-        Ok(num_subscribers) => {
-            info!(
-                "Succesfully sent NMT state update {:?} to {num_subscribers} subscribers",
-                new_nmt_state
-            )
-        }
-        Err(err) => {
-            error!("Error sending atcual position update: {err}");
-        }
-    }
+    send_update(MotorEvent::NmtStateUpdate(new_nmt_state.clone()), event_tx);
 }
 
 async fn handle_tpdo1(
@@ -109,17 +97,16 @@ async fn handle_tpdo1(
 
     // 1. Decode statusword
     match read_statusword(&frame) {
-        Ok(statusword) => match event_tx.send(MotorEvent::StatusWord(statusword)) {
-            Ok(num_subscribers) => {
-                info!(
-                    "Succesfully sent statusword update {:?} to {num_subscribers} subscribers",
-                    statusword
-                )
-            }
-            Err(err) => {
-                error!("Error sending statusword  update: {err}");
-            }
-        },
+        Ok(statusword) => {
+            // Parse NMT bits
+            let new_nmt_state: NmtState = statusword.into();
+
+            // Send fresh NMT state to subscribers
+            send_update(MotorEvent::NmtStateUpdate(new_nmt_state), event_tx);
+
+            // Send rest of statusword to subscribers
+            send_update(MotorEvent::StatusWord(statusword), event_tx);
+        }
         Err(err) => {
             error!("Error reading statusword from TPDO1: {err}");
         }
@@ -127,16 +114,10 @@ async fn handle_tpdo1(
 
     // 2. Decode actual mode of operation
     match read_operational_mode(&frame) {
-        Ok(opmode) => match event_tx.send(MotorEvent::OperationMode(opmode)) {
-            Ok(num_subscribers) => {
-                info!(
-                    "Succesfully sent operational mode update {opmode:?} to {num_subscribers} subscribers"
-                )
-            }
-            Err(err) => {
-                error!("Error sending operational mode update: {err}");
-            }
-        },
+        Ok(opmode) => {
+            // Send operational mode update
+            send_update(MotorEvent::OperationMode(opmode), event_tx);
+        }
         Err(err) => {
             error!("Unable to read operational mode from TPDO1: {err}");
         }
@@ -152,19 +133,13 @@ async fn handle_tpdo2(
 
     match read_actual_position(&frame) {
         Ok(actual_position) => {
-            match event_tx.send(MotorEvent::PositionFeedback {
-                actual_position: actual_position.value,
-            }) {
-                Ok(num_subscribers) => {
-                    info!(
-                        "Succesfully sent actual position update {} to {num_subscribers} subscribers",
-                        actual_position.value
-                    )
-                }
-                Err(err) => {
-                    error!("Error sending atcual position update: {err}");
-                }
-            }
+            // Send actual position update
+            send_update(
+                MotorEvent::PositionFeedback {
+                    actual_position: actual_position.value,
+                },
+                event_tx,
+            );
         }
         Err(err) => {
             error!("Error reading actual position: {err}");
@@ -173,19 +148,13 @@ async fn handle_tpdo2(
 
     match read_actual_velocity(&frame) {
         Ok(actual_velocity) => {
-            match event_tx.send(MotorEvent::VelocityFeedback {
-                actual_velocity: actual_velocity.value,
-            }) {
-                Ok(num_subscribers) => {
-                    info!(
-                        "Succesfully sent actual velocity update {} to {num_subscribers} subscribers",
-                        actual_velocity.value
-                    )
-                }
-                Err(err) => {
-                    error!("Error sending atcual velocity update: {err}");
-                }
-            }
+            // Send actual velocity update
+            send_update(
+                MotorEvent::VelocityFeedback {
+                    actual_velocity: actual_velocity.value,
+                },
+                event_tx,
+            );
         }
         Err(err) => {
             error!("Error reading actual velocity: {err}");
@@ -202,19 +171,13 @@ async fn handle_tpdo3(
 
     match read_actual_torque(&frame) {
         Ok(actual_torque) => {
-            match event_tx.send(MotorEvent::TorqueFeedback {
-                actual_torque: actual_torque.value,
-            }) {
-                Ok(num_subscribers) => {
-                    info!(
-                        "Succesfully sent actual torque update {} to {num_subscribers} subscribers",
-                        actual_torque.value
-                    )
-                }
-                Err(err) => {
-                    error!("Error sending atcual torque update: {err}");
-                }
-            }
+            // Send actual torque update
+            send_update(
+                MotorEvent::TorqueFeedback {
+                    actual_torque: actual_torque.value,
+                },
+                event_tx,
+            );
         }
         Err(err) => {
             error!("Error reading actual torque: {err}");
@@ -227,9 +190,9 @@ fn read_statusword(frame: &RxMessage) -> anyhow::Result<StatusWord> {
     const STATUSWORD_BYTES: std::ops::RangeInclusive<usize> = 0..=1;
 
     let raw_statusword = u16::from_be_bytes(frame.data[STATUSWORD_BYTES].try_into()?);
-    Ok(StatusWord::from_bits(raw_statusword).ok_or(anyhow::anyhow!(
+    StatusWord::from_bits(raw_statusword).ok_or(anyhow::anyhow!(
         "unable to decode raw statusword: {raw_statusword:?} into u16"
-    ))?)
+    ))
 }
 
 fn read_operational_mode(frame: &RxMessage) -> anyhow::Result<OperationMode> {
@@ -270,4 +233,18 @@ fn read_actual_torque(frame: &RxMessage) -> anyhow::Result<ActualTorque> {
     Ok(ActualTorque {
         value: i16::from_be_bytes(frame.data[ACTUAL_TORQUE_BYTES].try_into()?),
     })
+}
+
+fn send_update(event: MotorEvent, event_tx: &broadcast::Sender<MotorEvent>) {
+    match event_tx.send(event.clone()) {
+        Ok(num_subscribers) => {
+            info!(
+                "Succesfully sent update {:?} to {num_subscribers} subscribers",
+                event
+            )
+        }
+        Err(err) => {
+            error!("Error sending update: {err}");
+        }
+    }
 }
