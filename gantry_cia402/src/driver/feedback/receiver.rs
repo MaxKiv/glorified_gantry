@@ -1,13 +1,15 @@
 use oze_canopen::{canopen::RxMessage, interface::CanOpenInterface};
-use tokio::{
-    sync::broadcast,
-    time::Instant,
-};
+use tokio::{sync::broadcast, time::Instant};
 use tracing::*;
 
 use crate::{
     comms::pdo::mapping::{PdoMapping, PdoMappingSource},
-    driver::{event::MotorEvent, feedback::*, oms::OperationMode},
+    driver::{
+        event::MotorEvent,
+        feedback::*,
+        nmt::{HeartBeat, NmtState},
+        oms::OperationMode,
+    },
 };
 
 pub async fn handle_feedback(
@@ -19,47 +21,82 @@ pub async fn handle_feedback(
     let mut last_seen = Instant::now();
     let node_id = node_id as u16;
 
-    if let Ok(frame) = canopen.rx.recv().await {
-        match frame.cob_id {
-            id if id == COB_ID_SYNC => { /* SYNC */ }
-            id if id == COB_ID_TPDO1 + node_id => {
-                /* TPDO1 */
-                trace!("Received TPDO1: {frame:?}");
-                handle_tpdo1(frame, tpdo_mapping[1].mappings, &event_tx).await;
+    trace!("Starting feedback handling loop");
+
+    loop {
+        if let Ok(frame) = canopen.rx.recv().await {
+            trace!("Received feedback: {frame:?}");
+            match frame.cob_id {
+                id if id == COB_ID_SYNC => { /* SYNC */ }
+                id if id == COB_ID_TPDO1 + node_id => {
+                    /* TPDO1 */
+                    trace!("Received TPDO1: {frame:?}");
+                    handle_tpdo1(frame, tpdo_mapping[1].mappings, &event_tx).await;
+                }
+                id if id == COB_ID_RPDO1 + node_id => { /* RPDO1 */ }
+                id if id == COB_ID_TPDO2 + node_id => {
+                    /* TPDO2 */
+                    trace!("Received TPDO2: {frame:?}");
+                    handle_tpdo2(frame, tpdo_mapping[2].mappings, &event_tx).await;
+                }
+                id if id == COB_ID_RPDO2 + node_id => { /* RPDO2 */ }
+                id if id == COB_ID_TPDO3 + node_id => {
+                    /* TPDO3 */
+                    trace!("Received TPDO3: {frame:?}");
+                    handle_tpdo3(frame, tpdo_mapping[3].mappings, &event_tx).await;
+                }
+                id if id == COB_ID_RPDO3 + node_id => { /* RPDO3 */ }
+                id if id == COB_ID_TPDO4 + node_id => { /* TPDO4 */ }
+                id if id == COB_ID_RPDO4 + node_id => {
+                    /* RPDO4 */
+                    trace!(
+                        "Received TPDO4: {frame:?} - This is strange because we are only mapping 3, is the mapping done correctly?"
+                    );
+                }
+                id if id == COB_ID_SDO_TX + node_id => { /* SDO response */ }
+                id if id == COB_ID_SDO_RX + node_id => { /* SDO request */ }
+                id if id == COB_ID_HEARTBEAT + node_id => {
+                    /* Heartbeat */
+                    trace!("Received Heartbeat from: {node_id}");
+                    last_seen = Instant::now();
+
+                    handle_heartbeat(frame, &event_tx).await;
+                }
+                _ => { /* ignore */ }
             }
-            id if id == COB_ID_RPDO1 + node_id => { /* RPDO1 */ }
-            id if id == COB_ID_TPDO2 + node_id => {
-                /* TPDO2 */
-                trace!("Received TPDO2: {frame:?}");
-                handle_tpdo2(frame, tpdo_mapping[2].mappings, &event_tx).await;
-            }
-            id if id == COB_ID_RPDO2 + node_id => { /* RPDO2 */ }
-            id if id == COB_ID_TPDO3 + node_id => {
-                /* TPDO3 */
-                trace!("Received TPDO3: {frame:?}");
-                handle_tpdo3(frame, tpdo_mapping[3].mappings, &event_tx).await;
-            }
-            id if id == COB_ID_RPDO3 + node_id => { /* RPDO3 */ }
-            id if id == COB_ID_TPDO4 + node_id => { /* TPDO4 */ }
-            id if id == COB_ID_RPDO4 + node_id => {
-                /* RPDO4 */
-                trace!(
-                    "Received TPDO4: {frame:?} - This is strange because we are only mapping 3, is the mapping done correctly?"
-                );
-            }
-            id if id == COB_ID_SDO_TX + node_id => { /* SDO response */ }
-            id if id == COB_ID_SDO_RX + node_id => { /* SDO request */ }
-            id if id == COB_ID_HEARTBEAT + node_id => {
-                /* Heartbeat */
-                trace!("Received Heartbeat from: {node_id}");
-                last_seen = Instant::now();
-            }
-            _ => { /* ignore */ }
+        }
+
+        if Instant::now() - last_seen > COMMS_TIMEOUT
+            && let Err(err) = event_tx.send(MotorEvent::CommunicationLost)
+        {
+            error!("Unable to broadcast CommunicationLost message: {err}");
         }
     }
+}
 
-    if Instant::now() - last_seen > COMMS_TIMEOUT {
-        event_tx.send(MotorEvent::CommunicationLost);
+async fn handle_heartbeat(frame: RxMessage, event_tx: &broadcast::Sender<MotorEvent>) {
+    if frame.dlc != 1 {
+        error!("Received heartbeat with DLC != 1");
+    }
+
+    let heartbeat = HeartBeat {
+        data: frame.data[0],
+    };
+
+    let new_nmt_state: NmtState = heartbeat.into();
+
+    match event_tx.send(MotorEvent::NmtStateUpdate {
+        new: new_nmt_state.clone(),
+    }) {
+        Ok(num_subscribers) => {
+            info!(
+                "Succesfully sent NMT state update {:?} to {num_subscribers} subscribers",
+                new_nmt_state
+            )
+        }
+        Err(err) => {
+            error!("Error sending atcual position update: {err}");
+        }
     }
 }
 

@@ -1,10 +1,18 @@
-use crate::driver::{feedback::StatusWord, oms::OperationMode, state::Cia402State};
+use crate::driver::{feedback::StatusWord, nmt::NmtState, oms::OperationMode, state::Cia402State};
 
 /// Events broadcast by a motor driver (status updates, transitions, errors).
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum MotorEvent {
     /// State machine transition (Not Ready -> Ready to Switch On, etc.)
-    StateChanged { old: Cia402State, new: Cia402State },
+    StateChanged {
+        old: Cia402State,
+        new: Cia402State,
+    },
+
+    // NMT state update
+    NmtStateUpdate {
+        new: NmtState,
+    },
 
     /// New statusword received from device
     StatusWord(StatusWord),
@@ -13,16 +21,25 @@ pub enum MotorEvent {
     OperationMode(OperationMode),
 
     /// Position feedback (encoder units or user-scaled units)
-    PositionFeedback { actual_position: i32 },
+    PositionFeedback {
+        actual_position: i32,
+    },
 
     /// Velocity feedback
-    VelocityFeedback { actual_velocity: i32 },
+    VelocityFeedback {
+        actual_velocity: i32,
+    },
 
     /// Torque feedback
-    TorqueFeedback { actual_torque: i16 },
+    TorqueFeedback {
+        actual_torque: i16,
+    },
 
     /// Fault detected (e.g. fault bit set in statusword)
-    Fault { code: u16, description: String },
+    Fault {
+        code: u16,
+        description: String,
+    },
 
     /// Drive recovered from fault
     FaultCleared,

@@ -63,21 +63,19 @@ impl Cia402Driver {
         ) = tokio::sync::broadcast::channel(10);
 
         // Get the SDO client for this node id, we use this to make SDO read/writes
-        let sdo = canopen.get_sdo_client(node_id).expect(&format!(
-            "Unable to construct SDO client for node id {node_id}"
-        ));
+        let sdo = canopen
+            .get_sdo_client(node_id)
+            .unwrap_or_else(|| panic!("Unable to construct SDO client for node id {node_id}"));
         // Get the PDO client for this node id, we use this to manage R/TPDOs
-        let pdo = Pdo::new(canopen.clone(), node_id, rpdo_mapping_set).expect(&format!(
-            "unable to construct PDO client for node id {node_id}"
-        ));
+        let pdo = Pdo::new(canopen.clone(), node_id, rpdo_mapping_set)
+            .unwrap_or_else(|_| panic!("unable to construct PDO client for node id {node_id}"));
 
         // Track task handles that we are about to spawn
         let mut handles: Vec<JoinHandle<()>> = Vec::new();
 
         // Start the NMT task, this continously attempts to put the motor into NMT::Operational
         trace!("Starting NMT State Machine task for motor with node id {node_id}");
-        let (nmt_feedback_tx, nmt_feedback_rx) = tokio::sync::mpsc::channel(10);
-        handles.push(Nmt::init(node_id, canopen.clone(), nmt_feedback_rx));
+        handles.push(Nmt::start(node_id, canopen.clone(), event_rx.resubscribe()));
 
         // Start the startup task for this motor, this does parametrisation and sets pdo mapping
         trace!("Starting Startup Task for motor with node id {node_id}");
