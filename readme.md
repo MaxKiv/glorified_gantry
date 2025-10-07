@@ -4,6 +4,8 @@
 
 - Orchestrate task spawning, at least make startup task run first
 
+- Re-use updated parsing logic in driver::feedback::frame::parse
+
 - Parse R/TPDO mapping at configuration time or encode into type system. current hardcode setup is brittle
 
 - Refactor the feedback task to be more generic

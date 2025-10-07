@@ -2,30 +2,27 @@ pub mod common;
 
 use std::time::Duration;
 
+use gantry_cia402::comms::pdo::mapping::custom::CUSTOM_TPDOS;
 use gantry_cia402::{
     comms::{pdo::mapping::PdoMapping, sdo::SdoAction},
     driver::{
-        Cia402Driver,
         event::MotorEvent,
         feedback::receiver::handle_feedback,
         nmt::{Nmt, NmtState},
     },
-    od::ObjectDictionary,
+    od::DEVICE_TYPE,
 };
 use oze_canopen::interface::CanOpenInterface;
 use tokio::{
-    sync::{broadcast, mpsc},
+    sync::broadcast,
     task::{self, JoinHandle},
-    time::sleep,
 };
-use tracing::{Level, *};
-use tracing_subscriber::FmtSubscriber;
+use tracing::*;
 
 const NODE_ID: u8 = 3;
 
 const PARAMS: [SdoAction; 1] = [SdoAction::Upload {
-    index: ObjectDictionary::DEVICE_TYPE.index,
-    subindex: ObjectDictionary::DEVICE_TYPE.sub_index,
+    entry: &DEVICE_TYPE,
 }];
 
 /// Start the device feedback task responsible for receiving and parsing device feedback and broadcasting these as events
@@ -54,9 +51,7 @@ fn start_feedback_task(
 
 #[cfg(test)]
 mod tests {
-    use gantry_demo::{log_canopen, log_events};
-    use oze_canopen::error::CoError;
-    use tokio::time::timeout;
+    use gantry_demo::{log_canopen_pretty, log_canopen_raw, log_events};
 
     use crate::common::wait_for_event;
 
@@ -71,19 +66,17 @@ mod tests {
         info!("Starting can interface");
         let (canopen, _) = oze_canopen::canopen::start(String::from("can0"), Some(1000000));
 
-        let tpdo_mapping_set = PdoMapping::CUSTOM_TPDOS;
+        let tpdo_mapping_set = CUSTOM_TPDOS;
 
         let (_, mut event_rx) = start_feedback_task(canopen.clone(), node_id, tpdo_mapping_set);
 
         task::spawn(log_events(event_rx.resubscribe(), node_id));
-        task::spawn(log_canopen(canopen.clone()));
+        task::spawn(log_canopen_pretty(canopen.clone()));
 
         let nmt_handle = Nmt::start(node_id, canopen.clone(), event_rx.resubscribe());
 
         let timeout = Duration::from_secs(15);
-        let watch_for = MotorEvent::NmtStateUpdate {
-            new: NmtState::Operational,
-        };
+        let watch_for = MotorEvent::NmtStateUpdate(NmtState::Operational);
         // TODO also wait for statusword update, or should we just refactor that and parse the
         // statusword from within the feedback task? maybe thats better!
         wait_for_event(event_rx.resubscribe(), watch_for, timeout).await

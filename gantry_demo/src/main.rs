@@ -1,6 +1,6 @@
 use ::tracing::info;
 use gantry_cia402::{comms::sdo::SdoAction, od::DEVICE_TYPE};
-use gantry_demo::{log_canopen, setup_tracing};
+use gantry_demo::{log_canopen_pretty, log_canopen_raw, setup_tracing};
 use tracing::*;
 
 const NODE_ID: u8 = 3;
@@ -27,5 +27,5 @@ async fn main() {
     // .await
     // .expect("unable to construct Cia402 driver");
 
-    let _ = log_canopen(canopen).await;
+    let _ = log_canopen_pretty(canopen).await;
 }

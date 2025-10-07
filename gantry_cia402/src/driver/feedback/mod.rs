@@ -1,3 +1,4 @@
+pub mod frame;
 pub mod receiver;
 
 use std::time::Duration;

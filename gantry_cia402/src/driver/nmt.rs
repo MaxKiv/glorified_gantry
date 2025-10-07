@@ -14,6 +14,7 @@ use crate::{
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum NmtState {
+    Bootup,
     Stopped,
     PreOperational,
     Operational,
