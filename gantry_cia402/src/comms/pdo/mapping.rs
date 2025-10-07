@@ -1,5 +1,3 @@
-use crate::od::ObjectDictionary;
-
 #[derive(Debug)]
 pub enum PdoType {
     RPDO,
