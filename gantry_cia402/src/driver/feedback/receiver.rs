@@ -3,14 +3,14 @@ use tokio::{sync::broadcast, time::Instant};
 use tracing::*;
 
 use crate::{
-    comms::pdo::mapping::{PdoMapping, PdoMappingSource},
+    comms::pdo::mapping::PdoMapping,
     driver::{
         event::MotorEvent,
         feedback::*,
         nmt::{HeartBeat, NmtState},
         oms::OperationMode,
     },
-    format_frame,
+    log::format_frame,
 };
 
 pub async fn handle_feedback(
@@ -33,19 +33,19 @@ pub async fn handle_feedback(
                 id if id == COB_ID_TPDO1 + node_id => {
                     /* TPDO1 */
                     trace!("Received TPDO1: {frame:?}");
-                    handle_tpdo1(frame, tpdo_mapping[1].mappings, &event_tx).await;
+                    handle_tpdo1(frame, &tpdo_mapping[1], &event_tx).await;
                 }
                 id if id == COB_ID_RPDO1 + node_id => { /* RPDO1 */ }
                 id if id == COB_ID_TPDO2 + node_id => {
                     /* TPDO2 */
                     trace!("Received TPDO2: {frame:?}");
-                    handle_tpdo2(frame, tpdo_mapping[2].mappings, &event_tx).await;
+                    handle_tpdo2(frame, &tpdo_mapping[2], &event_tx).await;
                 }
                 id if id == COB_ID_RPDO2 + node_id => { /* RPDO2 */ }
                 id if id == COB_ID_TPDO3 + node_id => {
                     /* TPDO3 */
                     trace!("Received TPDO3: {frame:?}");
-                    handle_tpdo3(frame, tpdo_mapping[3].mappings, &event_tx).await;
+                    handle_tpdo3(frame, &tpdo_mapping[3], &event_tx).await;
                 }
                 id if id == COB_ID_RPDO3 + node_id => { /* RPDO3 */ }
                 id if id == COB_ID_TPDO4 + node_id => { /* TPDO4 */ }
@@ -90,7 +90,7 @@ async fn handle_heartbeat(frame: RxMessage, event_tx: &broadcast::Sender<MotorEv
 
 async fn handle_tpdo1(
     frame: RxMessage,
-    tpdo1_mappings: &'static [PdoMappingSource],
+    tpdo1_mapping: &PdoMapping,
     event_tx: &broadcast::Sender<MotorEvent>,
 ) {
     assert!(frame.dlc == 3);
@@ -126,7 +126,7 @@ async fn handle_tpdo1(
 
 async fn handle_tpdo2(
     frame: RxMessage,
-    tpdo2_mappings: &'static [PdoMappingSource],
+    tpdo2_mappings: &PdoMapping,
     event_tx: &broadcast::Sender<MotorEvent>,
 ) {
     assert!(frame.dlc == 8);
@@ -164,7 +164,7 @@ async fn handle_tpdo2(
 
 async fn handle_tpdo3(
     frame: RxMessage,
-    tpdo2_mappings: &'static [PdoMappingSource],
+    tpdo2_mappings: &PdoMapping,
     event_tx: &broadcast::Sender<MotorEvent>,
 ) {
     assert!(frame.dlc == 2);

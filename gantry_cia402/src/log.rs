@@ -39,7 +39,7 @@ pub async fn log_canopen(mut canopen: CanOpenInterface) -> Result<(), RecvError>
     }
 }
 
-fn format_frame(frame: &RxMessage) -> String {
+pub fn format_frame(frame: &RxMessage) -> String {
     format!(
         "{}\t{}\t{:?}",
         frame.cob_id_to_string(),
@@ -48,7 +48,7 @@ fn format_frame(frame: &RxMessage) -> String {
     )
 }
 
-fn format_data(data: &[u8], dlc: usize) -> String {
+pub fn format_data(data: &[u8], dlc: usize) -> String {
     // let mut out = String::from("[");
     let mut out = String::new();
     for byte in &data[0..dlc] {

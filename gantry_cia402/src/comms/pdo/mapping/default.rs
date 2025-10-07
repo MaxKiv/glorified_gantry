@@ -8,7 +8,7 @@ pub const DEFAULT_TPDOS: &[PdoMapping] = &[TPDO_DEFAULT_1, TPDO_DEFAULT_2];
 
 pub const RPDO_DEFAULT_1: PdoMapping = PdoMapping {
     pdo: PdoType::RPDO(1),
-    source: &[
+    sources: &[
         PdoMappingSource {
             entry: &od::CONTROL_WORD,
             bit_range: BitRange { start: 0, len: 16 },
@@ -22,7 +22,7 @@ pub const RPDO_DEFAULT_1: PdoMapping = PdoMapping {
 
 pub const RPDO_DEFAULT_2: PdoMapping = PdoMapping {
     pdo: PdoType::RPDO(2),
-    source: &[
+    sources: &[
         PdoMappingSource {
             entry: &od::SET_TARGET_POSITION,
             bit_range: BitRange { start: 0, len: 32 },
@@ -36,7 +36,7 @@ pub const RPDO_DEFAULT_2: PdoMapping = PdoMapping {
 
 pub const TPDO_DEFAULT_1: PdoMapping = PdoMapping {
     pdo: PdoType::TPDO(1),
-    source: &[
+    sources: &[
         PdoMappingSource {
             entry: &od::STATUS_WORD,
             bit_range: BitRange { start: 0, len: 16 },
@@ -50,7 +50,7 @@ pub const TPDO_DEFAULT_1: PdoMapping = PdoMapping {
 
 pub const TPDO_DEFAULT_2: PdoMapping = PdoMapping {
     pdo: PdoType::TPDO(2),
-    source: &[PdoMappingSource {
+    sources: &[PdoMappingSource {
         entry: &od::POSITION_ACTUAL_VALUE,
         bit_range: BitRange { start: 0, len: 32 },
     }],

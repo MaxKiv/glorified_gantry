@@ -24,7 +24,7 @@ pub struct PdoMapping {
     // PDO type and number
     pub pdo: PdoType,
     // Values to map
-    pub source: &'static [PdoMappingSource],
+    pub sources: &'static [PdoMappingSource],
 }
 
 #[derive(Debug)]
@@ -36,24 +36,6 @@ pub struct PdoMappingSource {
     // The T/RPDO bits to map the above entry to
     pub bit_range: BitRange,
 }
-
-// I didn't know of a better const method to do this, seems rust const fn are lacking compared
-// to c++ templates, this never changes anyway
-pub const RPDO_IDX_CONTROL_WORD: usize = 0;
-pub const CONTROL_WORD_OFFSET: usize = 0;
-
-pub const RPDO_IDX_OPMODE: usize = 0;
-pub const OPMODE_OFFSET: usize = 16;
-
-pub const RPDO_IDX_TARGET_POS: usize = 1;
-pub const POS_TARGET_OFFSET: usize = 0;
-pub const POS_VEL_OFFSET: usize = 16;
-
-pub const RPDO_IDX_TARGET_VEL: usize = 2;
-pub const VEL_TARGET_OFFSET: usize = 0;
-
-pub const RPDO_IDX_TARGET_TORQUE: usize = 3;
-pub const TORQUE_TARGET_OFFSET: usize = 0;
 
 impl PdoType {
     /// Returns the COB Id for the given pdo num and type

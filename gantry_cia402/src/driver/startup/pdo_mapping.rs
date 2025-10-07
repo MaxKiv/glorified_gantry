@@ -8,7 +8,10 @@ use tracing::*;
 use crate::{
     comms::pdo::mapping::{PdoMapping, PdoType},
     error::DriveError,
-    od::ObjectDictionary,
+    od::{
+        RPDO_COMMUNICATION_PARAMETER_BASE_INDEX, RPDO_MAPPING_PARAMETER_BASE_INDEX,
+        TPDO_COMMUNICATION_PARAMETER_BASE_INDEX, TPDO_MAPPING_PARAMETER_BASE_INDEX,
+    },
 };
 
 /// Configure the devicde with the given set of PDO mappings
@@ -18,8 +21,8 @@ pub async fn configure_pdo_mappings(
     pdo_mapping: &'static [PdoMapping],
 ) -> Result<()> {
     trace!("configure_pdo_mappings for nodeId {}", node_id);
-    for (mapping_number, mapping) in pdo_mapping.iter().enumerate() {
-        set_pdo_mapping(node_id, sdo.clone(), mapping, mapping_number).await?;
+    for mapping in pdo_mapping.iter() {
+        set_pdo_mapping(node_id, sdo.clone(), mapping).await?;
     }
 
     Ok(())
@@ -31,26 +34,22 @@ async fn set_pdo_mapping(
     node_id: u8,
     sdo: Arc<Mutex<SdoClient>>,
     pdo_mapping: &PdoMapping,
-    mapping_number: usize,
 ) -> Result<()> {
-    trace!(
-        "Setting Pdo mapping {mapping_number}: {:?} for motor at node id {node_id}",
-        pdo_mapping
-    );
-
-    let mapping_number = mapping_number as u8;
-
     // 1. Deactivate the PDO by setting the Valid Bit (bit 31) of subindex 01h of the corresponding communication parameter (e.g., 1400h:01h) to "1".
-    let communication_index = match pdo_mapping.kind {
-        PdoType::RPDO => calculate_pdo_index_offset(
-            ObjectDictionary::RPDO_COMMUNICATION_PARAMETER_BASE_INDEX,
-            mapping_number,
+    let (communication_index, num) = match pdo_mapping.pdo {
+        PdoType::RPDO(num) => (
+            calculate_pdo_index_offset(RPDO_COMMUNICATION_PARAMETER_BASE_INDEX, num),
+            num,
         ),
-        PdoType::TPDO => calculate_pdo_index_offset(
-            ObjectDictionary::TPDO_COMMUNICATION_PARAMETER_BASE_INDEX,
-            mapping_number,
+        PdoType::TPDO(num) => (
+            calculate_pdo_index_offset(TPDO_COMMUNICATION_PARAMETER_BASE_INDEX, num),
+            num,
         ),
     };
+    trace!(
+        "Setting Pdo mapping {num}: {:?} for motor at node id {node_id}",
+        pdo_mapping
+    );
     trace!(
         "1. Deactivate the PDO by setting the Valid Bit (bit 31) of subindex 01h of the
                 corresponding communication parameter ({}) to \"1\".",
@@ -64,15 +63,9 @@ async fn set_pdo_mapping(
         .map_err(DriveError::CanOpen)?;
 
     // 2. Deactivate the mapping by setting subindex 00h of the corresponding mapping parameter to \"0\".,
-    let mapping_index = match pdo_mapping.kind {
-        PdoType::RPDO => calculate_pdo_index_offset(
-            ObjectDictionary::RPDO_MAPPING_PARAMETER_BASE_INDEX,
-            mapping_number,
-        ),
-        PdoType::TPDO => calculate_pdo_index_offset(
-            ObjectDictionary::TPDO_MAPPING_PARAMETER_BASE_INDEX,
-            mapping_number,
-        ),
+    let mapping_index = match pdo_mapping.pdo {
+        PdoType::RPDO(_) => calculate_pdo_index_offset(RPDO_MAPPING_PARAMETER_BASE_INDEX, num),
+        PdoType::TPDO(_) => calculate_pdo_index_offset(TPDO_MAPPING_PARAMETER_BASE_INDEX, num),
     };
     trace!(
         "2. Deactivate the mapping by setting subindex 00h of the corresponding mapping parameter ({}) to \"0\".",
@@ -86,14 +79,14 @@ async fn set_pdo_mapping(
         .map_err(DriveError::CanOpen)?;
 
     trace!("3. Change the mapping in the desired subindices.");
-    for (number, mapping) in pdo_mapping.mappings.iter().enumerate() {
+    for (number, source) in pdo_mapping.sources.iter().enumerate() {
         // Construct the payload: 2 bytes of OD entry to be mapped, 1 byte subindex, 1 byte with number of bits to be mapped
-        let index_be: [u8; 2] = mapping.index.to_be_bytes();
+        let index_be: [u8; 2] = source.entry.index.to_be_bytes();
         let data: [u8; 4] = [
             index_be[0],
             index_be[1],
-            mapping.sub_index,
-            mapping.number_of_bits,
+            source.entry.sub_index,
+            source.bit_range.len,
         ];
         sdo.lock()
             .await
@@ -105,7 +98,7 @@ async fn set_pdo_mapping(
     trace!(
         "4. Activate the mapping by writing the number of objects that are to be mapped in subindex 00h of the corresponding mapping parameter (e.g., 1600h:00h)."
     );
-    let data = [pdo_mapping.mappings.len() as u8];
+    let data = [pdo_mapping.sources.len() as u8];
     sdo.lock()
         .await
         .download(mapping_index, 0x0, &data)

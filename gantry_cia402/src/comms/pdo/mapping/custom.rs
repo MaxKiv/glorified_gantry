@@ -3,6 +3,15 @@ use crate::{
     od,
 };
 
+// TODO: Making T/RPDO mapping generic + encoding into type system
+// I didn't know of a better const method to do this, seems rust const fn are lacking compared
+// to c++ templates, this never changes anyway
+pub const RPDO_IDX_CONTROL_WORD: usize = 0;
+pub const RPDO_IDX_OPMODE: usize = 0;
+pub const RPDO_IDX_TARGET_POS: usize = 1;
+pub const RPDO_IDX_TARGET_VEL: usize = 2;
+pub const RPDO_IDX_TARGET_TORQUE: usize = 3;
+
 pub const CUSTOM_RPDOS: &[PdoMapping; 4] = &[
     RPDO_CONTROL_OPMODE,
     RPDO_TARGET_POS,
@@ -15,7 +24,7 @@ pub const CUSTOM_TPDOS: &[PdoMapping; 3] =
 
 pub const RPDO_CONTROL_OPMODE: PdoMapping = PdoMapping {
     pdo: PdoType::RPDO(1),
-    source: &[
+    sources: &[
         PdoMappingSource {
             entry: &od::CONTROL_WORD,
             bit_range: BitRange { start: 0, len: 16 },
@@ -29,7 +38,7 @@ pub const RPDO_CONTROL_OPMODE: PdoMapping = PdoMapping {
 
 pub const RPDO_TARGET_POS: PdoMapping = PdoMapping {
     pdo: PdoType::RPDO(2),
-    source: &[
+    sources: &[
         PdoMappingSource {
             entry: &od::SET_TARGET_POSITION,
             bit_range: BitRange { start: 0, len: 32 },
@@ -43,7 +52,7 @@ pub const RPDO_TARGET_POS: PdoMapping = PdoMapping {
 
 pub const RPDO_TARGET_VEL: PdoMapping = PdoMapping {
     pdo: PdoType::RPDO(3),
-    source: &[PdoMappingSource {
+    sources: &[PdoMappingSource {
         entry: &od::SET_TARGET_VELOCITY,
         bit_range: BitRange { start: 0, len: 32 },
     }],
@@ -51,7 +60,7 @@ pub const RPDO_TARGET_VEL: PdoMapping = PdoMapping {
 
 pub const RPDO_TARGET_TORQUE: PdoMapping = PdoMapping {
     pdo: PdoType::RPDO(4),
-    source: &[PdoMappingSource {
+    sources: &[PdoMappingSource {
         entry: &od::SET_TARGET_TORQUE,
         bit_range: BitRange { start: 0, len: 16 },
     }],
@@ -59,7 +68,7 @@ pub const RPDO_TARGET_TORQUE: PdoMapping = PdoMapping {
 
 pub const TPDO_STATUS_OPMODE: PdoMapping = PdoMapping {
     pdo: PdoType::TPDO(1),
-    source: &[
+    sources: &[
         PdoMappingSource {
             entry: &od::STATUS_WORD,
             bit_range: BitRange { start: 0, len: 16 },
@@ -73,7 +82,7 @@ pub const TPDO_STATUS_OPMODE: PdoMapping = PdoMapping {
 
 pub const TPDO_POS_VEL_ACTUAL: PdoMapping = PdoMapping {
     pdo: PdoType::TPDO(2),
-    source: &[
+    sources: &[
         PdoMappingSource {
             entry: &od::POSITION_ACTUAL_VALUE,
             bit_range: BitRange { start: 0, len: 32 },
@@ -87,7 +96,7 @@ pub const TPDO_POS_VEL_ACTUAL: PdoMapping = PdoMapping {
 
 pub const TPDO_TORQUE_ACTUAL: PdoMapping = PdoMapping {
     pdo: PdoType::TPDO(3),
-    source: &[PdoMappingSource {
+    sources: &[PdoMappingSource {
         entry: &od::TORQUE_ACTUAL_VALUE,
         bit_range: BitRange { start: 0, len: 16 },
     }],

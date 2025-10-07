@@ -11,7 +11,7 @@ pub enum MotorCommand {
     SetVelocity { target_velocity: i32 },
 
     /// Set continuous velocity
-    SetTorque { target_torque: i32 },
+    SetTorque { target_torque: i16 },
 
     /// Halt immediately (stop but remain enabled)
     Halt,

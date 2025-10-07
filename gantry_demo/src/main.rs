@@ -1,13 +1,12 @@
 use ::tracing::info;
-use gantry_cia402::{comms::sdo::SdoAction, od::ObjectDictionary};
+use gantry_cia402::{comms::sdo::SdoAction, od::DEVICE_TYPE};
 use gantry_demo::{log_canopen, setup_tracing};
 use tracing::*;
 
 const NODE_ID: u8 = 3;
 
 const PARAMS: [SdoAction; 1] = [SdoAction::Upload {
-    index: ObjectDictionary::DEVICE_TYPE.index,
-    subindex: ObjectDictionary::DEVICE_TYPE.sub_index,
+    entry: &DEVICE_TYPE,
 }];
 
 #[tokio::main(flavor = "multi_thread", worker_threads = 8)]

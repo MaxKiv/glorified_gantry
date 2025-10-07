@@ -2,7 +2,7 @@ use crate::od::mappable::MappableType;
 
 use super::{access::AccessType, value::ODValue};
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct ODEntry {
     // Index of the OD entry
     pub index: u16,

@@ -9,7 +9,7 @@ use gantry_cia402::{
         feedback::receiver::handle_feedback,
         nmt::{Nmt, NmtState},
     },
-    od::ObjectDictionary,
+    od::DEVICE_TYPE,
 };
 use oze_canopen::interface::CanOpenInterface;
 use tokio::{
@@ -21,8 +21,7 @@ use tracing::*;
 const NODE_ID: u8 = 3;
 
 const PARAMS: [SdoAction; 1] = [SdoAction::Upload {
-    index: ObjectDictionary::DEVICE_TYPE.index,
-    subindex: ObjectDictionary::DEVICE_TYPE.sub_index,
+    entry: &DEVICE_TYPE,
 }];
 
 /// Start the device feedback task responsible for receiving and parsing device feedback and broadcasting these as events
@@ -52,7 +51,10 @@ fn start_feedback_task(
 #[cfg(test)]
 mod tests {
 
-    use gantry_cia402::{log_canopen, log_events};
+    use gantry_cia402::{
+        comms::pdo::mapping::custom::CUSTOM_TPDOS,
+        log::{log_canopen, log_events},
+    };
 
     use common::wait_for_event;
 
@@ -67,7 +69,7 @@ mod tests {
         info!("Starting can interface");
         let (canopen, _) = oze_canopen::canopen::start(String::from("can0"), Some(1000000));
 
-        let tpdo_mapping_set = PdoMapping::CUSTOM_TPDOS;
+        let tpdo_mapping_set = CUSTOM_TPDOS;
 
         let (_, mut event_rx) = start_feedback_task(canopen.clone(), node_id, tpdo_mapping_set);
 
