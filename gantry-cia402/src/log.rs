@@ -2,7 +2,10 @@ use oze_canopen::{canopen::RxMessage, interface::CanOpenInterface};
 use tokio::sync::broadcast::{self, error::RecvError};
 use tracing::{instrument, *};
 
-use crate::driver::{event::MotorEvent, feedback::frame::Frame};
+use crate::driver::{
+    event::MotorEvent,
+    feedback::frame::{Frame, ParseError},
+};
 
 #[instrument(skip(event_rx))]
 pub async fn log_events(
@@ -32,7 +35,7 @@ pub async fn log_canopen_pretty(mut canopen: CanOpenInterface) -> Result<(), Rec
 
                 match frame {
                     Ok(frame) => {
-                        let parsed: Result<Frame, ()> = frame.try_into();
+                        let parsed: Result<Frame, ParseError> = frame.try_into();
                         if let Ok(frame) = parsed {
                             frame.log();
                         } else {

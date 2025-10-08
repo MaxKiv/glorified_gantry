@@ -19,15 +19,22 @@ pub enum SdoAction<'a> {
 
 #[derive(Debug)]
 pub enum SdoResult {
+    Error(u32),
     None,
     Data(Vec<u8>),
+}
+
+#[derive(Debug)]
+pub struct SdoTransation<'a> {
+    request: &'a SdoAction<'a>,
+    result: SdoResult,
 }
 
 impl<'a> SdoAction<'a> {
     pub async fn run_on_sdo_client(
         &self,
         sdo: Arc<Mutex<SdoClient>>,
-    ) -> Result<SdoResult, DriveError> {
+    ) -> Result<SdoTransation<'_>, DriveError> {
         let mut sdo = sdo.lock().await;
 
         let result = match self {
@@ -46,6 +53,9 @@ impl<'a> SdoAction<'a> {
             }
         };
 
-        Ok(result)
+        Ok(SdoTransation {
+            request: self,
+            result,
+        })
     }
 }

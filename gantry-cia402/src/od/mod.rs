@@ -1,6 +1,8 @@
 use access::AccessType;
+use once_cell::sync::Lazy;
 
 use crate::od::{entry::ODEntry, mappable::MappableType, value::ODValue};
+use heapless::index_map::FnvIndexMap;
 
 pub mod access;
 pub mod entry;
@@ -371,3 +373,62 @@ pub const POSITION_MODE_MINIMUM_PARAMS: &[ODEntry] = &[
     PROFILE_JERK,
     POSITIONING_OPTION_CODE,
 ];
+
+pub const FULL_OBJECT_DICTIONARY: &[ODEntry] = &[
+    DEVICE_TYPE,
+    CONTROL_WORD,
+    STATUS_WORD,
+    PRODUCER_HEARTBEAT_TIME,
+    POSITION_ACTUAL_VALUE,
+    VELOCITY_ACTUAL_VALUE,
+    TORQUE_ACTUAL_VALUE,
+    SET_OPERATION_MODE,
+    GET_OPERATION_MODE,
+    SET_TARGET_POSITION,
+    SET_TARGET_VELOCITY,
+    SET_TARGET_TORQUE,
+    SOFTWARE_POSITION_LIMIT,
+    SOFTWARE_POSITION_RANGE_LIMIT_MIN,
+    SOFTWARE_POSITION_RANGE_LIMIT_MAX,
+    POSITION_LIIMT,
+    POSITION_RANGE_LIMIT_MIN,
+    POSITION_RANGE_LIMIT_MAX,
+    HOME_OFFSET,
+    POLARITY,
+    PROFILE_VELOCITY,
+    END_VELOCITY,
+    PROFILE_ACCELERATION,
+    PROFILE_DECELERATION,
+    QUICK_STOP_DECELERATION,
+    MOTION_PROFILE_TYPE,
+    MAX_ACCELERATION,
+    MAX_DECELERATION,
+    PROFILE_JERK,
+    PROFILE_JERK_BEGIN_ACCEL,
+    PROFILE_JERK_BEGIN_DECEL,
+    PROFILE_JERK_END_ACCEL,
+    PROFILE_JERK_END_DECEL,
+    POSITIONING_OPTION_CODE,
+    SI_UNIT_POSITION,
+    SI_UNIT_SPEED,
+];
+
+#[derive(Eq, PartialEq, Hash)]
+pub struct ODIdx {
+    pub index: u16,
+    pub sub_index: u8,
+}
+
+static OD_LOOKUP: Lazy<FnvIndexMap<ODIdx, &ODEntry, 64>> = Lazy::new(|| {
+    let mut m = FnvIndexMap::new();
+    for entry in FULL_OBJECT_DICTIONARY {
+        m.insert(
+            ODIdx {
+                index: entry.index,
+                sub_index: entry.sub_index,
+            },
+            entry,
+        );
+    }
+    m
+});

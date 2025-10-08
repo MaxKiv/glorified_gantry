@@ -86,6 +86,9 @@ struct FieldExtractor {
     node: Option<u64>,
     data: Option<String>,
     message: Option<String>,
+    parsed: Option<String>,
+    index: Option<String>,
+    sub_index: Option<String>,
 }
 
 impl Visit for FieldExtractor {
@@ -94,6 +97,9 @@ impl Visit for FieldExtractor {
             "frame" => self.frame = Some(value.to_string()),
             "message" => self.message = Some(value.to_string()),
             "data" => self.data = Some(value.to_string()),
+            "parsed" => self.parsed = Some(value.to_string()),
+            "index" => self.index = Some(value.to_string()),
+            "sub_index" => self.sub_index = Some(value.to_string()),
             _ => {}
         }
     }
@@ -117,6 +123,15 @@ impl Visit for FieldExtractor {
         }
         if field.name() == "data" && self.data.is_none() {
             self.data = Some(format!("{:?}", value));
+        }
+        if field.name() == "parsed" && self.data.is_none() {
+            self.parsed = Some(format!("{:?}", value));
+        }
+        if field.name() == "index" && self.data.is_none() {
+            self.index = Some(format!("{:?}", value));
+        }
+        if field.name() == "sub_index" && self.data.is_none() {
+            self.sub_index = Some(format!("{:?}", value));
         }
     }
 }
@@ -152,55 +167,59 @@ where
         let node = ex.node.unwrap_or(0);
         let message = ex.message.unwrap_or_default();
         let data = ex.data.unwrap_or_default();
+        let parsed = ex.parsed.unwrap_or_default();
+        let index = ex.index.unwrap_or_default();
+        let sub_index = ex.sub_index.unwrap_or_default();
 
         if supports_color {
             match frame.as_str() {
                 "EMCY" => write!(
                     writer,
-                    "{} from {}  {}",
+                    "{} from {} {}",
                     "EMCY".red().bold(),
                     format!("Node {}", node).red(),
                     message
                 )?,
                 "TPDO" => write!(
                     writer,
-                    "{} -< {}  [{}]",
+                    "{} -< {} [{}]",
                     "TPDO".green().bold(),
                     format!("Node {}", node).green(),
                     data
                 )?,
                 "RPDO" => write!(
                     writer,
-                    "{} -> {}  [{}]",
+                    "{} -> {} [{}]",
                     "RPDO".purple().bold(),
                     format!("Node {}", node).purple(),
                     data
                 )?,
                 "RSDO" => write!(
                     writer,
-                    "{} -> {}  [{}]",
+                    "{} -> {} [{}] => {}",
                     "RSDO".bright_blue().bold(),
                     format!("Node {}", node).bright_blue(),
-                    data
+                    data,
+                    parsed.blue(),
                 )?,
                 "TSDO" => write!(
                     writer,
-                    "{} <- {}  [{}]",
-                    "TSDO".blue().bold(),
-                    format!("Node {}", node).blue(),
-                    data
+                    "{} <- {} {}",
+                    "TSDO".cyan().bold(),
+                    format!("Node {}", node).cyan(),
+                    parsed.cyan(),
                 )?,
                 "SYNC" => write!(writer, "{}", "SYNC".white().bold())?,
                 "NmtControl" => write!(
                     writer,
-                    "{} for  {} request: {}",
+                    "{} -> {} request {}",
                     "NMT-Control".bright_yellow().bold().reversed(),
                     format!("Node {}", node).bright_yellow(),
                     data.bright_yellow().reversed()
                 )?,
                 "NmtMonitor" => write!(
                     writer,
-                    "{} from {} reports: {}",
+                    "{} <- {} reports {}",
                     "NMT-Monitor".yellow().bold(),
                     format!("Node {}", node).yellow(),
                     data.yellow().bold()
@@ -208,53 +227,7 @@ where
                 _ => write!(writer, "{} {}", frame, message)?,
             }
         } else {
-            // plain fallback for files / non-ttys
-            match frame.as_str() {
-                "EMCY" => write!(
-                    writer,
-                    "{} from {}  {}",
-                    "EMCY",
-                    format!("Node {}", node),
-                    message
-                )?,
-                "TPDO" => write!(
-                    writer,
-                    "{} from {}  [{}]",
-                    "TPDO",
-                    format!("Node {}", node),
-                    data
-                )?,
-                "RPDO" => write!(
-                    writer,
-                    "{} to {}  [{}]",
-                    "RPDO",
-                    format!("Node {}", node),
-                    data
-                )?,
-                "SDO" => write!(
-                    writer,
-                    "{} to {}  [{}]",
-                    "SDO".blue().bold(),
-                    format!("Node {}", node).blue(),
-                    data
-                )?,
-                "SYNC" => write!(writer, "{}", "SYNC")?,
-                "NmtControl" => write!(
-                    writer,
-                    "{} for  {} request: {}",
-                    "NMT-Control",
-                    format!("Node {}", node),
-                    data
-                )?,
-                "NmtMonitor" => write!(
-                    writer,
-                    "{} from {} reports: {}",
-                    "NMT-Monitor",
-                    format!("Node {}", node),
-                    data
-                )?,
-                _ => write!(writer, "{} {}", frame, message)?,
-            }
+            write!(writer, "Writer does not support colors :<")?;
         }
 
         writeln!(writer)
