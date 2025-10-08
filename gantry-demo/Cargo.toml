@@ -7,7 +7,8 @@ edition = "2024"
 oze-canopen = "0.1.0"
 tokio = { version = "1", features = ["full"] }
 tracing = "0.1.41"
-tracing-subscriber = "0.3.19"
+tracing-subscriber = { version = "0.3.19", features = ["registry"] }
 anyhow = "1.0.100"
 gantry-cia402 = { path = "../gantry-cia402/" }
 owo-colors = "4.2.3"
+chrono = "0.4.42"

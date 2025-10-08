@@ -62,7 +62,7 @@ mod tests {
 
     #[tokio::test]
     async fn nmt_boot_test() -> Result<(), String> {
-        common::setup_tracing();
+        gantry_demo::setup_tracing();
 
         let node_id = NODE_ID;
 

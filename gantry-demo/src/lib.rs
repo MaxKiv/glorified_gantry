@@ -2,29 +2,40 @@ use gantry_cia402::driver::{event::MotorEvent, feedback::frame::Frame};
 use oze_canopen::{canopen::RxMessage, interface::CanOpenInterface};
 use tokio::sync::broadcast::{self, error::RecvError};
 use tracing::{Level, *};
-use tracing_subscriber::FmtSubscriber;
+use tracing_subscriber::filter::filter_fn;
+use tracing_subscriber::fmt::time::SystemTime;
+use tracing_subscriber::{
+    FmtSubscriber, Registry, filter, fmt::time::Uptime, layer::SubscriberExt,
+};
+use tracing_subscriber::{Layer, filter::LevelFilter, prelude::*};
 
 use std::fmt::Debug;
 use std::time::Duration;
 
+use chrono::{SecondsFormat, Utc};
+use owo_colors::OwoColorize;
 use tokio::time::{self, Instant};
+use tracing::field::{Field, Visit};
+use tracing_subscriber::fmt::*;
 use tracing_subscriber::{
     fmt::{self, format::Writer},
     registry::LookupSpan,
 };
 
-use owo_colors::OwoColorize;
-use tracing::field::{Field, Visit};
-use tracing_subscriber::fmt::*;
-
 pub fn setup_tracing() {
-    // Setup tracing
-    let subscriber = FmtSubscriber::builder()
-        .event_format(FrameFormatter) // use our formatter
-        // all spans/events with a level higher than TRACE (e.g, debug, info, warn, etc.)
-        // will be written to stdout.
-        .with_max_level(Level::TRACE)
-        .finish();
+    // your custom formatter for canopen
+
+    let frame_fmt_layer = tracing_subscriber::fmt::layer()
+        .event_format(FrameFormatter)
+        .with_filter(filter_fn(|meta| meta.target() == "canopen"));
+
+    let default_layer =
+        tracing_subscriber::fmt::layer().with_filter(filter_fn(|meta| meta.target() != "canopen"));
+
+    let subscriber = Registry::default()
+        .with(default_layer)
+        .with(frame_fmt_layer);
+
     tracing::subscriber::set_global_default(subscriber)
         .expect("setting default tracing subscriber failed");
 }
@@ -46,11 +57,12 @@ pub async fn log_events(
 
 #[instrument(skip(canopen))]
 pub async fn log_canopen_pretty(mut canopen: CanOpenInterface) -> Result<(), RecvError> {
-    let span = span!(Level::TRACE, "sniffer");
-    let _enter = span.enter();
     loop {
         tokio::select! {
             frame = canopen.rx.recv() => {
+                let span = span!(Level::TRACE, "sniffer");
+                let _enter = span.enter();
+
                 match frame {
                     Ok(frame) => {
                         let parsed: Result<Frame, ()> = frame.try_into();
@@ -149,7 +161,6 @@ pub async fn wait_for_event(
 }
 
 // a tiny visitor to extract a few fields from the Event
-
 #[derive(Default)]
 struct FieldExtractor {
     frame: Option<String>,
@@ -191,7 +202,7 @@ impl Visit for FieldExtractor {
     }
 }
 
-// custom formatter that uses writer.has_ansi_escapes()
+// Custom formatter for [`Frame`]
 struct FrameFormatter;
 
 impl<S, N> FormatEvent<S, N> for FrameFormatter
@@ -205,7 +216,14 @@ where
         mut writer: Writer<'_>,
         event: &Event<'_>,
     ) -> core::fmt::Result {
-        // extract some fields
+        let timestamp = Utc::now().to_rfc3339_opts(SecondsFormat::Micros, true);
+
+        // print the timestamp first
+        write!(writer, "{} ", timestamp.black())?;
+
+        write!(writer, "{} ", "SNIFF".white())?;
+
+        // extract some fields using our FieldExtractor
         let mut ex = FieldExtractor::default();
         event.record(&mut ex);
 
@@ -259,8 +277,42 @@ where
         } else {
             // plain fallback for files / non-ttys
             match frame.as_str() {
-                "EMCY" => write!(writer, "EMCY from Node {}  {}", node, message)?,
-                "TPDO" => write!(writer, "TPDO from Node {}  [{}]", node, data)?,
+                "EMCY" => write!(
+                    writer,
+                    "{} from {}  {}",
+                    "EMCY",
+                    format!("Node {}", node),
+                    message
+                )?,
+                "TPDO" => write!(
+                    writer,
+                    "{} from {}  [{}]",
+                    "TPDO",
+                    format!("Node {}", node),
+                    data
+                )?,
+                "RPDO" => write!(
+                    writer,
+                    "{} to {}  [{}]",
+                    "RPDO",
+                    format!("Node {}", node),
+                    data
+                )?,
+                "SYNC" => write!(writer, "{}", "SYNC")?,
+                "NmtControl" => write!(
+                    writer,
+                    "{} for  {} request: {}",
+                    "NMT-Control",
+                    format!("Node {}", node),
+                    data
+                )?,
+                "NmtMonitor" => write!(
+                    writer,
+                    "{} from {} reports: {}",
+                    "NMT-Monitor",
+                    format!("Node {}", node),
+                    data
+                )?,
                 _ => write!(writer, "{} {}", frame, message)?,
             }
         }

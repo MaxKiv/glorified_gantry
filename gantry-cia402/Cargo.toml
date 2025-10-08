@@ -14,5 +14,4 @@ bitflags = "2.9.4"
 owo-colors = "4.2.3"
 
 [dev-dependencies]
-tracing-subscriber = { version = "0.3.19", features = ["env-filter", "std"] }
-gantry-demo = { path = "../gantry-demo/" }
+gantry-demo = { path = "../gantry-demo/" } # For tracing setup
