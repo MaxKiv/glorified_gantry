@@ -80,7 +80,7 @@ impl TryFrom<RxMessage> for Frame {
             // 0x580–0x5FF → TSDO (Server→Client)
             0x580..=0x5FF => {
                 let from = (id - 0x580) as u8;
-                Frame::SDO(SdoMessage {
+                Frame::TSDO(SdoMessage {
                     timestamp,
                     from,
                     data: value.data,
@@ -91,7 +91,7 @@ impl TryFrom<RxMessage> for Frame {
             // 0x600–0x67F → RSDO (Client→Server)
             0x600..=0x67F => {
                 let from = (id - 0x600) as u8;
-                Frame::SDO(SdoMessage {
+                Frame::RSDO(SdoMessage {
                     timestamp,
                     from,
                     data: value.data,

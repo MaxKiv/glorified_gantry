@@ -45,10 +45,18 @@ impl Frame {
                 info!(target: "canopen", frame = "NmtControl", node = msg.to as u64, data =
                     %format!("{:?}", msg.requested_state));
             }
-            Frame::SDO(msg) => {
+            Frame::TSDO(msg) => {
                 info!(
                     target: "canopen",
-                    frame = "SDO",
+                    frame = "TSDO",
+                    node = msg.from as u64,
+                    data = %hex_dump(&msg.data[..msg.dlc])
+                );
+            }
+            Frame::RSDO(msg) => {
+                info!(
+                    target: "canopen",
+                    frame = "RSDO",
                     node = msg.from as u64,
                     data = %hex_dump(&msg.data[..msg.dlc])
                 );

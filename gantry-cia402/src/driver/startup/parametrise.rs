@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{sync::Arc, time::Duration};
 
 use anyhow::Result;
 use oze_canopen::sdo_client::SdoClient;
@@ -6,6 +6,8 @@ use tokio::sync::Mutex;
 use tracing::*;
 
 use crate::comms::sdo::SdoAction;
+
+const SDO_PROCESS_DURATION: Duration = Duration::from_millis(0); // Typical SDO round trip at 1mbit/s ~= 4ms, + engineering factor :)
 
 /// Parametrize the motor at given node id
 /// parametrisation is the process of setting important parameters like
@@ -25,6 +27,8 @@ pub async fn parametrise_motor(
         if let Err(err) = action.run_on_sdo_client(sdo.clone()).await {
             error!("Error while parametrizing node id {}: {err}", node_id);
         }
+
+        tokio::time::sleep(SDO_PROCESS_DURATION).await;
     }
 
     Ok(())

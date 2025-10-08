@@ -1,4 +1,5 @@
 pub mod parametrise;
+pub mod params;
 pub mod pdo_mapping;
 
 use std::{sync::Arc, time::Duration};

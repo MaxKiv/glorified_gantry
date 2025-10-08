@@ -92,7 +92,7 @@ pub const GET_OPERATION_MODE: ODEntry = ODEntry::new(
     ODValue::I8(1),
 );
 
-/// Target position [counts]
+/// Target position [counts] (default 3600 counts = 1 rev)
 pub const SET_TARGET_POSITION: ODEntry = ODEntry::new(
     0x607A,
     0x00,

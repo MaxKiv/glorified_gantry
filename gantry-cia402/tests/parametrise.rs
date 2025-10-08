@@ -20,11 +20,7 @@ use tracing::*;
 
 const NODE_ID: u8 = 3;
 
-const PARAMS: [SdoAction; 1] = [SdoAction::Upload {
-    entry: &DEVICE_TYPE,
-}];
-
-const TIMEOUT: Duration = Duration::from_secs(1);
+const TIMEOUT: Duration = Duration::from_secs(2);
 
 /// Start the device feedback task responsible for receiving and parsing device feedback and broadcasting these as events
 fn start_feedback_task(
@@ -55,7 +51,8 @@ mod tests {
 
     use gantry_cia402::{
         comms::pdo::mapping::custom::CUSTOM_TPDOS,
-        log::{log_canopen, log_events},
+        driver::startup::{parametrise::parametrise_motor, params::PARAMS},
+        log::{log_canopen_pretty, log_events},
     };
 
     use common::wait_for_event;
@@ -72,7 +69,7 @@ mod tests {
         let (canopen, _) = oze_canopen::canopen::start(String::from("can0"), Some(1000000));
 
         info!("Starting CANOpen sniffer");
-        task::spawn(log_canopen(canopen.clone()));
+        task::spawn(log_canopen_pretty(canopen.clone()));
 
         let tpdo_mapping_set = CUSTOM_TPDOS;
 
@@ -83,12 +80,24 @@ mod tests {
         info!("Starting NMT handler logger");
         let nmt_handle = Nmt::start(node_id, canopen.clone(), event_rx.resubscribe());
 
-        // Watch for NmtState::Operational
+        info!("Wait for NmtState::Operational");
         wait_for_event(
             event_rx.resubscribe(),
             MotorEvent::NmtStateUpdate(NmtState::Operational),
             TIMEOUT,
         )
-        .await
+        .await?;
+
+        info!("Start SDO client");
+        // Get the SDO client for this node id, we use this to make SDO read/writes
+        let sdo = canopen
+            .get_sdo_client(node_id)
+            .unwrap_or_else(|| panic!("Unable to construct SDO client for node id {node_id}"));
+
+        parametrise_motor(node_id, PARAMS, sdo.clone())
+            .await
+            .map_err(|err| format!("Error during motor parametrisation: {err}").to_string())?;
+
+        Ok(())
     }
 }

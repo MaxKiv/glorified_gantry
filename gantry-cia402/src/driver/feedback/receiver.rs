@@ -26,7 +26,7 @@ pub async fn handle_feedback(
 
     loop {
         if let Ok(frame) = canopen.rx.recv().await {
-            trace!("Received frame: {}", format_frame(&frame));
+            // trace!("Received frame: {}", format_frame(&frame));
 
             match frame.cob_id {
                 id if id == COB_ID_SYNC => { /* master SYNC request */ }

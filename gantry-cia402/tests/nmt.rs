@@ -26,7 +26,7 @@ mod tests {
 
     use gantry_cia402::{
         comms::pdo::mapping::custom::CUSTOM_TPDOS,
-        log::{log_canopen, log_events},
+        log::{log_canopen_pretty, log_events},
     };
 
     use common::wait_for_event;
@@ -45,7 +45,7 @@ mod tests {
         let (canopen, _) = oze_canopen::canopen::start(String::from("can0"), Some(1000000));
 
         info!("Starting CANOpen sniffer");
-        task::spawn(log_canopen(canopen.clone()));
+        task::spawn(log_canopen_pretty(canopen.clone()));
 
         let tpdo_mapping_set = CUSTOM_TPDOS;
 

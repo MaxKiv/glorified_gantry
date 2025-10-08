@@ -1,7 +1,8 @@
-use crate::driver::event::MotorEvent;
 use oze_canopen::{canopen::RxMessage, interface::CanOpenInterface};
 use tokio::sync::broadcast::{self, error::RecvError};
-use tracing::*;
+use tracing::{instrument, *};
+
+use crate::driver::{event::MotorEvent, feedback::frame::Frame};
 
 #[instrument(skip(event_rx))]
 pub async fn log_events(
@@ -11,7 +12,10 @@ pub async fn log_events(
     loop {
         tokio::select! {
             Ok(event) = event_rx.recv() => {
-                info!("Received Feedback: {event:?}");
+                info!(
+                    target: "events",
+                    data = %format!("{:?}", event)
+                );
             },
             _ = tokio::signal::ctrl_c() => return Ok(()),
         };
@@ -19,15 +23,40 @@ pub async fn log_events(
 }
 
 #[instrument(skip(canopen))]
-pub async fn log_canopen(mut canopen: CanOpenInterface) -> Result<(), RecvError> {
-    let can_name = canopen.connection.lock().await.can_name.clone();
+pub async fn log_canopen_pretty(mut canopen: CanOpenInterface) -> Result<(), RecvError> {
+    loop {
+        tokio::select! {
+            frame = canopen.rx.recv() => {
+                let span = span!(Level::TRACE, "sniffer");
+                let _enter = span.enter();
 
+                match frame {
+                    Ok(frame) => {
+                        let parsed: Result<Frame, ()> = frame.try_into();
+                        if let Ok(frame) = parsed {
+                            frame.log();
+                        } else {
+                            error!("Error parsing frame: {frame:?}");
+                        }
+                    }
+                    Err(err) => {
+                        error!("Error logging canopen traffic: {err}");
+                    }
+                }
+            },
+            _ = tokio::signal::ctrl_c() => return Ok(()),
+        };
+    }
+}
+
+#[instrument(skip(canopen))]
+pub async fn log_canopen_raw(mut canopen: CanOpenInterface) -> Result<(), RecvError> {
     loop {
         tokio::select! {
             frame = canopen.rx.recv() => {
                 match frame {
                     Ok(frame) => {
-                        info!("{}\t{}", can_name, &format_frame(&frame));
+                        info!("{}", &format_frame(&frame));
                     }
                     Err(err) => {
                         error!("Error logging canopen traffic: {err}");
@@ -41,14 +70,14 @@ pub async fn log_canopen(mut canopen: CanOpenInterface) -> Result<(), RecvError>
 
 pub fn format_frame(frame: &RxMessage) -> String {
     format!(
-        "{}\t{}\t{:?}",
+        "can0\t{}\t{}\t{:?}",
         frame.cob_id_to_string(),
         frame.dlc,
         format_data(&frame.data, frame.dlc)
     )
 }
 
-pub fn format_data(data: &[u8], dlc: usize) -> String {
+fn format_data(data: &[u8], dlc: usize) -> String {
     // let mut out = String::from("[");
     let mut out = String::new();
     for byte in &data[0..dlc] {

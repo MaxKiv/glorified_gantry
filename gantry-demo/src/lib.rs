@@ -40,87 +40,6 @@ pub fn setup_tracing() {
         .expect("setting default tracing subscriber failed");
 }
 
-#[instrument(skip(event_rx))]
-pub async fn log_events(
-    mut event_rx: broadcast::Receiver<MotorEvent>,
-    node_id: u8,
-) -> Result<(), RecvError> {
-    loop {
-        tokio::select! {
-            Ok(event) = event_rx.recv() => {
-                info!("Received Feedback: {event:?}");
-            },
-            _ = tokio::signal::ctrl_c() => return Ok(()),
-        };
-    }
-}
-
-#[instrument(skip(canopen))]
-pub async fn log_canopen_pretty(mut canopen: CanOpenInterface) -> Result<(), RecvError> {
-    loop {
-        tokio::select! {
-            frame = canopen.rx.recv() => {
-                let span = span!(Level::TRACE, "sniffer");
-                let _enter = span.enter();
-
-                match frame {
-                    Ok(frame) => {
-                        let parsed: Result<Frame, ()> = frame.try_into();
-                        if let Ok(frame) = parsed {
-                            frame.log();
-                        } else {
-                            error!("Error parsing frame: {frame:?}");
-                        }
-                    }
-                    Err(err) => {
-                        error!("Error logging canopen traffic: {err}");
-                    }
-                }
-            },
-            _ = tokio::signal::ctrl_c() => return Ok(()),
-        };
-    }
-}
-
-#[instrument(skip(canopen))]
-pub async fn log_canopen_raw(mut canopen: CanOpenInterface) -> Result<(), RecvError> {
-    loop {
-        tokio::select! {
-            frame = canopen.rx.recv() => {
-                match frame {
-                    Ok(frame) => {
-                        info!("{}", &format_frame(&frame));
-                    }
-                    Err(err) => {
-                        error!("Error logging canopen traffic: {err}");
-                    }
-                }
-            },
-            _ = tokio::signal::ctrl_c() => return Ok(()),
-        };
-    }
-}
-
-fn format_frame(frame: &RxMessage) -> String {
-    format!(
-        "can0\t{}\t{}\t{:?}",
-        frame.cob_id_to_string(),
-        frame.dlc,
-        format_data(&frame.data, frame.dlc)
-    )
-}
-
-fn format_data(data: &[u8], dlc: usize) -> String {
-    // let mut out = String::from("[");
-    let mut out = String::new();
-    for byte in &data[0..dlc] {
-        out.push_str(&format!("{:#02x} ", byte));
-    }
-    // out += "]";
-
-    out
-}
-
 pub async fn wait_for_event(
     mut event_rx: broadcast::Receiver<MotorEvent>,
     watch_for: MotorEvent,
@@ -219,9 +138,9 @@ where
         let timestamp = Utc::now().to_rfc3339_opts(SecondsFormat::Micros, true);
 
         // print the timestamp first
-        write!(writer, "{} ", timestamp.black())?;
+        write!(writer, "{} ", timestamp.dimmed())?;
 
-        write!(writer, "{} ", "SNIFF".white())?;
+        write!(writer, "{} ", "SNIFF".white().bold())?;
 
         // extract some fields using our FieldExtractor
         let mut ex = FieldExtractor::default();
@@ -245,16 +164,30 @@ where
                 )?,
                 "TPDO" => write!(
                     writer,
-                    "{} from {}  [{}]",
+                    "{} -< {}  [{}]",
                     "TPDO".green().bold(),
                     format!("Node {}", node).green(),
                     data
                 )?,
                 "RPDO" => write!(
                     writer,
-                    "{} to {}  [{}]",
+                    "{} -> {}  [{}]",
                     "RPDO".purple().bold(),
                     format!("Node {}", node).purple(),
+                    data
+                )?,
+                "RSDO" => write!(
+                    writer,
+                    "{} -> {}  [{}]",
+                    "RSDO".bright_blue().bold(),
+                    format!("Node {}", node).bright_blue(),
+                    data
+                )?,
+                "TSDO" => write!(
+                    writer,
+                    "{} <- {}  [{}]",
+                    "TSDO".blue().bold(),
+                    format!("Node {}", node).blue(),
                     data
                 )?,
                 "SYNC" => write!(writer, "{}", "SYNC".white().bold())?,
@@ -296,6 +229,13 @@ where
                     "{} to {}  [{}]",
                     "RPDO",
                     format!("Node {}", node),
+                    data
+                )?,
+                "SDO" => write!(
+                    writer,
+                    "{} to {}  [{}]",
+                    "SDO".blue().bold(),
+                    format!("Node {}", node).blue(),
                     data
                 )?,
                 "SYNC" => write!(writer, "{}", "SYNC")?,

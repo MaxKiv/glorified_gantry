@@ -1,6 +1,6 @@
 use ::tracing::info;
-use gantry_cia402::{comms::sdo::SdoAction, od::DEVICE_TYPE};
-use gantry_demo::{log_canopen_pretty, log_canopen_raw, setup_tracing};
+use gantry_cia402::{comms::sdo::SdoAction, log::log_canopen_pretty, od::DEVICE_TYPE};
+use gantry_demo::setup_tracing;
 use tracing::*;
 
 const NODE_ID: u8 = 3;
