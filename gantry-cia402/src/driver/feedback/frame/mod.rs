@@ -177,7 +177,7 @@ impl SdoResponse {
     pub fn fmt_pretty(&self) -> String {
         match &self {
             SdoResponse::Error(sdo_error) => format!(
-                "SDO Error for {:#0x}:{}- code {:#0x}",
+                "SDO Error for {:#0x}:{} - code {:#0x}",
                 sdo_error.index, sdo_error.sub_index, sdo_error.code
             )
             .to_string(),

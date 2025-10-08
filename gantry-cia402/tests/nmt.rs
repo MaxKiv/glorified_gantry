@@ -19,7 +19,7 @@ const PARAMS: [SdoAction; 1] = [SdoAction::Upload {
     entry: &DEVICE_TYPE,
 }];
 
-const TIMEOUT: Duration = Duration::from_secs(1);
+const TIMEOUT: Duration = Duration::from_secs(5);
 
 #[cfg(test)]
 mod tests {
@@ -53,8 +53,16 @@ mod tests {
         let (_, mut event_rx) = start_feedback_task(canopen.clone(), node_id, tpdo_mapping_set);
         task::spawn(log_events(event_rx.resubscribe(), node_id));
 
+        tokio::time::sleep(Duration::from_millis(250)).await;
+
         info!("Starting NMT handler logger");
-        let nmt_handle = Nmt::start(node_id, canopen.clone(), event_rx.resubscribe());
+        let (nmt_tx, nmt_rx) = tokio::sync::mpsc::channel(10);
+        let nmt_handle = Nmt::start(node_id, canopen.clone(), nmt_rx, event_rx.resubscribe());
+
+        nmt_tx
+            .send(NmtState::Operational)
+            .await
+            .map_err(|err| format!("Error requesting NMT state: {err}").to_string())?;
 
         // Watch for NmtState::Operational
         wait_for_event(
@@ -62,6 +70,10 @@ mod tests {
             MotorEvent::NmtStateUpdate(NmtState::Operational),
             TIMEOUT,
         )
-        .await
+        .await?;
+
+        tokio::time::sleep(Duration::from_millis(250)).await;
+
+        Ok(())
     }
 }

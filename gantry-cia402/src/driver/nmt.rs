@@ -4,7 +4,10 @@ use oze_canopen::{
     interface::CanOpenInterface,
     proto::nmt::{NmtCommand, NmtCommandSpecifier},
 };
-use tokio::{sync::broadcast, task, time};
+use tokio::{
+    sync::{broadcast, mpsc},
+    task, time,
+};
 use tracing::*;
 
 use crate::{
@@ -52,6 +55,17 @@ impl From<HeartBeat> for NmtState {
     }
 }
 
+impl Into<NmtCommandSpecifier> for NmtState {
+    fn into(self) -> NmtCommandSpecifier {
+        match self {
+            NmtState::Bootup => NmtCommandSpecifier::ResetCommunication,
+            NmtState::Stopped => NmtCommandSpecifier::StopRemoteNode,
+            NmtState::PreOperational => NmtCommandSpecifier::EnterPreOperational,
+            NmtState::Operational => NmtCommandSpecifier::StartRemoteNode,
+        }
+    }
+}
+
 pub struct Nmt;
 
 impl Nmt {
@@ -60,45 +74,73 @@ impl Nmt {
     pub fn start(
         node_id: u8,
         canopen: CanOpenInterface,
+        nmt_rx: mpsc::Receiver<NmtState>,
         event_rx: broadcast::Receiver<MotorEvent>,
     ) -> task::JoinHandle<()> {
         trace!("Starting NMT State Machine task for motor with node id {node_id}");
 
-        task::spawn(Nmt::run(node_id, canopen, event_rx))
+        task::spawn(Nmt::run(node_id, canopen, nmt_rx, event_rx))
     }
 
     pub async fn run(
         node_id: u8,
         canopen: CanOpenInterface,
+        mut nmt_rx: mpsc::Receiver<NmtState>,
         mut event_rx: broadcast::Receiver<MotorEvent>,
     ) {
         let mut current_state = NmtState::PreOperational;
-        let mut interval = time::interval(Duration::from_millis(250));
-
         loop {
             tokio::select! {
                 // Process NMT state updates from feedback task
                 event = event_rx.recv() => {
-                    if let Ok(MotorEvent::StatusWord(statusword)) = event {
-                        let new_state: NmtState = statusword.into();
-                        trace!(
-                            "NMT state update received, old -> new state: {:?} -> {new_state:?}",
-                            current_state
-                        );
-                        current_state = new_state;
+                    if let Ok(event) = event {
+                        match event {
+                            MotorEvent::NmtStateUpdate(nmt_state) => {
+                                trace!("NMT: Received NMT state update: {nmt_state:?}");
+
+                                let new_state = nmt_state;
+                                trace!(
+                                    "NMT state update received, old -> new state: {:?} -> {new_state:?}",
+                                    current_state
+                                );
+                                current_state = new_state;
+                            },
+
+                            MotorEvent::StatusWord(status_word) => {
+                                trace!("NMT: Received statusword update: {status_word:?}");
+                                let new_state: NmtState = status_word.into();
+                                trace!(
+                                    "NMT state update received, old -> new state: {:?} -> {new_state:?}",
+                                    current_state
+                                );
+                                current_state = new_state;
+                            },
+
+                            _ => continue,
+                        }
                     }
                 }
-                _ = interval.tick() => {
-                    // Continously attempt to put the motor in NmtState::Operational
-                    if let Err(err) = Nmt::transition_to_operational(node_id, canopen.clone(),
-                            &current_state).await {
-                        error!(
-                            "Error transitioning device with node id {} to NMT::Operational: {err}",
-                            node_id
-                        );
+
+                // Set device to requested state
+                state = nmt_rx.recv() => {
+                    trace!("Received NMT state request: {state:?}");
+                    if let Some(state) = state {
+                        match canopen.send_nmt(
+                            NmtCommand::new(state.clone().into(), node_id)
+                        ).await {
+                            Ok(_) => {
+                                trace!("Send NMT state request: {state:?} to node {node_id}");
+                            }
+                            Err(err) => {
+                                trace!("Error sending NMT state request to node {node_id}: {err:?}");
+                            }
+                        }
                     }
+
                 }
+
             }
+
             tokio::time::sleep(Duration::from_millis(250)).await;
         }
     }

@@ -5,9 +5,7 @@ use oze_canopen::sdo_client::SdoClient;
 use tokio::sync::Mutex;
 use tracing::*;
 
-use crate::comms::sdo::SdoAction;
-
-const SDO_PROCESS_DURATION: Duration = Duration::from_millis(0); // Typical SDO round trip at 1mbit/s ~= 4ms, + engineering factor :)
+use crate::comms::sdo::{SDO_PROCESS_DURATION, SdoAction};
 
 /// Parametrize the motor at given node id
 /// parametrisation is the process of setting important parameters like

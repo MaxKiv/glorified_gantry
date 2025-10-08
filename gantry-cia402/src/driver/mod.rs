@@ -74,8 +74,14 @@ impl Cia402Driver {
         let mut handles: Vec<JoinHandle<()>> = Vec::new();
 
         // Start the NMT task, this continously attempts to put the motor into NMT::Operational
+        let (nmt_tx, nmt_rx) = tokio::sync::mpsc::channel(10);
         trace!("Starting NMT State Machine task for motor with node id {node_id}");
-        handles.push(Nmt::start(node_id, canopen.clone(), event_rx.resubscribe()));
+        handles.push(Nmt::start(
+            node_id,
+            canopen.clone(),
+            nmt_rx,
+            event_rx.resubscribe(),
+        ));
 
         // Start the startup task for this motor, this does parametrisation and sets pdo mapping
         trace!("Starting Startup Task for motor with node id {node_id}");

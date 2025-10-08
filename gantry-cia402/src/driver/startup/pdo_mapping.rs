@@ -6,7 +6,10 @@ use tokio::sync::Mutex;
 use tracing::*;
 
 use crate::{
-    comms::pdo::mapping::{PdoMapping, PdoType},
+    comms::{
+        pdo::mapping::{PdoMapping, PdoType},
+        sdo::SDO_PROCESS_DURATION,
+    },
     error::DriveError,
     od::{
         RPDO_COMMUNICATION_PARAMETER_BASE_INDEX, RPDO_MAPPING_PARAMETER_BASE_INDEX,
@@ -23,6 +26,8 @@ pub async fn configure_pdo_mappings(
     trace!("configure_pdo_mappings for nodeId {}", node_id);
     for mapping in pdo_mapping.iter() {
         set_pdo_mapping(node_id, sdo.clone(), mapping).await?;
+
+        tokio::time::sleep(SDO_PROCESS_DURATION).await;
     }
 
     Ok(())

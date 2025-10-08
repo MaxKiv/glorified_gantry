@@ -1,9 +1,11 @@
-use std::sync::Arc;
+use std::{sync::Arc, time::Duration};
 
 use oze_canopen::sdo_client::SdoClient;
 use tokio::sync::Mutex;
 
 use crate::{error::DriveError, od::entry::ODEntry};
+
+pub const SDO_PROCESS_DURATION: Duration = Duration::from_millis(0); // Typical SDO round trip at 1mbit/s ~= 4ms, + engineering factor :)
 
 /// One CANopen SDO parameter write (or read).
 #[derive(Debug)]

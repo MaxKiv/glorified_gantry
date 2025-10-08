@@ -182,7 +182,7 @@ where
                 )?,
                 "TPDO" => write!(
                     writer,
-                    "{} -< {} [{}]",
+                    "{} <- {} [{}]",
                     "TPDO".green().bold(),
                     format!("Node {}", node).green(),
                     data

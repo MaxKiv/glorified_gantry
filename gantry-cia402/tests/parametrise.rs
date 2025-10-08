@@ -77,6 +77,8 @@ mod tests {
         let (_, mut event_rx) = start_feedback_task(canopen.clone(), node_id, tpdo_mapping_set);
         task::spawn(log_events(event_rx.resubscribe(), node_id));
 
+        tokio::time::sleep(Duration::from_millis(250)).await;
+
         info!("Starting NMT handler logger");
         let nmt_handle = Nmt::start(node_id, canopen.clone(), event_rx.resubscribe());
 

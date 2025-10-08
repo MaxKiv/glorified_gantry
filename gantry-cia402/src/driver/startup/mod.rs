@@ -20,7 +20,7 @@ use crate::{
     error::DriveError,
 };
 
-const PARAMETRISATION_RETRY_DURATION: Duration = Duration::from_secs(1);
+pub const PARAMETRISATION_RETRY_DURATION: Duration = Duration::from_secs(1);
 
 /// Parametrize & Set up PDO mapping for cia402 compliant motor at given node_id
 pub async fn motor_startup_task(
