@@ -1,5 +1,5 @@
 [package]
-name = "gantry_ros2"
+name = "gantry-gui"
 version = "0.1.0"
 edition = "2024"
 

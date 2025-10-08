@@ -1,5 +1,5 @@
 [package]
-name = "gantry_nanotec_canopen"
+name = "gantry-nanotec"
 version = "0.1.0"
 edition = "2024"
 

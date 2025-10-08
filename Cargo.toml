@@ -1,10 +1,10 @@
 [workspace]
 members = [
-    "gantry_nanotec_canopen",
-    "gantry_cia402",
-    "gantry_ros2",
-    "gantry_gui",
-    "gantry_demo",
+    "gantry-nanotec",
+    "gantry-cia402",
+    "gantry-ros2",
+    "gantry-gui",
+    "gantry-demo",
 ]
 
 resolver = "2"

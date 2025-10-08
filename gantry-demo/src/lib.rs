@@ -46,6 +46,8 @@ pub async fn log_events(
 
 #[instrument(skip(canopen))]
 pub async fn log_canopen_pretty(mut canopen: CanOpenInterface) -> Result<(), RecvError> {
+    let span = span!(Level::TRACE, "sniffer");
+    let _enter = span.enter();
     loop {
         tokio::select! {
             frame = canopen.rx.recv() => {
