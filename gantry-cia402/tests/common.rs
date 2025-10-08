@@ -1,17 +1,16 @@
-use std::fmt::Debug;
 use std::time::Duration;
 
-use gantry_cia402::driver::event::MotorEvent;
+use gantry_cia402::{
+    comms::pdo::mapping::PdoMapping,
+    driver::{event::MotorEvent, feedback::receiver::handle_feedback},
+};
+use oze_canopen::interface::CanOpenInterface;
 use tokio::{
     sync::broadcast,
+    task::{self, JoinHandle},
     time::{self, Instant},
 };
 use tracing::*;
-use tracing_subscriber::{
-    FmtSubscriber,
-    fmt::{self, format::Writer},
-    registry::LookupSpan,
-};
 
 pub async fn wait_for_event(
     mut event_rx: broadcast::Receiver<MotorEvent>,
@@ -50,4 +49,28 @@ pub async fn wait_for_event(
             }
         }
     }
+}
+
+/// Start the device feedback task responsible for receiving and parsing device feedback and broadcasting these as events
+pub fn start_feedback_task(
+    canopen: CanOpenInterface,
+    node_id: u8,
+    tpdo_mapping_set: &'static [PdoMapping],
+) -> (JoinHandle<()>, broadcast::Receiver<MotorEvent>) {
+    // Initialize output interfaces
+    let (event_tx, event_rx): (
+        broadcast::Sender<MotorEvent>,
+        broadcast::Receiver<MotorEvent>,
+    ) = tokio::sync::broadcast::channel(10);
+
+    trace!("Starting device feedback handler for motor with node id {node_id}");
+    (
+        task::spawn(handle_feedback(
+            node_id,
+            canopen,
+            tpdo_mapping_set,
+            event_tx,
+        )),
+        event_rx,
+    )
 }

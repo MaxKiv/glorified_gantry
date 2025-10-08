@@ -66,7 +66,7 @@ mod tests {
 
     #[tokio::test]
     async fn basic_canopen_test() -> Result<(), CoError> {
-        common::setup_tracing();
+        gantry_demo::setup_tracing();
 
         test_oze_canopen().await?;
 

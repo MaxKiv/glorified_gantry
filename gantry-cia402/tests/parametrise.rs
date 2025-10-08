@@ -2,7 +2,6 @@ pub mod common;
 
 use std::time::Duration;
 
-use gantry_cia402::comms::pdo::mapping::custom::CUSTOM_TPDOS;
 use gantry_cia402::{
     comms::{pdo::mapping::PdoMapping, sdo::SdoAction},
     driver::{
@@ -24,6 +23,8 @@ const NODE_ID: u8 = 3;
 const PARAMS: [SdoAction; 1] = [SdoAction::Upload {
     entry: &DEVICE_TYPE,
 }];
+
+const TIMEOUT: Duration = Duration::from_secs(1);
 
 /// Start the device feedback task responsible for receiving and parsing device feedback and broadcasting these as events
 fn start_feedback_task(
@@ -51,9 +52,13 @@ fn start_feedback_task(
 
 #[cfg(test)]
 mod tests {
-    use gantry_demo::{log_canopen_pretty, log_canopen_raw, log_events};
 
-    use crate::common::wait_for_event;
+    use gantry_cia402::{
+        comms::pdo::mapping::custom::CUSTOM_TPDOS,
+        log::{log_canopen, log_events},
+    };
+
+    use common::wait_for_event;
 
     use super::*;
 
@@ -66,19 +71,24 @@ mod tests {
         info!("Starting can interface");
         let (canopen, _) = oze_canopen::canopen::start(String::from("can0"), Some(1000000));
 
+        info!("Starting CANOpen sniffer");
+        task::spawn(log_canopen(canopen.clone()));
+
         let tpdo_mapping_set = CUSTOM_TPDOS;
 
+        info!("Starting CANOpen event logger");
         let (_, mut event_rx) = start_feedback_task(canopen.clone(), node_id, tpdo_mapping_set);
-
         task::spawn(log_events(event_rx.resubscribe(), node_id));
-        task::spawn(log_canopen_pretty(canopen.clone()));
 
+        info!("Starting NMT handler logger");
         let nmt_handle = Nmt::start(node_id, canopen.clone(), event_rx.resubscribe());
 
-        let timeout = Duration::from_secs(15);
-        let watch_for = MotorEvent::NmtStateUpdate(NmtState::Operational);
-        // TODO also wait for statusword update, or should we just refactor that and parse the
-        // statusword from within the feedback task? maybe thats better!
-        wait_for_event(event_rx.resubscribe(), watch_for, timeout).await
+        // Watch for NmtState::Operational
+        wait_for_event(
+            event_rx.resubscribe(),
+            MotorEvent::NmtStateUpdate(NmtState::Operational),
+            TIMEOUT,
+        )
+        .await
     }
 }
