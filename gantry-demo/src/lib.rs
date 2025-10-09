@@ -1,4 +1,4 @@
-use gantry_cia402::driver::{event::MotorEvent, feedback::frame::Frame};
+use gantry_cia402::driver::{event::MotorEvent, receiver::frame::MessageType};
 use oze_canopen::{canopen::RxMessage, interface::CanOpenInterface};
 use tokio::sync::broadcast::{self, error::RecvError};
 use tracing::{Level, *};

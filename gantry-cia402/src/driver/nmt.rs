@@ -6,12 +6,12 @@ use oze_canopen::{
 };
 use tokio::{
     sync::{broadcast, mpsc},
-    task, time,
+    task,
 };
 use tracing::*;
 
 use crate::{
-    driver::{event::MotorEvent, feedback::StatusWord},
+    driver::{event::MotorEvent, receiver::StatusWord},
     error::DriveError,
 };
 
@@ -35,22 +35,6 @@ impl From<StatusWord> for NmtState {
             NmtState::PreOperational
         } else {
             NmtState::Stopped
-        }
-    }
-}
-
-pub struct HeartBeat {
-    pub data: u8,
-}
-
-impl From<HeartBeat> for NmtState {
-    fn from(heartbeat: HeartBeat) -> Self {
-        match heartbeat.data {
-            0x04 => NmtState::Stopped,
-            0x05 => NmtState::Operational,
-            0x7f => NmtState::PreOperational,
-            0x00 => NmtState::Stopped,
-            _ => NmtState::Stopped,
         }
     }
 }

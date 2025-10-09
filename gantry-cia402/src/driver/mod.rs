@@ -1,8 +1,8 @@
 pub mod command;
 pub mod event;
-pub mod feedback;
 pub mod nmt;
 pub mod oms;
+pub mod receiver;
 pub mod router;
 pub mod startup;
 pub mod state;
@@ -14,8 +14,8 @@ use crate::{
         sdo::SdoAction,
     },
     driver::{
-        command::MotorCommand, event::MotorEvent, feedback::receiver::handle_feedback, nmt::Nmt,
-        oms::OmsHandler, router::command_router, startup::motor_startup_task,
+        command::MotorCommand, event::MotorEvent, nmt::Nmt, oms::OmsHandler,
+        receiver::subscriber::handle_feedback, router::command_router, startup::motor_startup_task,
         state::Cia402StateMachine, update::publisher::publish_updates,
     },
     error::DriveError,

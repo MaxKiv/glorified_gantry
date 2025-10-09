@@ -4,7 +4,7 @@ use tracing::{instrument, *};
 
 use crate::driver::{
     event::MotorEvent,
-    feedback::frame::{Frame, ParseError},
+    receiver::frame::{Frame, MessageType, ParseError},
 };
 
 #[instrument(skip(event_rx))]
@@ -29,18 +29,17 @@ pub async fn log_events(
 pub async fn log_canopen_pretty(mut canopen: CanOpenInterface) -> Result<(), RecvError> {
     loop {
         tokio::select! {
-            frame = canopen.rx.recv() => {
+            message = canopen.rx.recv() => {
                 let span = span!(Level::TRACE, "sniffer");
                 let _enter = span.enter();
 
-                match frame {
-                    Ok(frame) => {
-                        let parsed: Result<Frame, ParseError> = frame.try_into();
-                        if let Ok(frame) = parsed {
-                            frame.log();
-                        } else {
-                            error!("Error parsing frame: {frame:?}");
-                        }
+                match message {
+                    Ok(message) => {
+                        let Ok(parsed): Result<Frame, _> = message.try_into() else {
+                            error!("Error parsing message: {message:?}");
+                            continue;
+                        };
+                        parsed.log();
                     }
                     Err(err) => {
                         error!("Error logging canopen traffic: {err}");
@@ -56,10 +55,10 @@ pub async fn log_canopen_pretty(mut canopen: CanOpenInterface) -> Result<(), Rec
 pub async fn log_canopen_raw(mut canopen: CanOpenInterface) -> Result<(), RecvError> {
     loop {
         tokio::select! {
-            frame = canopen.rx.recv() => {
-                match frame {
-                    Ok(frame) => {
-                        info!("{}", &format_frame(&frame));
+            message = canopen.rx.recv() => {
+                match message {
+                    Ok(message) => {
+                        info!("{}", &format_frame(&message));
                     }
                     Err(err) => {
                         error!("Error logging canopen traffic: {err}");
@@ -71,12 +70,12 @@ pub async fn log_canopen_raw(mut canopen: CanOpenInterface) -> Result<(), RecvEr
     }
 }
 
-pub fn format_frame(frame: &RxMessage) -> String {
+pub fn format_frame(message: &RxMessage) -> String {
     format!(
         "can0\t{}\t{}\t{:?}",
-        frame.cob_id_to_string(),
-        frame.dlc,
-        format_data(&frame.data, frame.dlc)
+        message.cob_id_to_string(),
+        message.dlc,
+        format_data(&message.data, message.dlc)
     )
 }
 

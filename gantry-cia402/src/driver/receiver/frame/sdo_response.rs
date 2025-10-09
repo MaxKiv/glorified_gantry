@@ -1,122 +1,39 @@
-pub mod log;
-pub mod parse;
+use oze_canopen::canopen::{NodeId, RxMessage};
 
-use oze_canopen::{
-    canopen::{NodeId, RxMessage},
-    proto::sdo,
-};
-use thiserror::Error;
-use tokio::time::Instant;
-use tracing::*;
-
-use crate::{
-    comms::pdo::mapping::PdoType,
-    driver::{feedback::frame::log::hex_dump, nmt::NmtState},
-    od::{entry::ODEntry, value::ODValue},
-};
-
-#[derive(Debug)]
-pub struct ParseError(anyhow::Error);
-
-pub enum Frame {
-    NmtControl(NmtControlMessage),
-    Sync(SyncMessage),
-    EMCY(EmergencyMessage),
-    TSDO(SdoResponse),
-    RSDO(SdoRequest),
-    TPDO(TPDOMessage),
-    RPDO(RPDOMessage),
-    NmtMonitor(NmtMonitorMessage),
-    Unknown(RxMessage),
-}
-
-pub struct NmtControlMessage {
-    timestamp: Instant,
-    requested_state: NmtState,
-    to: NodeId,
-}
-
-pub struct NmtMonitorMessage {
-    timestamp: Instant,
-    from: NodeId,
-    current_state: NmtState,
-}
-
-pub struct SyncMessage {
-    timestamp: Instant,
-}
-
-#[derive(Debug)]
-pub struct EmergencyMessage {
-    timestamp: Instant,
-    from: NodeId,
-    error: EMCY,
-}
-
-#[derive(Debug)]
-pub enum EMCY {
-    Undervoltage,
-    Unknown,
-}
-
-pub struct TPDOMessage {
-    timestamp: Instant,
-    from: NodeId,
-    num: usize,
-    data: [u8; 8],
-    dlc: usize,
-}
-
-pub struct RPDOMessage {
-    timestamp: Instant,
-    from: NodeId,
-    num: usize,
-    data: [u8; 8],
-    dlc: usize,
-}
-
-pub struct SdoMessage {
-    timestamp: Instant,
-    from: NodeId,
-    data: [u8; 8],
-    dlc: usize,
-    value: Option<ODEntry>,
-}
+use crate::{driver::receiver::frame::log::hex_dump, od::entry::ODEntry};
 
 #[derive(Debug)]
 pub struct SdoRequest {
-    timestamp: Instant,
-    from: NodeId,
-    data: [u8; 8],
-    dlc: usize,
-    value: Option<ODEntry>,
+    pub data: [u8; 8],
+    pub dlc: usize,
+    pub value: Option<ODEntry>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct SdoError {
-    from: NodeId,
-    index: u16,
-    sub_index: u8,
-    code: u32,
+    pub from: NodeId,
+    pub index: u16,
+    pub sub_index: u8,
+    pub code: u32,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct SdoUploadResult {
-    from: NodeId,
-    dlc: u8,
-    index: u16,
-    sub_index: u8,
-    data: [u8; 4],
+    pub from: NodeId,
+    pub dlc: u8,
+    pub index: u16,
+    pub sub_index: u8,
+    pub data: [u8; 4],
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct SdoDownloadConfirmed {
-    from: NodeId,
-    index: u16,
-    sub_index: u8,
+    pub from: NodeId,
+    pub index: u16,
+    pub sub_index: u8,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum SdoResponse {
     Error(SdoError),
     DownloadConfirm(SdoDownloadConfirmed),

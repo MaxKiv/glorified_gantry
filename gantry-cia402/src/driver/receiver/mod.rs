@@ -1,5 +1,6 @@
+pub mod error;
 pub mod frame;
-pub mod receiver;
+pub mod subscriber;
 
 use std::time::Duration;
 

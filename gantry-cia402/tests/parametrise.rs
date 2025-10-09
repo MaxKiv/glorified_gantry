@@ -6,8 +6,8 @@ use gantry_cia402::{
     comms::{pdo::mapping::PdoMapping, sdo::SdoAction},
     driver::{
         event::MotorEvent,
-        feedback::receiver::handle_feedback,
         nmt::{Nmt, NmtState},
+        receiver::subscriber::handle_feedback,
     },
     od::DEVICE_TYPE,
 };
@@ -74,21 +74,31 @@ mod tests {
         let tpdo_mapping_set = CUSTOM_TPDOS;
 
         info!("Starting CANOpen event logger");
-        let (_, mut event_rx) = start_feedback_task(canopen.clone(), node_id, tpdo_mapping_set);
+        let (_, event_rx) = start_feedback_task(canopen.clone(), node_id, tpdo_mapping_set);
         task::spawn(log_events(event_rx.resubscribe(), node_id));
 
         tokio::time::sleep(Duration::from_millis(250)).await;
 
-        info!("Starting NMT handler logger");
-        let nmt_handle = Nmt::start(node_id, canopen.clone(), event_rx.resubscribe());
+        info!("Starting NMT handler");
+        let (nmt_tx, nmt_rx) = tokio::sync::mpsc::channel(10);
+        let nmt_handle = Nmt::start(node_id, canopen.clone(), nmt_rx, event_rx.resubscribe());
 
-        info!("Wait for NmtState::Operational");
+        info!("Requesting NMT Pre-Operational");
+        nmt_tx
+            .send(NmtState::PreOperational)
+            .await
+            .map_err(|err| format!("Error requesting NMT state: {err}").to_string())?;
+
+        info!("Wait for NmtState::Pre-Operational");
         wait_for_event(
             event_rx.resubscribe(),
-            MotorEvent::NmtStateUpdate(NmtState::Operational),
+            MotorEvent::NmtStateUpdate(NmtState::PreOperational),
             TIMEOUT,
         )
-        .await?;
+        .await
+        .map_err(|err| {
+            format!("Error waiting for NmtState::PreOperational: {err:?}").to_string()
+        })?;
 
         info!("Start SDO client");
         // Get the SDO client for this node id, we use this to make SDO read/writes

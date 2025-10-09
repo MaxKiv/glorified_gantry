@@ -12,8 +12,8 @@ use gantry_cia402::{
     },
     driver::{
         event::MotorEvent,
-        feedback::receiver::handle_feedback,
         nmt::{Nmt, NmtState},
+        receiver::subscriber::handle_feedback,
     },
     od::DEVICE_TYPE,
 };

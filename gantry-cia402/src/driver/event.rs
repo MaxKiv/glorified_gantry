@@ -1,4 +1,12 @@
-use crate::driver::{feedback::StatusWord, nmt::NmtState, oms::OperationMode, state::Cia402State};
+use crate::driver::{
+    nmt::NmtState,
+    oms::OperationMode,
+    receiver::{
+        StatusWord,
+        frame::{self, sdo_response::SdoResponse},
+    },
+    state::Cia402State,
+};
 
 /// Events broadcast by a motor driver (status updates, transitions, errors).
 #[derive(Debug, Clone, PartialEq)]
@@ -38,6 +46,11 @@ pub enum MotorEvent {
         code: u16,
         description: String,
     },
+
+    // EMCY message from motor driver
+    EMCY(frame::EMCY),
+
+    SdoResponse(SdoResponse),
 
     /// Drive recovered from fault
     FaultCleared,

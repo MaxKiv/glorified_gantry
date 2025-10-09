@@ -50,7 +50,7 @@ mod tests {
         let tpdo_mapping_set = CUSTOM_TPDOS;
 
         info!("Starting CANOpen event logger");
-        let (_, mut event_rx) = start_feedback_task(canopen.clone(), node_id, tpdo_mapping_set);
+        let (_, event_rx) = start_feedback_task(canopen.clone(), node_id, tpdo_mapping_set);
         task::spawn(log_events(event_rx.resubscribe(), node_id));
 
         tokio::time::sleep(Duration::from_millis(250)).await;
@@ -59,18 +59,32 @@ mod tests {
         let (nmt_tx, nmt_rx) = tokio::sync::mpsc::channel(10);
         let nmt_handle = Nmt::start(node_id, canopen.clone(), nmt_rx, event_rx.resubscribe());
 
+        // Switch to PreOp
+        nmt_tx.send(NmtState::PreOperational).await.map_err(|err| {
+            format!("Error requesting NMT state PreOperational: {err}").to_string()
+        })?;
+        wait_for_event(
+            event_rx.resubscribe(),
+            MotorEvent::NmtStateUpdate(NmtState::PreOperational),
+            TIMEOUT,
+        )
+        .await
+        .map_err(|err| {
+            format!("Error waiting for NmtState::PreOperational: {err:?}").to_string()
+        })?;
+
+        // Check if we can switch to Operational
         nmt_tx
             .send(NmtState::Operational)
             .await
-            .map_err(|err| format!("Error requesting NMT state: {err}").to_string())?;
-
-        // Watch for NmtState::Operational
+            .map_err(|err| format!("Error requesting NMT state Operational: {err}").to_string())?;
         wait_for_event(
             event_rx.resubscribe(),
             MotorEvent::NmtStateUpdate(NmtState::Operational),
             TIMEOUT,
         )
-        .await?;
+        .await
+        .map_err(|err| format!("Error waiting for NmtState::Operational: {err:?}").to_string())?;
 
         tokio::time::sleep(Duration::from_millis(250)).await;
 

@@ -2,27 +2,39 @@ use std::time::Duration;
 
 use gantry_cia402::{
     comms::pdo::mapping::PdoMapping,
-    driver::{event::MotorEvent, feedback::receiver::handle_feedback},
+    driver::{event::MotorEvent, receiver::subscriber::handle_feedback},
 };
 use oze_canopen::interface::CanOpenInterface;
+use thiserror::Error;
 use tokio::{
-    sync::broadcast,
+    sync::broadcast::{self, error::RecvError},
     task::{self, JoinHandle},
-    time::{self, Instant},
+    time::{self, Instant, error::Elapsed},
 };
 use tracing::*;
+
+#[derive(Debug, Error)]
+pub enum TestError {
+    #[error("Timeout waiting for event: {0:?}: {1:?}")]
+    Timeout(MotorEvent, Option<Elapsed>),
+    #[error("Broadcast lag waiting for event: {0:?}: {1:?}")]
+    BroadcastLagged(MotorEvent, RecvError),
+    #[error("Broadcast closed waiting for event: {0:?}: {1:?}")]
+    BroadcastClosed(MotorEvent, RecvError),
+}
 
 pub async fn wait_for_event(
     mut event_rx: broadcast::Receiver<MotorEvent>,
     watch_for: MotorEvent,
     timeout: Duration,
-) -> Result<(), String> {
+) -> Result<(), TestError> {
     let deadline = Instant::now() + timeout;
 
     loop {
         let remaining = deadline.saturating_duration_since(Instant::now());
         if remaining.is_zero() {
-            return Err("timeout elapsed".to_owned());
+            warn!("Timeout when waiting for event: {watch_for:?}");
+            return Err(TestError::Timeout(watch_for, None));
         }
 
         let recv_future = event_rx.recv();
@@ -35,17 +47,18 @@ pub async fn wait_for_event(
                 }
                 // else keep looping for the next one
             }
-            Ok(Err(broadcast::error::RecvError::Lagged(_))) => {
+            Ok(Err(err @ broadcast::error::RecvError::Lagged(_))) => {
                 // Messages were missed, continue to next one
                 error!("Lagged in wait_for_event, indicates serious issue");
-                return Err("Lagged".to_owned());
+                return Err(TestError::BroadcastLagged(watch_for, err));
             }
-            Ok(Err(broadcast::error::RecvError::Closed)) => {
+            Ok(Err(err @ broadcast::error::RecvError::Closed)) => {
                 error!("Event channel closed in wait_for_event");
-                return Err("event channel closed".to_owned());
+                return Err(TestError::BroadcastClosed(watch_for, err));
             }
-            Err(_) => {
-                return Err("timeout elapsed".to_owned());
+            Err(err) => {
+                warn!("Timeout when waiting for event: {watch_for:?}");
+                return Err(TestError::Timeout(watch_for, Some(err)));
             }
         }
     }
