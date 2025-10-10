@@ -1,3 +1,4 @@
+pub mod home;
 pub mod parametrise;
 pub mod params;
 pub mod pdo_mapping;

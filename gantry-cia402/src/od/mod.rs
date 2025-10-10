@@ -1,7 +1,10 @@
 use access::AccessType;
 use once_cell::sync::Lazy;
 
-use crate::od::{entry::ODEntry, mappable::MappableType, value::ODValue};
+use crate::{
+    driver::startup::home::HomingMethods,
+    od::{entry::ODEntry, mappable::MappableType, value::ODValue},
+};
 use heapless::index_map::FnvIndexMap;
 
 pub mod access;
@@ -321,6 +324,76 @@ pub const POSITIONING_OPTION_CODE: ODEntry = ODEntry::new(
     ODValue::U16(1), // Position movements are executed relative to the preset value (or output) of the ramp generator
 );
 
+/// Homing method — Defines which homing procedure the device should use.
+/// See CiA 402 Table 46 for method codes (e.g. 1 = Home on negative limit, 33 = Home on positive limit, etc.)
+/// [unitless]
+pub const HOMING_METHOD: ODEntry = ODEntry::new(
+    0x6098,
+    0x00,
+    AccessType::ReadWrite,
+    MappableType::RPDO,
+    ODValue::I8(HomingMethods::IndexOnly.as_i8()), // Home on current position
+);
+
+/// Speed during search for switch — Speed used while seeking the limit or home switch
+/// during the first phase of the homing sequence [counts/s]
+pub const HOMING_SPEED_SWITCH_SEARCH: ODEntry = ODEntry::new(
+    0x6099,
+    0x01,
+    AccessType::ReadWrite,
+    MappableType::RPDO,
+    ODValue::U32(0x32),
+);
+
+/// Speed during search for zero — Speed used for the fine search phase
+/// after switch detection, to locate the mechanical or encoder zero [counts/s]
+pub const HOMING_SPEED_ZERO_SEARCH: ODEntry = ODEntry::new(
+    0x6099,
+    0x02,
+    AccessType::ReadWrite,
+    MappableType::RPDO,
+    ODValue::U32(0x0A),
+);
+
+/// Maximum motor speed — Defines the motor’s absolute maximum velocity
+/// the controller may command [counts/s]
+pub const MAX_MOTOR_SPEED: ODEntry = ODEntry::new(
+    0x6080,
+    0x00,
+    AccessType::ReadWrite,
+    MappableType::RPDO,
+    ODValue::U32(0x7530),
+);
+
+/// Homing acceleration — Acceleration (and deceleration) to use during the homing procedure [counts/s²]
+pub const HOMING_ACCELERATION: ODEntry = ODEntry::new(
+    0x609A,
+    0x00,
+    AccessType::ReadWrite,
+    MappableType::RPDO,
+    ODValue::U32(0x1F4),
+);
+
+/// Minimum current for block detection — Threshold current above which the motor
+/// is considered blocked [mA]
+pub const BLOCK_DETECTION_MIN_CURRENT: ODEntry = ODEntry::new(
+    0x203A,
+    0x01,
+    AccessType::ReadWrite,
+    MappableType::RPDO,
+    ODValue::I32(0x41A), // 1050 mA
+);
+
+/// Period of blocking — Time duration the motor continues to run after
+/// detecting a block condition [ms]
+pub const BLOCK_DETECTION_PERIOD: ODEntry = ODEntry::new(
+    0x203A,
+    0x02,
+    AccessType::ReadWrite,
+    MappableType::RPDO,
+    ODValue::I32(0xC8), // 200ms
+);
+
 // PDO related (datasheet page 118)
 // NOTE: these only work when in NMT::PreOperational
 
@@ -355,6 +428,7 @@ pub const SI_UNIT_SPEED: ODEntry = ODEntry::new(
     ODValue::U32(0x00B447000), // Combined value [revolutions per minute], look at page 379
 );
 
+/// Minimum set of Object Dictionary entries required for Profile Position
 pub const POSITION_MODE_MINIMUM_PARAMS: &[ODEntry] = &[
     SET_TARGET_POSITION,
     SOFTWARE_POSITION_LIMIT,
@@ -372,6 +446,18 @@ pub const POSITION_MODE_MINIMUM_PARAMS: &[ODEntry] = &[
     MAX_DECELERATION,
     PROFILE_JERK,
     POSITIONING_OPTION_CODE,
+];
+
+/// Minimum set of Object Dictionary entries required for Homing Mode (CiA 402 § 6.5.1.5)
+pub const HOMING_MODE_MINIMUM_PARAMS: &[ODEntry] = &[
+    HOME_OFFSET,                 // 607Ch
+    HOMING_METHOD,               // 6098h
+    HOMING_SPEED_SWITCH_SEARCH,  // 6099h:01h
+    HOMING_SPEED_ZERO_SEARCH,    // 6099h:02h
+    MAX_MOTOR_SPEED,             // 6080h
+    HOMING_ACCELERATION,         // 609Ah
+    BLOCK_DETECTION_MIN_CURRENT, // 203Ah:01h
+    BLOCK_DETECTION_PERIOD,      // 203Ah:02h
 ];
 
 pub const FULL_OBJECT_DICTIONARY: &[ODEntry] = &[
