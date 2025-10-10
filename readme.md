@@ -9,6 +9,9 @@
 - Invalidate all PDOs before mapping, currently TPDO4 isnt in CUSTOM_TPDOS, so
   its never changed from the default and will generate warnings
 
+- All R/TPDO code makes heavy assumptions on the R/TPDO mapping, which makes it
+  hard to change anything. Generalising would be better.
+
 # Set up physical CAN
 
 ```bash

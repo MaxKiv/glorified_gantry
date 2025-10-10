@@ -11,45 +11,34 @@ use crate::driver::{
 /// Events broadcast by a motor driver (status updates, transitions, errors).
 #[derive(Debug, Clone, PartialEq)]
 pub enum MotorEvent {
-    /// State machine transition (Not Ready -> Ready to Switch On, etc.)
-    StateChanged {
-        old: Cia402State,
-        new: Cia402State,
-    },
+    /// Cia402 state update
+    Cia402StateUpdate(Cia402State),
 
-    // NMT state update
+    /// NMT state update
     NmtStateUpdate(NmtState),
+
+    /// Operational mode update
+    OperationModeUpdate(OperationMode),
 
     /// New statusword received from device
     StatusWord(StatusWord),
 
-    /// Operational mode of the device
-    OperationMode(OperationMode),
+    /// Position feedback [counts]
+    PositionFeedback { actual_position: i32 },
 
-    /// Position feedback (encoder units or user-scaled units)
-    PositionFeedback {
-        actual_position: i32,
-    },
-
-    /// Velocity feedback
-    VelocityFeedback {
-        actual_velocity: i32,
-    },
+    /// Velocity feedback [counts/min]
+    VelocityFeedback { actual_velocity: i32 },
 
     /// Torque feedback
-    TorqueFeedback {
-        actual_torque: i16,
-    },
+    TorqueFeedback { actual_torque: i16 },
 
     /// Fault detected (e.g. fault bit set in statusword)
-    Fault {
-        code: u16,
-        description: String,
-    },
+    Fault { code: u16, description: String },
 
-    // EMCY message from motor driver
+    /// EMCY message from motor driver
     EMCY(frame::EMCY),
 
+    /// SDO response received
     SdoResponse(SdoResponse),
 
     /// Drive recovered from fault
@@ -57,7 +46,4 @@ pub enum MotorEvent {
 
     /// Communication to Drive lost
     CommunicationLost,
-
-    /// Generic async notification (homing completed, target reached, etc.)
-    Notification(String),
 }

@@ -499,7 +499,7 @@ pub const FULL_OBJECT_DICTIONARY: &[ODEntry] = &[
     SI_UNIT_SPEED,
 ];
 
-#[derive(Eq, PartialEq, Hash)]
+#[derive(Eq, PartialEq, Hash, Debug)]
 pub struct ODIdx {
     pub index: u16,
     pub sub_index: u8,
@@ -514,7 +514,8 @@ static OD_LOOKUP: Lazy<FnvIndexMap<ODIdx, &ODEntry, 64>> = Lazy::new(|| {
                 sub_index: entry.sub_index,
             },
             entry,
-        );
+        )
+        .expect("Unable to insert {entry:?} in OD_LOOKUP table, its likely too small");
     }
     m
 });

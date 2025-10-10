@@ -60,7 +60,7 @@ mod tests {
     use super::*;
 
     #[tokio::test]
-    async fn nmt_boot_test() -> Result<(), String> {
+    async fn parametrise_test() -> Result<(), String> {
         gantry_demo::setup_tracing();
 
         let node_id = NODE_ID;

@@ -67,9 +67,38 @@ impl Default for PositionModeFlags {
     fn default() -> Self {
         PositionModeFlags::NEW_SETPOINT// By default start movement when new setpoint is given
         | PositionModeFlags::CHANGE_IMMEDIATELY  // By default instantly adopt new setpoint, overriding old
-        | !(PositionModeFlags::RELATIVE)         // By default interpret target position as absolute position
-        | !(PositionModeFlags::HALT)             // By default do not halt
+        & !(PositionModeFlags::RELATIVE)         // By default interpret target position as absolute position
+        & !(PositionModeFlags::HALT)             // By default do not halt
         | PositionModeFlags::CHANGE_ON_SETPOINT // By default have zero velocity when reaching setpoint
+    }
+}
+impl PositionModeFlags {
+    pub fn absolute() -> Self {
+        Self::default()
+    }
+
+    pub fn relative() -> Self {
+        Self::default() | PositionModeFlags::RELATIVE
+    }
+
+    pub fn halt() -> Self {
+        PositionModeFlags::NEW_SETPOINT// By default start movement when new setpoint is given
+        | PositionModeFlags::CHANGE_IMMEDIATELY  // By default instantly adopt new setpoint, overriding old
+        | PositionModeFlags::CHANGE_ON_SETPOINT // By default have zero velocity when reaching setpoint
+        | PositionModeFlags::HALT // Stop!
+    }
+}
+
+bitflags::bitflags! {
+#[derive(Clone, Copy, Debug)]
+    pub struct HomeFlags: u16 {
+        const NEW_SETPOINT       = 1 << 4; // Bit 4: Rising edge triggers start of movement
+    }
+}
+
+impl Default for HomeFlags {
+    fn default() -> Self {
+        HomeFlags::NEW_SETPOINT
     }
 }
 
@@ -78,6 +107,7 @@ pub enum Setpoint {
     ProfilePosition(PositionSetpoint),
     ProfileVelocity(VelocitySetpoint),
     ProfileTorque(TorqueSetpoint),
+    Home(HomingSetpoint),
 }
 
 #[derive(Clone, Debug)]
@@ -99,42 +129,8 @@ pub struct TorqueSetpoint {
     pub target_torque: i16,
 }
 
-pub struct OmsHandler {
-    node_id: u8,
-    canopen: CanOpenInterface,
-    setpoint_cmd_rx: mpsc::Receiver<Setpoint>,
-    setpoint_update_tx: mpsc::Sender<Setpoint>,
-}
-
-impl OmsHandler {
-    pub fn init(
-        node_id: u8,
-        canopen: CanOpenInterface,
-        setpoint_cmd_rx: mpsc::Receiver<Setpoint>,
-        setpoint_update_tx: mpsc::Sender<Setpoint>,
-    ) -> JoinHandle<()> {
-        let oms_handler = Self {
-            node_id,
-            canopen,
-            setpoint_cmd_rx,
-            setpoint_update_tx,
-        };
-
-        let oms_handle = task::spawn(oms_handler.run());
-
-        oms_handle
-    }
-
-    pub async fn run(mut self) {
-        loop {
-            // Process Setpoint updates
-            if let Some(new_setpoint) = self.setpoint_cmd_rx.recv().await {
-                trace!("OMS handler received new setpoint: {new_setpoint:?}",);
-
-                if let Err(err) = self.setpoint_update_tx.send(new_setpoint).await {
-                    error!("Failed to send setpoint update to update task: {err}");
-                }
-            }
-        }
-    }
+#[derive(Clone, Debug)]
+pub struct HomingSetpoint {
+    pub flags: HomeFlags,
+    // pub flags: PositionModeFlags,
 }

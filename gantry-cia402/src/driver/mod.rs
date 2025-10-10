@@ -3,7 +3,6 @@ pub mod event;
 pub mod nmt;
 pub mod oms;
 pub mod receiver;
-pub mod router;
 pub mod startup;
 pub mod state;
 pub mod update;
@@ -14,9 +13,9 @@ use crate::{
         sdo::SdoAction,
     },
     driver::{
-        command::MotorCommand, event::MotorEvent, nmt::Nmt, oms::OmsHandler,
-        receiver::subscriber::handle_feedback, router::command_router, startup::motor_startup_task,
-        state::Cia402StateMachine, update::publisher::publish_updates,
+        command::MotorCommand, event::MotorEvent, nmt::nmt_task,
+        receiver::subscriber::handle_feedback, startup::motor_startup_task, state::cia402_task,
+        update::publisher::publish_updates,
     },
     error::DriveError,
 };
@@ -32,7 +31,7 @@ use tracing::*;
 /// CiA-402 driver built on top of a CANopen protocol manager
 pub struct Cia402Driver {
     pub node_id: u8,
-    cmd_tx: mpsc::Sender<MotorCommand>,
+    cmd_tx: broadcast::Sender<MotorCommand>,
     pub event_rx: broadcast::Receiver<MotorEvent>,
     handles: Vec<JoinHandle<()>>,
 }
@@ -52,9 +51,11 @@ impl Cia402Driver {
         rpdo_mapping_set: &'static [PdoMapping],
         tpdo_mapping_set: &'static [PdoMapping],
     ) -> Result<Self, DriveError> {
+        // Track task handles that we are about to spawn
+        let mut handles: Vec<JoinHandle<()>> = Vec::new();
+
         // Initialize input interfaces
-        let (cmd_tx, cmd_rx): (mpsc::Sender<MotorCommand>, mpsc::Receiver<MotorCommand>) =
-            tokio::sync::mpsc::channel(10);
+        let (cmd_tx, cmd_rx) = tokio::sync::broadcast::channel(10);
 
         // Initialize output interfaces
         let (event_tx, event_rx): (
@@ -62,92 +63,58 @@ impl Cia402Driver {
             broadcast::Receiver<MotorEvent>,
         ) = tokio::sync::broadcast::channel(10);
 
+        // Initialize Cia402 Task -> Publisher channel
+        let (state_update_tx, state_update_rx) = tokio::sync::mpsc::channel(10);
+
+        // Initialize the NMT Task channel
+        let (nmt_tx, nmt_rx) = tokio::sync::mpsc::channel(10);
+
         // Get the SDO client for this node id, we use this to make SDO read/writes
         let sdo = canopen
             .get_sdo_client(node_id)
             .unwrap_or_else(|| panic!("Unable to construct SDO client for node id {node_id}"));
+
         // Get the PDO client for this node id, we use this to manage R/TPDOs
         let pdo = Pdo::new(canopen.clone(), node_id, rpdo_mapping_set)
             .unwrap_or_else(|_| panic!("unable to construct PDO client for node id {node_id}"));
 
-        // Track task handles that we are about to spawn
-        let mut handles: Vec<JoinHandle<()>> = Vec::new();
-
-        // Start the NMT task, this continously attempts to put the motor into NMT::Operational
-        let (nmt_tx, nmt_rx) = tokio::sync::mpsc::channel(10);
+        // Start the NMT task
         trace!("Starting NMT State Machine task for motor with node id {node_id}");
-        handles.push(Nmt::start(
+        handles.push(task::spawn(nmt_task(
             node_id,
             canopen.clone(),
             nmt_rx,
             event_rx.resubscribe(),
-        ));
+        )));
 
-        // Start the startup task for this motor, this does parametrisation and sets pdo mapping
+        // Start the startup task for this motor, this does parametrisation and configures pdo mapping
         trace!("Starting Startup Task for motor with node id {node_id}");
-        let (startup_completed_tx, startup_completed_rx): (
-            oneshot::Sender<bool>,
-            oneshot::Receiver<bool>,
-        ) = tokio::sync::oneshot::channel();
-        let startup = task::spawn(motor_startup_task(
+        motor_startup_task(
             node_id,
+            nmt_tx.clone(),
             sdo,
             parameters,
             rpdo_mapping_set,
             tpdo_mapping_set,
-            event_tx.clone(),
-            startup_completed_tx,
-        ));
-
-        // Wait for the startup task to finish to make sure the motor is in a known state before
-        // proceeding
-        if let Err(err) = startup.await {
-            error!("Startup task failed for motor with node id {node_id}: {err}");
-        }
+            event_rx.resubscribe(),
+        )
+        .await?;
 
         // Start the cia402 state machine task, this is responsible for managing cia402 state
         // transitions
         trace!("Starting Cia402 State Machine task for motor with node id {node_id}");
-        let (state_cmd_tx, state_cmd_rx) = tokio::sync::mpsc::channel(10);
-        let (state_update_tx, state_update_rx) = tokio::sync::mpsc::channel(10);
-        let (state_feedback_tx, state_feedback_rx) = tokio::sync::mpsc::channel(10);
-        handles.push(Cia402StateMachine::init(
-            node_id,
-            canopen.clone(),
-            state_cmd_rx,
-            state_feedback_rx,
+        task::spawn(cia402_task(
+            event_rx.resubscribe(),
+            cmd_rx.resubscribe(),
             state_update_tx,
         ));
 
-        // Start the OMS task for this motor, this is responsible for translating pos/vel/torque
-        // commands into their respective setpoints
-        trace!("Starting Operational Mode Specific task for motor with node id {node_id}");
-        let (setpoint_cmd_tx, setpoint_cmd_rx) = tokio::sync::mpsc::channel(10);
-        let (setpoint_update_tx, setpoint_update_rx) = tokio::sync::mpsc::channel(10);
-        handles.push(OmsHandler::init(
-            node_id,
-            canopen.clone(),
-            setpoint_cmd_rx,
-            setpoint_update_tx,
-        ));
-
-        // Start the command router which is responsible for routing the incoming commands to
-        // either the cia402 state machine or the OMS handler
-        trace!("Starting command router motor with node id {node_id}");
-        handles.push(task::spawn(command_router(
-            cmd_rx,
-            state_cmd_tx,
-            setpoint_cmd_tx,
-        )));
-
-        // Start the update publisher which is responsible for aggregating the validated device
-        // updates from the cia402 state machine and OMS handler, and translating those into the
-        // correct OD updates for the device
+        // Start the publisher task, responsible for update aggregation and device communication
         trace!("Starting update publisher task for motor with node id {node_id}");
         handles.push(tokio::task::spawn(publish_updates(
             pdo,
             state_update_rx,
-            setpoint_update_rx,
+            cmd_rx.resubscribe(),
         )));
 
         // Start the device feedback task responsible for receiving and parsing device feedback,
@@ -155,7 +122,7 @@ impl Cia402Driver {
         trace!("Starting device feedback handler for motor with node id {node_id}");
         handles.push(task::spawn(handle_feedback(
             node_id,
-            canopen,
+            canopen.clone(),
             tpdo_mapping_set,
             event_tx,
         )));

@@ -13,6 +13,7 @@ use crate::comms::pdo::mapping::custom::RPDO_IDX_TARGET_VEL;
 use crate::comms::pdo::mapping::custom::RPDO_TARGET_POS;
 use crate::comms::pdo::mapping::custom::RPDO_TARGET_TORQUE;
 use crate::comms::pdo::mapping::custom::RPDO_TARGET_VEL;
+use crate::driver::oms::HomingSetpoint;
 use crate::od;
 use std::time::Duration;
 use std::usize;
@@ -70,7 +71,7 @@ impl Pdo {
         // Set the cia402 controlword bits to represent the requested state
         let cw = self.get_current_controlword();
         cw.with_cia402_flags(flags);
-        self.set_controlword(cw);
+        self.set_controlword_rpdo(cw);
 
         self.send_rpdo(RPDO_CONTROL_OPMODE).await?;
 
@@ -92,7 +93,7 @@ impl Pdo {
         // Set Controlword
         let cw = self.get_current_controlword();
         cw.with_position_flags(flags);
-        self.set_controlword(cw);
+        self.set_controlword_rpdo(cw);
 
         // Set Position Mode
         self.set_operational_mode(OperationMode::ProfilePosition);
@@ -165,6 +166,26 @@ impl Pdo {
         Ok(())
     }
 
+    pub async fn write_homing_setpoint(
+        &mut self,
+        HomingSetpoint { flags }: HomingSetpoint,
+    ) -> Result<(), DriveError> {
+        // 1. Construct RPDO1: Set opmode to homing and toggle control_word Homing bits
+
+        // 1.A Set Position Mode
+        self.set_operational_mode(OperationMode::Homing);
+
+        // 1.B Set controlword homing bits
+        let cw = self.get_current_controlword();
+        cw.with_home_flags(flags);
+        self.set_controlword_rpdo(cw);
+
+        // Send RPDO1
+        self.send_rpdo(RPDO_CONTROL_OPMODE).await?;
+
+        Ok(())
+    }
+
     // Check if these rpdo mappings contain a controlword
     // TODO: move this into type system
     fn check_required_rpdo_mappings(
@@ -233,12 +254,13 @@ impl Pdo {
                 Duration::from_millis(SEND_TIMOUT),
             )
             .await
-            .map_err(DriveError::Timeout)?;
+            .map_err(DriveError::CanOpenTimeout)?;
 
         Ok(())
     }
 
-    fn set_controlword(&mut self, cw: ControlWord) {
+    /// Saves new controlword in the appropriate RPDO frame, to be sent later
+    fn set_controlword_rpdo(&mut self, cw: ControlWord) {
         let PdoType::RPDO(num) = RPDO_CONTROL_OPMODE.pdo else {
             panic!("Controlword is not mapped to RPDO");
         };

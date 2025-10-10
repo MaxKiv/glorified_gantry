@@ -2,18 +2,21 @@ mod common;
 
 use std::time::Duration;
 
+use gantry_cia402::{driver::receiver::StatusWord, od::STATUS_WORD};
 use oze_canopen::{
     error::CoError,
     proto::nmt::{NmtCommand, NmtCommandSpecifier},
 };
 use tracing::*;
 
+use crate::common::TestError;
+
 const NODE_ID: u8 = 3;
 
 /// Quick test of oze-canopen
 /// Attempts some SDO down/uploads to a single node
 /// Useful to see if your socketCAN setup is correct (if not: run `just setup-can`)
-async fn test_oze_canopen() -> Result<(), CoError> {
+async fn test_oze_canopen() -> Result<(), TestError> {
     info!("Starting can interface");
     let (interface, mut handles) = oze_canopen::canopen::start(String::from("can0"), Some(1000000));
 
@@ -24,7 +27,8 @@ async fn test_oze_canopen() -> Result<(), CoError> {
             NmtCommandSpecifier::StartRemoteNode,
             NODE_ID,
         ))
-        .await?;
+        .await
+        .map_err(TestError::CANOpenError)?;
 
     // Give the slave device some time to boot, we all have trouble getting out of bed sometimes
     tokio::time::sleep(Duration::from_millis(200)).await;
@@ -33,26 +37,68 @@ async fn test_oze_canopen() -> Result<(), CoError> {
     let s = interface.get_sdo_client(3).unwrap();
 
     info!("Testing upload");
-    let dat = s.lock().await.upload(0x1000, 0).await?;
+    let dat = s
+        .lock()
+        .await
+        .upload(0x1000, 0)
+        .await
+        .map_err(TestError::CANOpenError)?;
+
     info!("Test upload - device type: {dat:?}");
 
     info!("Testing download");
-    let dat = s.lock().await.upload(0x607A, 0).await?;
+    let dat = s
+        .lock()
+        .await
+        .upload(0x607A, 0)
+        .await
+        .map_err(TestError::CANOpenError)?;
+
     info!("Test before download - target position: {dat:?} - Setting to 4x 0x0");
 
     s.lock()
         .await
         .download(0x607A, 0, &[0x00, 0x00, 0x00, 0x00])
-        .await?;
-    let dat = s.lock().await.upload(0x607A, 0).await?;
+        .await
+        .map_err(TestError::CANOpenError)?;
+    let dat = s
+        .lock()
+        .await
+        .upload(0x607A, 0)
+        .await
+        .map_err(TestError::CANOpenError)?;
     info!("Test before download - target position: {dat:?} - Setting to [0x1, 0x2, 0x3, 0x4]");
 
     s.lock()
         .await
         .download(0x607A, 0, &[0x1, 0x2, 0x3, 0x4])
-        .await?;
-    let dat = s.lock().await.upload(0x607A, 0).await?;
+        .await
+        .map_err(TestError::CANOpenError)?;
+    let dat = s
+        .lock()
+        .await
+        .upload(0x607A, 0)
+        .await
+        .map_err(TestError::CANOpenError)?;
     info!("Test after download - target position: {dat:?}");
+
+    info!("Test Statusword upload");
+    let dat = s
+        .lock()
+        .await
+        .upload(STATUS_WORD.index, STATUS_WORD.sub_index)
+        .await
+        .map_err(TestError::CANOpenError)?;
+
+    let sw =
+        u16::from_le_bytes(dat[..2].try_into().map_err(|e| {
+            TestError::ConversionError(format!("Unable to convert {dat:?} into u16"))
+        })?);
+    let sw = StatusWord::from_bits(sw).ok_or(TestError::ConversionError(format!(
+        "Unable to convert {sw} into statusword"
+    )))?;
+
+    info!("Current Statusword: {sw:?}");
 
     // stop tasks
     handles.close_and_join().await;
@@ -65,7 +111,7 @@ mod tests {
     use super::*;
 
     #[tokio::test]
-    async fn basic_canopen_test() -> Result<(), CoError> {
+    async fn basic_canopen_test() -> Result<(), TestError> {
         gantry_demo::setup_tracing();
 
         test_oze_canopen().await?;

@@ -50,117 +50,88 @@ impl Into<NmtCommandSpecifier> for NmtState {
     }
 }
 
-pub struct Nmt;
+pub async fn nmt_task(
+    node_id: u8,
+    canopen: CanOpenInterface,
+    mut nmt_rx: mpsc::Receiver<NmtState>,
+    mut event_rx: broadcast::Receiver<MotorEvent>,
+) {
+    let mut current_state = NmtState::PreOperational;
+    loop {
+        tokio::select! {
+            // Process NMT state updates from feedback task
+            event = event_rx.recv() => {
+                if let Ok(event) = event {
+                    match event {
+                        MotorEvent::NmtStateUpdate(nmt_state) => {
+                            trace!("NMT: Received NMT state update: {nmt_state:?}");
 
-impl Nmt {
-    /// Start the NMT task responsible for putting the device into NmtState::Operational, which is a
-    /// prerequisite for doing anything with a cia402 motordriver
-    pub fn start(
-        node_id: u8,
-        canopen: CanOpenInterface,
-        nmt_rx: mpsc::Receiver<NmtState>,
-        event_rx: broadcast::Receiver<MotorEvent>,
-    ) -> task::JoinHandle<()> {
-        trace!("Starting NMT State Machine task for motor with node id {node_id}");
+                            let new_state = nmt_state;
+                            trace!(
+                                "NMT state update received, old -> new state: {:?} -> {new_state:?}",
+                                current_state
+                            );
+                            current_state = new_state;
+                        },
 
-        task::spawn(Nmt::run(node_id, canopen, nmt_rx, event_rx))
-    }
+                        _ => continue,
+                    }
+                }
+            }
 
-    pub async fn run(
-        node_id: u8,
-        canopen: CanOpenInterface,
-        mut nmt_rx: mpsc::Receiver<NmtState>,
-        mut event_rx: broadcast::Receiver<MotorEvent>,
-    ) {
-        let mut current_state = NmtState::PreOperational;
-        loop {
-            tokio::select! {
-                // Process NMT state updates from feedback task
-                event = event_rx.recv() => {
-                    if let Ok(event) = event {
-                        match event {
-                            MotorEvent::NmtStateUpdate(nmt_state) => {
-                                trace!("NMT: Received NMT state update: {nmt_state:?}");
-
-                                let new_state = nmt_state;
-                                trace!(
-                                    "NMT state update received, old -> new state: {:?} -> {new_state:?}",
-                                    current_state
-                                );
-                                current_state = new_state;
-                            },
-
-                            MotorEvent::StatusWord(status_word) => {
-                                trace!("NMT: Received statusword update: {status_word:?}");
-                                let new_state: NmtState = status_word.into();
-                                trace!(
-                                    "NMT state update received, old -> new state: {:?} -> {new_state:?}",
-                                    current_state
-                                );
-                                current_state = new_state;
-                            },
-
-                            _ => continue,
+            // Set device to requested state
+            state = nmt_rx.recv() => {
+                trace!("Received NMT state request: {state:?}");
+                if let Some(state) = state {
+                    match canopen.send_nmt(
+                        NmtCommand::new(state.clone().into(), node_id)
+                    ).await {
+                        Ok(_) => {
+                            trace!("Send NMT state request: {state:?} to node {node_id}");
+                        }
+                        Err(err) => {
+                            trace!("Error sending NMT state request to node {node_id}: {err:?}");
                         }
                     }
                 }
 
-                // Set device to requested state
-                state = nmt_rx.recv() => {
-                    trace!("Received NMT state request: {state:?}");
-                    if let Some(state) = state {
-                        match canopen.send_nmt(
-                            NmtCommand::new(state.clone().into(), node_id)
-                        ).await {
-                            Ok(_) => {
-                                trace!("Send NMT state request: {state:?} to node {node_id}");
-                            }
-                            Err(err) => {
-                                trace!("Error sending NMT state request to node {node_id}: {err:?}");
-                            }
-                        }
-                    }
-
-                }
-
             }
 
-            tokio::time::sleep(Duration::from_millis(250)).await;
+        }
+    }
+}
+
+/// Makes sure the device is set to NmtState::OP
+pub async fn transition_to_operational(
+    node_id: u8,
+    canopen: CanOpenInterface,
+    current_state: &NmtState,
+) -> Result<(), DriveError> {
+    if *current_state != NmtState::Operational {
+        trace!(
+            "Motor with node id {} is in NMT state: {:?} - Requesting NmtState::Operational",
+            node_id, current_state,
+        );
+        match canopen
+            .send_nmt(NmtCommand::new(
+                NmtCommandSpecifier::StartRemoteNode,
+                node_id,
+            ))
+            .await
+        {
+            Ok(_) => {
+                trace!("Send NMT Operational to motor with node id {}", node_id);
+            }
+            Err(err) => {
+                error!(
+                    "Error setting motor {} to NMT Operational: {err:?}",
+                    node_id
+                );
+
+                return Err(DriveError::CanOpen(err));
+            }
         }
     }
 
-    /// Makes sure the device is set to NmtState::OP
-    pub async fn transition_to_operational(
-        node_id: u8,
-        canopen: CanOpenInterface,
-        current_state: &NmtState,
-    ) -> Result<(), DriveError> {
-        if *current_state != NmtState::Operational {
-            trace!(
-                "Motor with node id {} is in NMT state: {:?} - Requesting NmtState::Operational",
-                node_id, current_state,
-            );
-            match canopen
-                .send_nmt(NmtCommand::new(
-                    NmtCommandSpecifier::StartRemoteNode,
-                    node_id,
-                ))
-                .await
-            {
-                Ok(_) => {
-                    trace!("Send NMT Operational to motor with node id {}", node_id);
-                }
-                Err(err) => {
-                    error!(
-                        "Error setting motor {} to NMT Operational: {err:?}",
-                        node_id
-                    );
-
-                    return Err(DriveError::CanOpen(err));
-                }
-            }
-        }
-
-        Ok(())
-    }
+    Ok(())
 }

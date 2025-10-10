@@ -61,7 +61,7 @@ mod tests {
     use gantry_cia402::{
         comms::pdo::mapping::custom::CUSTOM_TPDOS,
         driver::startup::{
-            PARAMETRISATION_RETRY_DURATION, parametrise::parametrise_motor, params::PARAMS,
+            RETRY_DURATION, parametrise::parametrise_motor, params::PARAMS,
             pdo_mapping::configure_pdo_mappings,
         },
         log::{log_canopen_pretty, log_events},
@@ -74,7 +74,7 @@ mod tests {
     use super::*;
 
     #[tokio::test]
-    async fn nmt_boot_test() -> Result<(), String> {
+    async fn configure_pdo_test() -> Result<(), String> {
         gantry_demo::setup_tracing();
 
         let node_id = NODE_ID;

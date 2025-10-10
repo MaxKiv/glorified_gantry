@@ -1,5 +1,8 @@
 use oze_canopen::{canopen::RxMessage, interface::CanOpenInterface};
-use tokio::{sync::broadcast, time::Instant};
+use tokio::{
+    sync::broadcast,
+    time::{self, Instant},
+};
 use tracing::*;
 
 use crate::{
@@ -13,7 +16,9 @@ use crate::{
             frame::{Frame, MessageType, ParseError},
             *,
         },
+        state::{Cia402Flags, Cia402State},
     },
+    error::DriveError,
     log::format_frame,
 };
 
@@ -164,9 +169,11 @@ async fn handle_tpdo1(
         Ok(statusword) => {
             // Parse NMT bits
             let new_nmt_state: NmtState = statusword.into();
-
             // Send fresh NMT state to subscribers
             send_update(MotorEvent::NmtStateUpdate(new_nmt_state), event_tx);
+
+            let new_cia402_state: Cia402Flags = statusword.into();
+            send_update(MotorEvent::Cia402StateUpdate(new_cia402_state), event_tx);
 
             // Send rest of statusword to subscribers
             send_update(MotorEvent::StatusWord(statusword), event_tx);
@@ -180,7 +187,7 @@ async fn handle_tpdo1(
     match read_operational_mode(&tpdomessage.data) {
         Ok(opmode) => {
             // Send operational mode update
-            send_update(MotorEvent::OperationMode(opmode), event_tx);
+            send_update(MotorEvent::OperationModeUpdate(opmode), event_tx);
         }
         Err(err) => {
             error!("Unable to read operational mode from TPDO1: {err}");
@@ -253,10 +260,14 @@ fn read_statusword(data: &[u8; 8]) -> anyhow::Result<StatusWord> {
     // TODO: move range and type info to central place
     const STATUSWORD_BYTES: std::ops::RangeInclusive<usize> = 0..=1;
 
-    let raw_statusword = u16::from_be_bytes(data[STATUSWORD_BYTES].try_into()?);
-    StatusWord::from_bits(raw_statusword).ok_or(anyhow::anyhow!(
+    let raw_statusword = u16::from_le_bytes(data[STATUSWORD_BYTES].try_into()?);
+    // trace!("Decoding raw statusword: {:#0x}", raw_statusword);
+    let sw = StatusWord::from_bits(raw_statusword).ok_or(anyhow::anyhow!(
         "unable to decode raw statusword: {raw_statusword:?} into u16"
-    ))
+    ))?;
+
+    // trace!("Decoded statusword from tpdo1: {sw:?}");
+    Ok(sw)
 }
 
 fn read_operational_mode(data: &[u8; 8]) -> anyhow::Result<OperationMode> {
@@ -309,6 +320,47 @@ fn send_update(event: MotorEvent, event_tx: &broadcast::Sender<MotorEvent>) {
         }
         Err(err) => {
             error!("Error sending update: {err}");
+        }
+    }
+}
+
+pub async fn wait_for_event(
+    event_rx: &mut broadcast::Receiver<MotorEvent>,
+    watch_for: MotorEvent,
+    timeout: Duration,
+) -> Result<(), DriveError> {
+    let deadline = Instant::now() + timeout;
+
+    loop {
+        let remaining = deadline.saturating_duration_since(Instant::now());
+        if remaining.is_zero() {
+            warn!("Timeout when waiting for event: {watch_for:?}");
+            return Err(DriveError::EventTimeout(watch_for, None));
+        }
+
+        let recv_future = event_rx.recv();
+        let result = time::timeout(remaining, recv_future).await;
+
+        match result {
+            Ok(Ok(event)) => {
+                if event == watch_for {
+                    return Ok(());
+                }
+                // else keep looping for the next one
+            }
+            Ok(Err(err @ broadcast::error::RecvError::Lagged(_))) => {
+                // Messages were missed, continue to next one
+                error!("Lagged in wait_for_event, indicates serious issue");
+                return Err(DriveError::BroadcastLagged(watch_for, err));
+            }
+            Ok(Err(err @ broadcast::error::RecvError::Closed)) => {
+                error!("Event channel closed in wait_for_event");
+                return Err(DriveError::BroadcastClosed(watch_for, err));
+            }
+            Err(err) => {
+                warn!("Timeout when waiting for event: {watch_for:?}");
+                return Err(DriveError::EventTimeout(watch_for, Some(err)));
+            }
         }
     }
 }

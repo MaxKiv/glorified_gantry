@@ -1,6 +1,9 @@
 // Commands that can be sent to the motor
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum MotorCommand {
+    /// Set continuous velocity
+    Home,
+
     /// Move to an absolute position (in device units, e.g. encoder ticks)
     MoveAbsolute { target: i32, profile_velocity: u32 },
 
@@ -15,6 +18,12 @@ pub enum MotorCommand {
 
     /// Halt immediately (stop but remain enabled)
     Halt,
+
+    /// Perform a fault reset sequence
+    ResetFault,
+
+    /// Stop motion but keep power enabled.
+    // QuickStop,
 
     /// Disable drive (turn off power stage)
     Disable,

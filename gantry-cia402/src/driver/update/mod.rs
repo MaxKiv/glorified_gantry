@@ -3,7 +3,7 @@ pub mod publisher;
 use thiserror::Error;
 
 use crate::driver::{
-    oms::PositionModeFlags,
+    oms::{HomeFlags, PositionModeFlags},
     state::{Cia402Flags, Cia402State},
 };
 
@@ -58,6 +58,12 @@ bitflags::bitflags! {
 impl ControlWord {
     pub fn with_position_flags(self, flags: PositionModeFlags) -> Self {
         let mask = PositionModeFlags::all().bits();
+        let new_bits = (self.bits() & !mask) | (flags.bits() & mask);
+        ControlWord::from_bits_truncate(new_bits)
+    }
+
+    pub fn with_home_flags(self, flags: HomeFlags) -> Self {
+        let mask = HomeFlags::all().bits();
         let new_bits = (self.bits() & !mask) | (flags.bits() & mask);
         ControlWord::from_bits_truncate(new_bits)
     }

@@ -4,10 +4,7 @@ use std::time::Duration;
 
 use gantry_cia402::{
     comms::sdo::SdoAction,
-    driver::{
-        event::MotorEvent,
-        nmt::{Nmt, NmtState},
-    },
+    driver::{event::MotorEvent, nmt::NmtState},
     od::DEVICE_TYPE,
 };
 use tokio::task::{self};
@@ -26,10 +23,9 @@ mod tests {
 
     use gantry_cia402::{
         comms::pdo::mapping::custom::CUSTOM_TPDOS,
+        driver::receiver::subscriber::wait_for_event,
         log::{log_canopen_pretty, log_events},
     };
-
-    use common::wait_for_event;
 
     use crate::common::start_feedback_task;
 
@@ -64,7 +60,7 @@ mod tests {
             format!("Error requesting NMT state PreOperational: {err}").to_string()
         })?;
         wait_for_event(
-            event_rx.resubscribe(),
+            &mut event_rx,
             MotorEvent::NmtStateUpdate(NmtState::PreOperational),
             TIMEOUT,
         )
@@ -79,7 +75,7 @@ mod tests {
             .await
             .map_err(|err| format!("Error requesting NMT state Operational: {err}").to_string())?;
         wait_for_event(
-            event_rx.resubscribe(),
+            &mut event_rx,
             MotorEvent::NmtStateUpdate(NmtState::Operational),
             TIMEOUT,
         )

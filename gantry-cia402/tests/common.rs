@@ -1,67 +1,51 @@
 use std::time::Duration;
 
 use gantry_cia402::{
-    comms::pdo::mapping::PdoMapping,
-    driver::{event::MotorEvent, receiver::subscriber::handle_feedback},
+    comms::{
+        pdo::mapping::{
+            PdoMapping,
+            custom::{CUSTOM_RPDOS, CUSTOM_TPDOS},
+        },
+        sdo::SdoAction,
+    },
+    driver::{event::MotorEvent, nmt::NmtState, receiver::subscriber::handle_feedback, startup},
+    log::{log_canopen_pretty, log_events},
 };
-use oze_canopen::interface::CanOpenInterface;
+use oze_canopen::{error::CoError, interface::CanOpenInterface};
 use thiserror::Error;
 use tokio::{
-    sync::broadcast::{self, error::RecvError},
+    sync::{
+        broadcast::{self, error::RecvError},
+        mpsc::{self, error::SendError},
+    },
     task::{self, JoinHandle},
     time::{self, Instant, error::Elapsed},
 };
 use tracing::*;
 
+// Default test parameters
+pub const CAN_INTERFACE: &str = "can0";
+pub const CAN_BITRATE: u32 = 1_000_000;
+pub const NODE_ID: u8 = 3;
+pub const PARAMS: &[SdoAction] = startup::params::PARAMS;
+pub const TIMEOUT: Duration = Duration::from_secs(5);
+pub const TPDOS: &[PdoMapping; 4] = CUSTOM_TPDOS;
+pub const RPDOS: &[PdoMapping; 4] = CUSTOM_RPDOS;
+
 #[derive(Debug, Error)]
 pub enum TestError {
+    #[error("Error from CANOpen: {0:?}")]
+    CANOpenError(CoError),
+    #[error("Error from CANOpen: {0:?}")]
+    ConversionError(String),
     #[error("Timeout waiting for event: {0:?}: {1:?}")]
     Timeout(MotorEvent, Option<Elapsed>),
     #[error("Broadcast lag waiting for event: {0:?}: {1:?}")]
     BroadcastLagged(MotorEvent, RecvError),
     #[error("Broadcast closed waiting for event: {0:?}: {1:?}")]
     BroadcastClosed(MotorEvent, RecvError),
-}
-
-pub async fn wait_for_event(
-    mut event_rx: broadcast::Receiver<MotorEvent>,
-    watch_for: MotorEvent,
-    timeout: Duration,
-) -> Result<(), TestError> {
-    let deadline = Instant::now() + timeout;
-
-    loop {
-        let remaining = deadline.saturating_duration_since(Instant::now());
-        if remaining.is_zero() {
-            warn!("Timeout when waiting for event: {watch_for:?}");
-            return Err(TestError::Timeout(watch_for, None));
-        }
-
-        let recv_future = event_rx.recv();
-        let result = time::timeout(remaining, recv_future).await;
-
-        match result {
-            Ok(Ok(event)) => {
-                if event == watch_for {
-                    return Ok(());
-                }
-                // else keep looping for the next one
-            }
-            Ok(Err(err @ broadcast::error::RecvError::Lagged(_))) => {
-                // Messages were missed, continue to next one
-                error!("Lagged in wait_for_event, indicates serious issue");
-                return Err(TestError::BroadcastLagged(watch_for, err));
-            }
-            Ok(Err(err @ broadcast::error::RecvError::Closed)) => {
-                error!("Event channel closed in wait_for_event");
-                return Err(TestError::BroadcastClosed(watch_for, err));
-            }
-            Err(err) => {
-                warn!("Timeout when waiting for event: {watch_for:?}");
-                return Err(TestError::Timeout(watch_for, Some(err)));
-            }
-        }
-    }
+    #[error("Error switching to NMT state: {0:?}: {1:?}")]
+    NMTSendError(NmtState, SendError<NmtState>),
 }
 
 /// Start the device feedback task responsible for receiving and parsing device feedback and broadcasting these as events

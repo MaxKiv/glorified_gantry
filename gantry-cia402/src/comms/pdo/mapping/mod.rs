@@ -2,10 +2,7 @@ pub mod custom;
 pub mod default;
 
 use crate::driver::startup::pdo_mapping::TransmissionType;
-use crate::od;
 use crate::od::entry::ODEntry;
-use crate::od::mappable::MappableType::RPDO;
-use crate::od::mappable::MappableType::TPDO;
 
 #[derive(Debug, Clone, Copy)]
 pub struct BitRange {

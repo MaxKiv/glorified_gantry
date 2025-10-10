@@ -1,9 +1,19 @@
-use tokio::sync::mpsc::{self};
+use tokio::sync::{
+    broadcast,
+    mpsc::{self},
+};
 use tracing::*;
 
 use crate::{
     comms::pdo::Pdo,
-    driver::{oms::Setpoint, state::Cia402Flags},
+    driver::{
+        command::MotorCommand,
+        oms::{
+            HomeFlags, HomingSetpoint, PositionModeFlags, PositionSetpoint, TorqueSetpoint,
+            VelocitySetpoint,
+        },
+        state::Cia402Flags,
+    },
 };
 
 /// Responsible for all CANopen communication to the drive
@@ -13,7 +23,7 @@ use crate::{
 pub async fn publish_updates(
     mut pdo: Pdo,
     mut state_update_rx: mpsc::Receiver<Cia402Flags>,
-    mut setpoint_update_rx: mpsc::Receiver<Setpoint>,
+    mut cmd_rx: broadcast::Receiver<MotorCommand>,
 ) {
     tokio::select! {
         // Check for cia402 state update
@@ -28,28 +38,54 @@ pub async fn publish_updates(
                 );
             }
         }
-        // Check for cia402 state transition requests from the user
-        Some(new_setpoint) = setpoint_update_rx.recv() => {
-            trace!(
-                "Setpoint update received, new setpoint {new_setpoint:?}",
-            );
-
-            if let Err(err) = match new_setpoint {
-                Setpoint::ProfilePosition(position_setpoint) => {
-                    pdo.write_position_setpoint(position_setpoint).await
+        Ok(cmd) = cmd_rx.recv() => {
+            if let Err(err) = match cmd {
+                MotorCommand::Halt => {
+                    pdo.write_position_setpoint(PositionSetpoint {
+                        flags: PositionModeFlags::halt(),
+                        target: 0,
+                        profile_velocity: 0,
+                    }).await
                 }
-                Setpoint::ProfileVelocity(velocity_setpoint) => {
-                    pdo.write_velocity_setpoint(velocity_setpoint).await
-                }
-                Setpoint::ProfileTorque(torque_setpoint) => {
-                    pdo.write_torque_setpoint(torque_setpoint).await
-                }
+                MotorCommand::Home => {
+                    pdo.write_homing_setpoint(HomingSetpoint {
+                        flags: HomeFlags::default(),
+                    }).await
+                },
+                MotorCommand::MoveAbsolute { target, profile_velocity } => {
+                    pdo.write_position_setpoint(PositionSetpoint {
+                        flags: PositionModeFlags::absolute(),
+                        target,
+                        profile_velocity
+                    }).await
+                },
+                MotorCommand::MoveRelative { delta, profile_velocity } => {
+                    pdo.write_position_setpoint(PositionSetpoint {
+                        flags: PositionModeFlags::relative(),
+                        target: delta,
+                        profile_velocity
+                    }).await
+                },
+                MotorCommand::SetVelocity { target_velocity }=> {
+                    pdo.write_velocity_setpoint(VelocitySetpoint {
+                        // flags: PositionModeFlags::relative(),
+                        target_velocity,
+                        // profile_velocity
+                    }).await
+                },
+                MotorCommand::SetTorque { target_torque }=> {
+                    pdo.write_torque_setpoint(TorqueSetpoint {
+                        // flags: PositionModeFlags::relative(),
+                        target_torque,
+                        // profile_torque
+                    }).await
+                },
+                _ => {
+                    Ok(())
+                },
             } {
-                error!(
-                    "Unable to write setpoint update: {err}",
-                );
+                error!("Error handling command {cmd:?}: {err}");
             }
-
         }
     }
 }
