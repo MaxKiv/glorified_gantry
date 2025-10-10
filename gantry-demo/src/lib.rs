@@ -89,6 +89,7 @@ struct FieldExtractor {
     parsed: Option<String>,
     index: Option<String>,
     sub_index: Option<String>,
+    num: Option<u64>,
 }
 
 impl Visit for FieldExtractor {
@@ -109,7 +110,7 @@ impl Visit for FieldExtractor {
             self.node = Some(value);
         }
         if field.name() == "num" {
-            // optionally stash num in data or similar
+            self.num = Some(value)
         }
     }
 
@@ -165,6 +166,7 @@ where
 
         let frame = ex.frame.unwrap_or_else(|| "UNKNOWN".to_string());
         let node = ex.node.unwrap_or(0);
+        let num = ex.num.unwrap_or(0);
         let message = ex.message.unwrap_or_default();
         let data = ex.data.unwrap_or_default();
         let parsed = ex.parsed.unwrap_or_default();
@@ -182,15 +184,17 @@ where
                 )?,
                 "TPDO" => write!(
                     writer,
-                    "{} <- {} [{}]",
-                    "TPDO".green().bold(),
+                    "{} {} <- {} [{}]",
+                    "TPDO".green(),
+                    num.green().bold(),
                     format!("Node {}", node).green(),
                     data
                 )?,
                 "RPDO" => write!(
                     writer,
-                    "{} -> {} [{}]",
-                    "RPDO".purple().bold(),
+                    "{} {} -> {} [{}]",
+                    "RPDO".purple(),
+                    num.purple().bold(),
                     format!("Node {}", node).purple(),
                     data
                 )?,

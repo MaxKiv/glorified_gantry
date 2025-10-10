@@ -32,7 +32,7 @@ pub async fn handle_feedback(
             let span = span!(Level::TRACE, "receiver");
             let _enter = span.enter();
 
-            trace!("Received frame: {}", format_frame(&message));
+            // trace!("Received frame: {}", format_frame(&message));
 
             // Parse received frames
             let Ok(parsed): Result<Frame, _> = message.try_into() else {
@@ -123,18 +123,22 @@ async fn handle_tpdo(
 ) -> Result<(), ReceiverError> {
     match &tpdomessage.num {
         1 => {
-            handle_tpdo1(tpdomessage, &tpdo_mapping[0], event_tx);
+            handle_tpdo1(tpdomessage, &tpdo_mapping[0], event_tx).await;
             Ok(())
         }
         2 => {
-            handle_tpdo2(tpdomessage, &tpdo_mapping[1], event_tx);
+            handle_tpdo2(tpdomessage, &tpdo_mapping[1], event_tx).await;
             Ok(())
         }
         3 => {
-            handle_tpdo3(tpdomessage, &tpdo_mapping[2], event_tx);
+            handle_tpdo3(tpdomessage, &tpdo_mapping[2], event_tx).await;
             Ok(())
         }
-        _ => Err(ReceiverError::UnknownTPDO(tpdomessage.clone())),
+        _ => {
+            // Err(ReceiverError::UnknownTPDO(tpdomessage.clone())),
+            warn!("Received unknown / unmapped RPDO: {:?}", tpdomessage);
+            Ok(())
+        }
     }
 }
 

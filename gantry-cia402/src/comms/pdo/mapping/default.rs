@@ -1,5 +1,6 @@
 use crate::{
     comms::pdo::mapping::{BitRange, PdoMapping, PdoMappingSource, PdoType},
+    driver::startup::pdo_mapping::TransmissionType,
     od,
 };
 
@@ -18,6 +19,7 @@ pub const RPDO_DEFAULT_1: PdoMapping = PdoMapping {
             bit_range: BitRange { start: 16, len: 8 },
         },
     ],
+    transmission_type: TransmissionType::OnChange,
 };
 
 pub const RPDO_DEFAULT_2: PdoMapping = PdoMapping {
@@ -32,6 +34,7 @@ pub const RPDO_DEFAULT_2: PdoMapping = PdoMapping {
             bit_range: BitRange { start: 32, len: 32 },
         },
     ],
+    transmission_type: TransmissionType::OnChange,
 };
 
 pub const TPDO_DEFAULT_1: PdoMapping = PdoMapping {
@@ -46,6 +49,7 @@ pub const TPDO_DEFAULT_1: PdoMapping = PdoMapping {
             bit_range: BitRange { start: 16, len: 8 },
         },
     ],
+    transmission_type: TransmissionType::OnChange,
 };
 
 pub const TPDO_DEFAULT_2: PdoMapping = PdoMapping {
@@ -54,4 +58,5 @@ pub const TPDO_DEFAULT_2: PdoMapping = PdoMapping {
         entry: &od::POSITION_ACTUAL_VALUE,
         bit_range: BitRange { start: 0, len: 32 },
     }],
+    transmission_type: TransmissionType::OnChange,
 };

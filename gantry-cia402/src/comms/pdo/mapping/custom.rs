@@ -1,5 +1,6 @@
 use crate::{
     comms::pdo::mapping::{BitRange, PdoMapping, PdoMappingSource, PdoType},
+    driver::startup::pdo_mapping::TransmissionType,
     od,
 };
 
@@ -19,8 +20,13 @@ pub const CUSTOM_RPDOS: &[PdoMapping; 4] = &[
     RPDO_TARGET_TORQUE,
 ];
 
-pub const CUSTOM_TPDOS: &[PdoMapping; 3] =
-    &[TPDO_STATUS_OPMODE, TPDO_POS_VEL_ACTUAL, TPDO_TORQUE_ACTUAL];
+pub const CUSTOM_TPDOS: &[PdoMapping; 4] = &[
+    TPDO_STATUS_OPMODE,
+    TPDO_POS_VEL_ACTUAL,
+    TPDO_TORQUE_ACTUAL,
+    TPDO_EMPTY, // Required to avoid default TPDO4 generating warnings, TODO: remove this when
+                // adding invalidate all PDO step in configure_pdo_mappings
+];
 
 pub const RPDO_CONTROL_OPMODE: PdoMapping = PdoMapping {
     pdo: PdoType::RPDO(1),
@@ -34,6 +40,7 @@ pub const RPDO_CONTROL_OPMODE: PdoMapping = PdoMapping {
             bit_range: BitRange { start: 16, len: 8 },
         },
     ],
+    transmission_type: TransmissionType::OnChange,
 };
 
 pub const RPDO_TARGET_POS: PdoMapping = PdoMapping {
@@ -48,6 +55,7 @@ pub const RPDO_TARGET_POS: PdoMapping = PdoMapping {
             bit_range: BitRange { start: 32, len: 32 },
         },
     ],
+    transmission_type: TransmissionType::OnChange,
 };
 
 pub const RPDO_TARGET_VEL: PdoMapping = PdoMapping {
@@ -56,6 +64,7 @@ pub const RPDO_TARGET_VEL: PdoMapping = PdoMapping {
         entry: &od::SET_TARGET_VELOCITY,
         bit_range: BitRange { start: 0, len: 32 },
     }],
+    transmission_type: TransmissionType::OnChange,
 };
 
 pub const RPDO_TARGET_TORQUE: PdoMapping = PdoMapping {
@@ -64,6 +73,7 @@ pub const RPDO_TARGET_TORQUE: PdoMapping = PdoMapping {
         entry: &od::SET_TARGET_TORQUE,
         bit_range: BitRange { start: 0, len: 16 },
     }],
+    transmission_type: TransmissionType::OnChange,
 };
 
 pub const TPDO_STATUS_OPMODE: PdoMapping = PdoMapping {
@@ -78,6 +88,7 @@ pub const TPDO_STATUS_OPMODE: PdoMapping = PdoMapping {
             bit_range: BitRange { start: 16, len: 8 },
         },
     ],
+    transmission_type: TransmissionType::OnChange,
 };
 
 pub const TPDO_POS_VEL_ACTUAL: PdoMapping = PdoMapping {
@@ -92,6 +103,7 @@ pub const TPDO_POS_VEL_ACTUAL: PdoMapping = PdoMapping {
             bit_range: BitRange { start: 32, len: 32 },
         },
     ],
+    transmission_type: TransmissionType::OnChange,
 };
 
 pub const TPDO_TORQUE_ACTUAL: PdoMapping = PdoMapping {
@@ -100,4 +112,11 @@ pub const TPDO_TORQUE_ACTUAL: PdoMapping = PdoMapping {
         entry: &od::TORQUE_ACTUAL_VALUE,
         bit_range: BitRange { start: 0, len: 16 },
     }],
+    transmission_type: TransmissionType::OnChange,
+};
+
+pub const TPDO_EMPTY: PdoMapping = PdoMapping {
+    pdo: PdoType::TPDO(4),
+    sources: &[],
+    transmission_type: TransmissionType::OnChange,
 };

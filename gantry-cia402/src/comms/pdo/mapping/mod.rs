@@ -1,6 +1,7 @@
 pub mod custom;
 pub mod default;
 
+use crate::driver::startup::pdo_mapping::TransmissionType;
 use crate::od;
 use crate::od::entry::ODEntry;
 use crate::od::mappable::MappableType::RPDO;
@@ -25,6 +26,8 @@ pub struct PdoMapping {
     pub pdo: PdoType,
     // Values to map
     pub sources: &'static [PdoMappingSource],
+    // When to transmit this PDO
+    pub transmission_type: TransmissionType,
 }
 
 #[derive(Debug)]
