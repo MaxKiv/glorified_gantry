@@ -13,6 +13,7 @@ use crate::comms::pdo::mapping::custom::RPDO_IDX_TARGET_VEL;
 use crate::comms::pdo::mapping::custom::RPDO_TARGET_POS;
 use crate::comms::pdo::mapping::custom::RPDO_TARGET_TORQUE;
 use crate::comms::pdo::mapping::custom::RPDO_TARGET_VEL;
+use crate::comms::pdo::mapping::custom::get_dlc;
 use crate::driver::oms::HomingSetpoint;
 use crate::od;
 use std::time::Duration;
@@ -23,6 +24,7 @@ use oze_canopen::{
     interface::{CanOpenInterface, SEND_TIMOUT},
     transmitter::TxPacket,
 };
+use tracing::*;
 
 use crate::{
     comms::pdo::frame::PdoFrame,
@@ -54,11 +56,16 @@ impl Pdo {
         // Check if all required mappings are present
         Pdo::check_required_rpdo_mappings(rpdo_mapping_set)?;
 
+        let mut dlcs = [0usize; 8];
+        for (idx, mappings) in rpdo_mapping_set.iter().enumerate() {
+            dlcs[idx] = get_dlc(mappings);
+        }
+
         Ok(Self {
             canopen,
             node_id,
             rpdo_mapping_set,
-            rpdo_frames: core::array::from_fn(|_| PdoFrame::zero()),
+            rpdo_frames: core::array::from_fn(|idx| PdoFrame::with_dlc(dlcs[idx])),
         })
     }
 
@@ -68,12 +75,20 @@ impl Pdo {
         &mut self,
         flags: Cia402Flags,
     ) -> Result<(), DriveError> {
+        trace!("cia402 state transition requested - flags {flags:?}");
+
         // Set the cia402 controlword bits to represent the requested state
-        let cw = self.get_current_controlword();
-        cw.with_cia402_flags(flags);
+        let mut cw = self.get_current_controlword();
+        cw = cw.with_cia402_flags(flags);
         self.set_controlword_rpdo(cw);
 
-        self.send_rpdo(RPDO_CONTROL_OPMODE).await?;
+        match self.send_rpdo(RPDO_CONTROL_OPMODE).await {
+            Ok(_) => {}
+            Err(err) => {
+                error!("ERR: {err}");
+                return Err(err);
+            }
+        }
 
         Ok(())
     }
@@ -91,8 +106,8 @@ impl Pdo {
         // 1. Construct RPDO1: Set opmode to position and toggle control_word OMS bits
 
         // Set Controlword
-        let cw = self.get_current_controlword();
-        cw.with_position_flags(flags);
+        let mut cw = self.get_current_controlword();
+        cw = cw.with_position_flags(flags);
         self.set_controlword_rpdo(cw);
 
         // Set Position Mode
@@ -176,8 +191,8 @@ impl Pdo {
         self.set_operational_mode(OperationMode::Homing);
 
         // 1.B Set controlword homing bits
-        let cw = self.get_current_controlword();
-        cw.with_home_flags(flags);
+        let mut cw = self.get_current_controlword();
+        cw = cw.with_home_flags(flags);
         self.set_controlword_rpdo(cw);
 
         // Send RPDO1
@@ -235,24 +250,38 @@ impl Pdo {
             ));
         };
 
-        let cob_id = pdo_mapping
-            .pdo
-            .get_pdo_cob_id()
-            .ok_or(DriveError::ViolatedInvariant(
-                "Asked for the cob_id for PDO number: {rpdo_num} > 4".to_string(),
-            ))?;
+        trace!("sending RPDO #{num} - getting cob_id");
 
-        let num = num as usize;
+        let cob_id =
+            pdo_mapping
+                .pdo
+                .get_pdo_cob_id(self.node_id)
+                .ok_or(DriveError::ViolatedInvariant(
+                    "Asked for the cob_id for PDO number: {rpdo_num} > 4".to_string(),
+                ))?;
+
+        trace!(
+            "sending RPDO #{num} - cob_id: {cob_id:#0x} - updating rpdo_frames[{}]",
+            num - 1
+        );
+
+        let idx = (num - 1) as usize;
+        trace!(
+            "sending RPDO #{num} - Constructing TxPacket from data: {:?} - dlc {}",
+            self.rpdo_frames[idx].data, self.rpdo_frames[idx].dlc,
+        );
+
+        let value = TxPacket::new(
+            cob_id,
+            &self.rpdo_frames[idx].data[..self.rpdo_frames[idx].dlc],
+        )
+        .map_err(DriveError::CANOpenError)?;
+
+        trace!("sending RPDO #{num} - TxPacket: {value:?}");
 
         self.canopen
             .tx
-            .send_timeout(
-                TxPacket {
-                    cob_id,
-                    data: self.rpdo_frames[num].data.to_vec(),
-                },
-                Duration::from_millis(SEND_TIMOUT),
-            )
+            .send_timeout(value, Duration::from_millis(SEND_TIMOUT))
             .await
             .map_err(DriveError::CanOpenTimeout)?;
 
@@ -264,9 +293,10 @@ impl Pdo {
         let PdoType::RPDO(num) = RPDO_CONTROL_OPMODE.pdo else {
             panic!("Controlword is not mapped to RPDO");
         };
-        let num = num as usize;
+        let cw_idx = (num - 1) as usize;
 
-        self.rpdo_frames[num].set(
+        warn!("setting controlword rpdo #{num} to new cw: {cw:?}");
+        self.rpdo_frames[cw_idx].set(
             RPDO_CONTROL_OPMODE.sources[RPDO_IDX_CONTROL_WORD]
                 .bit_range
                 .start as usize,
@@ -280,9 +310,9 @@ impl Pdo {
         let PdoType::RPDO(num) = RPDO_CONTROL_OPMODE.pdo else {
             panic!("Controlword is not mapped to RPDO");
         };
-        let num = num as usize;
+        let idx = (num - 1) as usize;
 
-        self.rpdo_frames[num].set(
+        self.rpdo_frames[idx].set(
             RPDO_CONTROL_OPMODE.sources[RPDO_IDX_OPMODE].bit_range.start as usize,
             &[mode as u8],
         );

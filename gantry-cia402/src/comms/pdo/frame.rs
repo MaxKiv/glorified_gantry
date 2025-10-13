@@ -1,10 +1,11 @@
 pub struct PdoFrame {
     pub data: [u8; 8],
+    pub dlc: usize,
 }
 
 impl PdoFrame {
-    pub fn zero() -> Self {
-        Self { data: [0; 8] }
+    pub fn with_dlc(dlc: usize) -> Self {
+        Self { data: [0; 8], dlc }
     }
 
     pub fn set(&mut self, offset: usize, data: &[u8]) {

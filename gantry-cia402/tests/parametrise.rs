@@ -3,13 +3,8 @@ pub mod common;
 use std::time::Duration;
 
 use gantry_cia402::{
-    comms::{pdo::mapping::PdoMapping, sdo::SdoAction},
-    driver::{
-        event::MotorEvent,
-        nmt::{Nmt, NmtState},
-        receiver::subscriber::handle_feedback,
-    },
-    od::DEVICE_TYPE,
+    comms::pdo::mapping::PdoMapping,
+    driver::{event::MotorEvent, receiver::subscriber::handle_feedback},
 };
 use oze_canopen::interface::CanOpenInterface;
 use tokio::{
@@ -17,10 +12,6 @@ use tokio::{
     task::{self, JoinHandle},
 };
 use tracing::*;
-
-const NODE_ID: u8 = 3;
-
-const TIMEOUT: Duration = Duration::from_secs(2);
 
 /// Start the device feedback task responsible for receiving and parsing device feedback and broadcasting these as events
 fn start_feedback_task(
@@ -51,11 +42,15 @@ mod tests {
 
     use gantry_cia402::{
         comms::pdo::mapping::custom::CUSTOM_TPDOS,
-        driver::startup::{parametrise::parametrise_motor, params::PARAMS},
+        driver::{
+            nmt::{NmtState, nmt_task},
+            receiver::subscriber::wait_for_event,
+            startup::{parametrise::parametrise_motor, params::PARAMS},
+        },
         log::{log_canopen_pretty, log_events},
     };
 
-    use common::wait_for_event;
+    use crate::common::{NODE_ID, TIMEOUT};
 
     use super::*;
 
@@ -79,9 +74,15 @@ mod tests {
 
         tokio::time::sleep(Duration::from_millis(250)).await;
 
-        info!("Starting NMT handler");
         let (nmt_tx, nmt_rx) = tokio::sync::mpsc::channel(10);
-        let nmt_handle = Nmt::start(node_id, canopen.clone(), nmt_rx, event_rx.resubscribe());
+        // Start the NMT task
+        info!("Starting NMT State Machine task for motor with node id {node_id}");
+        task::spawn(nmt_task(
+            node_id,
+            canopen.clone(),
+            nmt_rx,
+            event_rx.resubscribe(),
+        ));
 
         info!("Requesting NMT Pre-Operational");
         nmt_tx

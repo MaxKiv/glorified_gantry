@@ -1,4 +1,5 @@
 use oze_canopen::canopen::RxMessage;
+use tracing::error;
 
 use crate::driver::{nmt::NmtState, receiver::frame::*};
 
@@ -33,8 +34,15 @@ impl TryFrom<RxMessage> for Frame {
             0x081..=0x0FF => {
                 let node_id = Some((id - 0x080) as u8);
                 let error_code = u16::from_le_bytes([frame.data[0], frame.data[1]]);
+                error!(
+                    "Error frame received: {frame:?} - error code: {:#0x} - see datasheet page 108",
+                    error_code
+                );
                 let error = match error_code {
                     0x3100 => EMCY::Undervoltage,
+                    0x8210 => EMCY::PdoLengthError,
+                    0x8220 => EMCY::PdoLengthExceeded,
+                    0x0 => EMCY::NoFurtherPendingErrors,
                     _ => EMCY::Unknown,
                 };
                 (node_id, MessageType::EMCY(EmergencyMessage { error }))

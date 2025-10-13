@@ -1,3 +1,5 @@
+use crate::driver::state::Cia402State;
+
 // Commands that can be sent to the motor
 #[derive(Debug, Clone)]
 pub enum MotorCommand {
@@ -30,6 +32,7 @@ pub enum MotorCommand {
 
     /// Enable drive (transition to operation enabled)
     Enable,
-    // /// Custom low-level SDO/PDO passthrough (optional escape hatch)
-    // RawControlWord(u16),
+
+    /// Transition into target Cia402 State
+    Cia402TransitionTo { target_state: Cia402State },
 }

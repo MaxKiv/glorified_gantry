@@ -57,6 +57,9 @@ pub struct EmergencyMessage {
 #[derive(Debug, Clone, PartialEq)]
 pub enum EMCY {
     Undervoltage,
+    PdoLengthError,
+    PdoLengthExceeded,
+    NoFurtherPendingErrors,
     Unknown,
 }
 

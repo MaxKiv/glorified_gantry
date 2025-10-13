@@ -40,17 +40,20 @@ pub struct PdoMappingSource {
 impl PdoType {
     /// Returns the COB Id for the given pdo num and type
     /// See https://en.wikipedia.org/wiki/CANopen#Process_Data_Object_(PDO)_protocol
-    pub fn get_pdo_cob_id(&self) -> Option<u16> {
+    pub fn get_pdo_cob_id(&self, node_id: u8) -> Option<u16> {
         Some(match self {
-            Self::RPDO(num) if *num == 1 => 0x180,
-            Self::RPDO(num) if *num == 2 => 0x280,
-            Self::RPDO(num) if *num == 3 => 0x380,
-            Self::RPDO(num) if *num == 4 => 0x480,
-            Self::TPDO(num) if *num == 1 => 0x180 + 0x20,
-            Self::TPDO(num) if *num == 2 => 0x280 + 0x20,
-            Self::TPDO(num) if *num == 3 => 0x380 + 0x20,
-            Self::TPDO(num) if *num == 4 => 0x480 + 0x20,
-            _ => return None,
+            Self::TPDO(num) => {
+                const BASE: u16 = 0x80;
+                let num = *num as u16;
+                let node_id = node_id as u16;
+                BASE + (0x100 * num) + node_id
+            }
+            Self::RPDO(num) => {
+                const BASE: u16 = 0x100;
+                let num = *num as u16;
+                let node_id = node_id as u16;
+                BASE + (0x100 * num) + node_id
+            }
         })
     }
 }

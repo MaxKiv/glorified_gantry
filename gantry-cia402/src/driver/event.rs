@@ -11,7 +11,7 @@ use crate::driver::{
 /// Events broadcast by a motor driver (status updates, transitions, errors).
 #[derive(Debug, Clone, PartialEq)]
 pub enum MotorEvent {
-    /// Cia402 state update
+    /// NMT state update
     Cia402StateUpdate(Cia402State),
 
     /// NMT state update

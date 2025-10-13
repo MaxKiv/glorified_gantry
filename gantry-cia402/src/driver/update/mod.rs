@@ -1,6 +1,7 @@
 pub mod publisher;
 
 use thiserror::Error;
+use tracing::info;
 
 use crate::driver::{
     oms::{HomeFlags, PositionModeFlags},
@@ -69,9 +70,21 @@ impl ControlWord {
     }
 
     pub fn with_cia402_flags(self, flags: Cia402Flags) -> Self {
+        // info!("adding cia402flags to cw: {flags:?}");
+
         let mask = Cia402Flags::all().bits();
+
+        // info!("Cia402flags mask: {:#0b}", mask);
+        // info!("self.bits() & !mask: {:#0b}", self.bits() & !mask);
+        // info!("(flags.bits() & mask): {:#0b}", (flags.bits() & mask));
+
         let new_bits = (self.bits() & !mask) | (flags.bits() & mask);
-        ControlWord::from_bits_truncate(new_bits)
+        // info!("new_bits {:#0b}", new_bits);
+
+        let cw = ControlWord::from_bits(new_bits).expect("Bits size mismatch in with_cia402_flags");
+        // trace!("new cw: {cw:?}");
+
+        cw
     }
 }
 

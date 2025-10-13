@@ -2,32 +2,19 @@ pub mod common;
 
 use std::time::Duration;
 
-use gantry_cia402::{
-    comms::sdo::SdoAction,
-    driver::{event::MotorEvent, nmt::NmtState},
-    od::DEVICE_TYPE,
-};
+use gantry_cia402::driver::{event::MotorEvent, nmt::NmtState};
 use tokio::task::{self};
 use tracing::*;
-
-const NODE_ID: u8 = 3;
-
-const PARAMS: [SdoAction; 1] = [SdoAction::Upload {
-    entry: &DEVICE_TYPE,
-}];
-
-const TIMEOUT: Duration = Duration::from_secs(5);
 
 #[cfg(test)]
 mod tests {
 
     use gantry_cia402::{
-        comms::pdo::mapping::custom::CUSTOM_TPDOS,
-        driver::receiver::subscriber::wait_for_event,
+        driver::{nmt::nmt_task, receiver::subscriber::wait_for_event},
         log::{log_canopen_pretty, log_events},
     };
 
-    use crate::common::start_feedback_task;
+    use crate::common::{NODE_ID, TIMEOUT, TPDOS, start_feedback_task};
 
     use super::*;
 
@@ -43,24 +30,28 @@ mod tests {
         info!("Starting CANOpen sniffer");
         task::spawn(log_canopen_pretty(canopen.clone()));
 
-        let tpdo_mapping_set = CUSTOM_TPDOS;
-
         info!("Starting CANOpen event logger");
-        let (_, event_rx) = start_feedback_task(canopen.clone(), node_id, tpdo_mapping_set);
+        let (_, event_rx) = start_feedback_task(canopen.clone(), node_id, TPDOS);
         task::spawn(log_events(event_rx.resubscribe(), node_id));
 
         tokio::time::sleep(Duration::from_millis(250)).await;
 
-        info!("Starting NMT handler logger");
         let (nmt_tx, nmt_rx) = tokio::sync::mpsc::channel(10);
-        let nmt_handle = Nmt::start(node_id, canopen.clone(), nmt_rx, event_rx.resubscribe());
+        // Start the NMT task
+        info!("Starting NMT State Machine task for motor with node id {node_id}");
+        task::spawn(nmt_task(
+            node_id,
+            canopen.clone(),
+            nmt_rx,
+            event_rx.resubscribe(),
+        ));
 
         // Switch to PreOp
         nmt_tx.send(NmtState::PreOperational).await.map_err(|err| {
             format!("Error requesting NMT state PreOperational: {err}").to_string()
         })?;
         wait_for_event(
-            &mut event_rx,
+            event_rx.resubscribe(),
             MotorEvent::NmtStateUpdate(NmtState::PreOperational),
             TIMEOUT,
         )
@@ -75,7 +66,7 @@ mod tests {
             .await
             .map_err(|err| format!("Error requesting NMT state Operational: {err}").to_string())?;
         wait_for_event(
-            &mut event_rx,
+            event_rx.resubscribe(),
             MotorEvent::NmtStateUpdate(NmtState::Operational),
             TIMEOUT,
         )

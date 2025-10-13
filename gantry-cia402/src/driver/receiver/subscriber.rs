@@ -172,9 +172,6 @@ async fn handle_tpdo1(
             // Send fresh NMT state to subscribers
             send_update(MotorEvent::NmtStateUpdate(new_nmt_state), event_tx);
 
-            let new_cia402_state: Cia402Flags = statusword.into();
-            send_update(MotorEvent::Cia402StateUpdate(new_cia402_state), event_tx);
-
             // Send rest of statusword to subscribers
             send_update(MotorEvent::StatusWord(statusword), event_tx);
         }
@@ -325,7 +322,7 @@ fn send_update(event: MotorEvent, event_tx: &broadcast::Sender<MotorEvent>) {
 }
 
 pub async fn wait_for_event(
-    event_rx: &mut broadcast::Receiver<MotorEvent>,
+    mut event_rx: broadcast::Receiver<MotorEvent>,
     watch_for: MotorEvent,
     timeout: Duration,
 ) -> Result<(), DriveError> {
