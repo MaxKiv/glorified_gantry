@@ -1,4 +1,5 @@
-use gantry_cia402::driver::{event::MotorEvent, receiver::frame::MessageType};
+use gantry_cia402::driver::receiver::parse::pdo_message::PDOMessage;
+use gantry_cia402::driver::{event::MotorEvent, receiver::parse::MessageType};
 use oze_canopen::{canopen::RxMessage, interface::CanOpenInterface};
 use tokio::sync::broadcast::{self, error::RecvError};
 use tracing::{Level, *};
@@ -48,6 +49,7 @@ struct FieldExtractor {
     data: Option<String>,
     message: Option<String>,
     parsed: Option<String>,
+    header: Option<String>,
     index: Option<String>,
     sub_index: Option<String>,
     num: Option<u64>,
@@ -62,6 +64,7 @@ impl Visit for FieldExtractor {
             "parsed" => self.parsed = Some(value.to_string()),
             "index" => self.index = Some(value.to_string()),
             "sub_index" => self.sub_index = Some(value.to_string()),
+            "header" => self.header = Some(value.to_string()),
             _ => {}
         }
     }
@@ -86,13 +89,13 @@ impl Visit for FieldExtractor {
         if field.name() == "data" && self.data.is_none() {
             self.data = Some(format!("{:?}", value));
         }
-        if field.name() == "parsed" && self.data.is_none() {
+        if field.name() == "parsed" && self.parsed.is_none() {
             self.parsed = Some(format!("{:?}", value));
         }
-        if field.name() == "index" && self.data.is_none() {
+        if field.name() == "index" && self.index.is_none() {
             self.index = Some(format!("{:?}", value));
         }
-        if field.name() == "sub_index" && self.data.is_none() {
+        if field.name() == "sub_index" && self.sub_index.is_none() {
             self.sub_index = Some(format!("{:?}", value));
         }
     }
@@ -133,6 +136,9 @@ where
         let parsed = ex.parsed.unwrap_or_default();
         let index = ex.index.unwrap_or_default();
         let sub_index = ex.sub_index.unwrap_or_default();
+        let header = ex.header.unwrap_or_default();
+
+        write!(writer, "NODE {}  ", node.white().bold())?;
 
         if supports_color {
             match frame.as_str() {
@@ -145,19 +151,17 @@ where
                 )?,
                 "TPDO" => write!(
                     writer,
-                    "{} {} <- {} [{}]",
-                    "TPDO".green(),
-                    num.green().bold(),
-                    format!("Node {}", node).green(),
-                    data
+                    "{} {:32} => {}",
+                    header.green().bold(),
+                    data,
+                    parsed.green(),
                 )?,
                 "RPDO" => write!(
                     writer,
-                    "{} {} -> {} [{}]",
-                    "RPDO".purple(),
-                    num.purple().bold(),
-                    format!("Node {}", node).purple(),
-                    data
+                    "{} {:32} => {}",
+                    header.purple().bold(),
+                    data,
+                    parsed.purple(),
                 )?,
                 "RSDO" => write!(
                     writer,

@@ -1,15 +1,19 @@
+pub mod frame;
 pub mod log;
-pub mod parse;
+pub mod pdo;
+pub mod pdo_message;
 pub mod sdo_response;
 
 use oze_canopen::canopen::{NodeId, RxMessage};
 use tokio::time::Instant;
 
 use crate::{
-    comms::pdo::mapping::PdoType,
     driver::{
         nmt::NmtState,
-        receiver::frame::sdo_response::{SdoRequest, SdoResponse},
+        receiver::parse::{
+            pdo_message::{PDOMessage, ParsedPDO},
+            sdo_response::{SdoRequest, SdoResponse},
+        },
     },
     od::entry::ODEntry,
 };
@@ -32,6 +36,7 @@ pub enum MessageType {
     RSDO(SdoRequest),
     TPDO(TPDOMessage),
     RPDO(RPDOMessage),
+    PDO(ParsedPDO),
     NmtMonitor(NmtMonitorMessage),
     Unknown(RxMessage), // No node id
 }
@@ -57,8 +62,26 @@ pub struct EmergencyMessage {
 #[derive(Debug, Clone, PartialEq)]
 pub enum EMCY {
     Undervoltage,
+    InterlockError,
+    SoftwareReset,
+    InternalSoftwareError,
+    RatedCurrentNotSet,
+    BallastResistorOverload,
+    MotorBlocked,
+    InternalCorrectionFactorMissing,
+    Sensor1Fault,
+    Sensor2Fault,
+    SensorNFault,
+    NonvolatileMemoryFull,
+    FieldbusError,
+    HeartbeatError,
+    SlaveTimeout,
     PdoLengthError,
     PdoLengthExceeded,
+    UnexpectedSyncLength,
+    SpeedMonitoringError,
+    FollowingErrorTooLarge,
+    LimitSwitchExceeded,
     NoFurtherPendingErrors,
     Unknown,
 }

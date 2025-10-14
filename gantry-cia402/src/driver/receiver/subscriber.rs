@@ -13,7 +13,7 @@ use crate::{
         oms::OperationMode,
         receiver::{
             error::ReceiverError,
-            frame::{Frame, MessageType, ParseError},
+            parse::{Frame, MessageType, ParseError},
             *,
         },
         state::{Cia402Flags, Cia402State},
@@ -108,21 +108,21 @@ async fn handle_message(
 }
 
 async fn handle_sdo_response(
-    sdo_response: &frame::sdo_response::SdoResponse,
+    sdo_response: &parse::sdo_response::SdoResponse,
     event_tx: &&broadcast::Sender<MotorEvent>,
 ) {
     send_update(MotorEvent::SdoResponse(sdo_response.clone()), event_tx);
 }
 
 async fn handle_emcy(
-    emergency_message: &frame::EmergencyMessage,
+    emergency_message: &parse::EmergencyMessage,
     event_tx: &broadcast::Sender<MotorEvent>,
 ) {
     send_update(MotorEvent::EMCY(emergency_message.error.clone()), event_tx);
 }
 
 async fn handle_tpdo(
-    tpdomessage: &frame::TPDOMessage,
+    tpdomessage: &parse::TPDOMessage,
     tpdo_mapping: &'static [PdoMapping],
     event_tx: &broadcast::Sender<MotorEvent>,
 ) -> Result<(), ReceiverError> {
@@ -148,7 +148,7 @@ async fn handle_tpdo(
 }
 
 async fn handle_nmt_monitor(
-    nmt_monitor_message: &frame::NmtMonitorMessage,
+    nmt_monitor_message: &parse::NmtMonitorMessage,
     event_tx: &broadcast::Sender<MotorEvent>,
 ) {
     send_update(
@@ -158,7 +158,7 @@ async fn handle_nmt_monitor(
 }
 
 async fn handle_tpdo1(
-    tpdomessage: &frame::TPDOMessage,
+    tpdomessage: &parse::TPDOMessage,
     tpdo1_mapping: &PdoMapping,
     event_tx: &broadcast::Sender<MotorEvent>,
 ) {
@@ -193,7 +193,7 @@ async fn handle_tpdo1(
 }
 
 async fn handle_tpdo2(
-    tpdomessage: &frame::TPDOMessage,
+    tpdomessage: &parse::TPDOMessage,
     tpdo2_mappings: &PdoMapping,
     event_tx: &broadcast::Sender<MotorEvent>,
 ) {
@@ -231,7 +231,7 @@ async fn handle_tpdo2(
 }
 
 async fn handle_tpdo3(
-    tpdomessage: &frame::TPDOMessage,
+    tpdomessage: &parse::TPDOMessage,
     tpdo2_mappings: &PdoMapping,
     event_tx: &broadcast::Sender<MotorEvent>,
 ) {

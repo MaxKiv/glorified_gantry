@@ -1,6 +1,6 @@
 use oze_canopen::canopen::{NodeId, RxMessage};
 
-use crate::{driver::receiver::frame::log::hex_dump, od::entry::ODEntry};
+use crate::{driver::receiver::parse::log::hex_dump, od::entry::ODEntry};
 
 #[derive(Debug)]
 pub struct SdoRequest {

@@ -1,6 +1,6 @@
 use thiserror::Error;
 
-use crate::driver::receiver::frame::{RPDOMessage, TPDOMessage};
+use crate::driver::receiver::parse::{RPDOMessage, TPDOMessage};
 
 #[derive(Debug, Error)]
 pub enum ReceiverError {

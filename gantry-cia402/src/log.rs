@@ -4,7 +4,7 @@ use tracing::{instrument, *};
 
 use crate::driver::{
     event::MotorEvent,
-    receiver::frame::{Frame, MessageType, ParseError},
+    receiver::parse::{Frame, MessageType, ParseError},
 };
 
 #[instrument(skip(event_rx))]

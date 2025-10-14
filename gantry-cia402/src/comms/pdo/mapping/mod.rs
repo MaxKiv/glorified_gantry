@@ -10,10 +10,19 @@ pub struct BitRange {
     pub len: u8,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum PdoType {
     RPDO(u8),
     TPDO(u8),
+}
+
+impl PdoType {
+    pub fn to_string(&self) -> String {
+        match self {
+            PdoType::RPDO(num) => format!("RPDO{num}"),
+            PdoType::TPDO(num) => format!("TPDO{num}"),
+        }
+    }
 }
 
 #[derive(Debug)]

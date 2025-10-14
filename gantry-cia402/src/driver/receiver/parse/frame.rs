@@ -1,7 +1,14 @@
 use oze_canopen::canopen::RxMessage;
 use tracing::error;
 
-use crate::driver::{nmt::NmtState, receiver::frame::*};
+use crate::{
+    comms::pdo::mapping::PdoType,
+    driver::{
+        nmt::NmtState,
+        receiver::parse::{pdo_message::*, *},
+        *,
+    },
+};
 
 impl TryFrom<RxMessage> for Frame {
     type Error = ParseError;
@@ -38,19 +45,39 @@ impl TryFrom<RxMessage> for Frame {
                     "Error frame received: {frame:?} - error code: {:#0x} - see datasheet page 108",
                     error_code
                 );
+
                 let error = match error_code {
+                    0x0 => EMCY::NoFurtherPendingErrors,
                     0x3100 => EMCY::Undervoltage,
                     0x8210 => EMCY::PdoLengthError,
                     0x8220 => EMCY::PdoLengthExceeded,
-                    0x0 => EMCY::NoFurtherPendingErrors,
+                    0x5440 => EMCY::InterlockError,
+                    0x6010 => EMCY::SoftwareReset,
+                    0x6100 => EMCY::InternalSoftwareError,
+                    0x6320 => EMCY::RatedCurrentNotSet,
+                    0x7113 => EMCY::BallastResistorOverload,
+                    0x7121 => EMCY::MotorBlocked,
+                    0x7200 => EMCY::InternalCorrectionFactorMissing,
+                    0x7305 => EMCY::Sensor1Fault,
+                    0x7306 => EMCY::Sensor2Fault,
+                    0x7307 => EMCY::SensorNFault,
+                    0x7600 => EMCY::NonvolatileMemoryFull,
+                    0x8100 => EMCY::FieldbusError,
+                    0x8130 => EMCY::HeartbeatError,
+                    0x8200 => EMCY::SlaveTimeout,
+                    0x8240 => EMCY::UnexpectedSyncLength,
+                    0x8400 => EMCY::SpeedMonitoringError,
+                    0x8611 => EMCY::FollowingErrorTooLarge,
+                    0x8612 => EMCY::LimitSwitchExceeded,
                     _ => EMCY::Unknown,
                 };
+
                 (node_id, MessageType::EMCY(EmergencyMessage { error }))
             }
 
             // TPDO1..4 (0x180 + n*0x200)
             0x180..=0x57F => {
-                let (pdo, base) = match id {
+                let (kind, base) = match id {
                     0x180..=0x1FF => (PdoType::TPDO(1), 0x180),
                     0x200..=0x21F => (PdoType::RPDO(1), 0x200),
                     0x280..=0x2FF => (PdoType::TPDO(2), 0x280),
@@ -61,26 +88,38 @@ impl TryFrom<RxMessage> for Frame {
                     0x500..=0x51F => (PdoType::RPDO(4), 0x500),
                     _ => unreachable!(),
                 };
-                let node_id = Some((id - base) as u8);
+                // let node_id = Some((id - base) as u8);
+                let node = (id - base) as u8;
 
-                match pdo {
-                    PdoType::TPDO(num) => (
-                        node_id,
-                        MessageType::TPDO(TPDOMessage {
-                            num: num.into(),
+                let (num, message) = match kind {
+                    PdoType::RPDO(1) => (1, PDOMessage::RPDO1(frame.data.try_into()?)),
+                    PdoType::RPDO(2) => (2, PDOMessage::RPDO2(frame.data.try_into()?)),
+                    PdoType::RPDO(3) => (3, PDOMessage::RPDO3(frame.data.try_into()?)),
+                    PdoType::RPDO(4) => (4, PDOMessage::RPDO4(frame.data.try_into()?)),
+                    PdoType::TPDO(1) => (1, PDOMessage::TPDO1(frame.data.try_into()?)),
+                    PdoType::TPDO(2) => (2, PDOMessage::TPDO2(frame.data.try_into()?)),
+                    PdoType::TPDO(3) => (3, PDOMessage::TPDO3(frame.data.try_into()?)),
+                    PdoType::TPDO(4) => (4, PDOMessage::TPDO4(frame.data.try_into()?)),
+                    _ => (
+                        255,
+                        PDOMessage::Raw(RawPDOMessage {
+                            cob_id: id as usize,
                             data: frame.data,
                             dlc: frame.dlc,
                         }),
                     ),
-                    PdoType::RPDO(num) => (
-                        node_id,
-                        MessageType::RPDO(RPDOMessage {
-                            num: num.into(),
-                            data: frame.data,
-                            dlc: frame.dlc,
-                        }),
-                    ),
-                }
+                };
+
+                let parsed = ParsedPDO {
+                    node,
+                    num,
+                    kind,
+                    message,
+                    raw_data: frame.data,
+                    raw_dlc: frame.dlc,
+                };
+
+                (Some(node), MessageType::PDO(parsed))
             }
 
             // 0x580–0x5FF → TSDO (Server→Client)

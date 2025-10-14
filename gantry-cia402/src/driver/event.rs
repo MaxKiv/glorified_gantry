@@ -3,7 +3,7 @@ use crate::driver::{
     oms::OperationMode,
     receiver::{
         StatusWord,
-        frame::{self, sdo_response::SdoResponse},
+        parse::{self, sdo_response::SdoResponse},
     },
     state::Cia402State,
 };
@@ -36,7 +36,7 @@ pub enum MotorEvent {
     Fault { code: u16, description: String },
 
     /// EMCY message from motor driver
-    EMCY(frame::EMCY),
+    EMCY(parse::EMCY),
 
     /// SDO response received
     SdoResponse(SdoResponse),

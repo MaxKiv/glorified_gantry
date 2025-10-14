@@ -27,8 +27,8 @@ pub enum SdoResult {
 }
 
 #[derive(Debug)]
-pub struct SdoTransation<'a> {
-    request: &'a SdoAction<'a>,
+pub struct SdoTransaction<'a> {
+    action: &'a SdoAction<'a>,
     result: SdoResult,
 }
 
@@ -36,7 +36,7 @@ impl<'a> SdoAction<'a> {
     pub async fn run_on_sdo_client(
         &self,
         sdo: Arc<Mutex<SdoClient>>,
-    ) -> Result<SdoTransation<'_>, DriveError> {
+    ) -> Result<SdoTransaction<'_>, DriveError> {
         let mut sdo = sdo.lock().await;
 
         let result = match self {
@@ -55,8 +55,8 @@ impl<'a> SdoAction<'a> {
             }
         };
 
-        Ok(SdoTransation {
-            request: self,
+        Ok(SdoTransaction {
+            action: self,
             result,
         })
     }

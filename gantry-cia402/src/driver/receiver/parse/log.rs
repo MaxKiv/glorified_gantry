@@ -1,6 +1,9 @@
 use tracing::*;
 
-use crate::driver::receiver::frame::{MessageType, *};
+use crate::{
+    comms::pdo::mapping::PdoType,
+    driver::receiver::parse::{MessageType, pdo_message::PrettyPdo, *},
+};
 
 // 1) change your Frame::log to emit structured fields (no ANSI)
 impl Frame {
@@ -60,6 +63,25 @@ impl Frame {
                     node = self.node_id.unwrap_or(0) as u64,
                     data = %hex_dump(&msg.data[..msg.dlc]),
                     parsed = ?msg.value,
+                );
+            }
+            MessageType::PDO(msg) => {
+                use PdoType::*;
+
+                let pretty: PrettyPdo = msg.clone().into();
+
+                let frame = match msg.kind {
+                    RPDO(_) => "RPDO",
+                    TPDO(_) => "TPDO",
+                };
+
+                info!(
+                    target: "canopen",
+                    frame = frame,
+                    node = self.node_id.unwrap_or(0) as u64,
+                    data = pretty.raw,
+                    parsed = pretty.parsed,
+                    header = pretty.header,
                 );
             }
             MessageType::Unknown(rx_message) => {
