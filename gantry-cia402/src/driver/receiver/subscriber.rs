@@ -33,40 +33,47 @@ pub async fn handle_feedback(
     trace!("Starting feedback handling loop");
 
     loop {
-        if let Ok(message) = canopen.rx.recv().await {
-            let span = span!(Level::TRACE, "receiver");
-            let _enter = span.enter();
+        match canopen.rx.recv().await {
+            Ok(message) => {
+                let span = span!(Level::TRACE, "receiver");
+                let _enter = span.enter();
 
-            // trace!("Received frame: {}", format_frame(&message));
+                trace!("Received frame: {}", format_frame(&message));
 
-            // Parse received frames
-            let Ok(parsed): Result<Frame, _> = message.try_into() else {
-                error!("Error parsing message: {message:?}");
-                continue;
-            };
-            parsed.log();
+                // Parse received frames
+                let Ok(parsed): Result<Frame, _> = message.try_into() else {
+                    error!("Error parsing message: {message:?}");
+                    continue;
+                };
+                parsed.log();
 
-            // Skip messages that are not from the motor that we are managing
-            if parsed
-                .node_id
-                .is_some_and(|message_id| message_id == this_node_id)
-            {
-                // Our node talked, you love to see it
-                last_seen = Instant::now();
+                // Skip messages that are not from the motor that we are managing
+                if parsed
+                    .node_id
+                    .is_some_and(|message_id| message_id == this_node_id)
+                {
+                    // Our node talked, you love to see it
+                    last_seen = Instant::now();
 
-                // Lets check what message we got
-                if let Err(err) = handle_message(&parsed.message, &event_tx, &tpdo_mapping).await {
-                    error!(
-                        "Error while handling this message: {:?} - {err}",
-                        parsed.message
-                    );
+                    // Lets check what message we got
+                    if let Err(err) =
+                        handle_message(&parsed.message, &event_tx, &tpdo_mapping).await
+                    {
+                        error!(
+                            "Error while handling this message: {:?} - {err}",
+                            parsed.message
+                        );
+                    }
+                }
+
+                if Instant::now() - last_seen > COMMS_TIMEOUT
+                    && let Err(err) = event_tx.send(MotorEvent::CommunicationLost)
+                {
+                    error!("Unable to broadcast CommunicationLost message: {err}");
                 }
             }
-
-            if Instant::now() - last_seen > COMMS_TIMEOUT
-                && let Err(err) = event_tx.send(MotorEvent::CommunicationLost)
-            {
-                error!("Unable to broadcast CommunicationLost message: {err}");
+            Err(err) => {
+                error!("Error while trying to receive raw can frame: {err}");
             }
         }
     }
@@ -82,23 +89,23 @@ async fn handle_message(
             // We sent this: Ignore
         }
         MessageType::EMCY(emergency_message) => {
-            handle_emcy(emergency_message, &event_tx).await;
+            handle_emcy(emergency_message, event_tx).await;
         }
         MessageType::TSDO(sdo_response) => {
-            handle_sdo_response(sdo_response, &event_tx).await;
+            handle_sdo_response(sdo_response, event_tx).await;
         }
         MessageType::RSDO(_) => {
             // We sent this: Ignore
         }
         MessageType::TPDO(tpdomessage) => {
-            handle_tpdo(tpdomessage, &tpdo_mapping, &event_tx).await?;
+            handle_tpdo(tpdomessage, tpdo_mapping, event_tx).await?;
         }
 
         MessageType::RPDO(_) => {
             // We sent this: Ignore
         }
         MessageType::NmtMonitor(nmt_monitor_message) => {
-            handle_nmt_monitor(nmt_monitor_message, &event_tx).await;
+            handle_nmt_monitor(nmt_monitor_message, event_tx).await;
         }
         // SYNC and UNKNOWN are both not addressed to a single node, we not adress those here: Ignore
         _ => unreachable!(),
@@ -109,7 +116,7 @@ async fn handle_message(
 
 async fn handle_sdo_response(
     sdo_response: &parse::sdo_response::SdoResponse,
-    event_tx: &&broadcast::Sender<MotorEvent>,
+    event_tx: &broadcast::Sender<MotorEvent>,
 ) {
     send_update(MotorEvent::SdoResponse(sdo_response.clone()), event_tx);
 }

@@ -51,12 +51,16 @@ pub async fn cia402_state_machine_task(
     loop {
         tokio::select! {
             Some(cmd) = sm_cmd_rx.recv() => {
-                if let Some(cw) = Cia402Flags::transition_flags(&sm.state, &cmd) {
+                trace!(
+                    "Cia402 SM command received - cmd: {:?} - current state: {:?}",
+                    cmd, sm.state
+                );
+                if let Some(updated_flags) = Cia402Flags::transition_flags(&sm.state, &cmd) {
                     trace!(
-                        "Cia402 state update command received - from: {:?} - cmd: {:?} - controlword {:?}",
-                        sm.state, cmd, cw
+                        "Requested transition is valid - cia402Flags: {updated_flags:?}",
                     );
-                    if let Err(err) = state_update_tx.send(cw).await {
+
+                    if let Err(err) = state_update_tx.send(updated_flags).await {
                         error!("Error while processing command: {cmd:?} -> Unable to send state update request: {err}" );
                     }
                 } else {
@@ -65,6 +69,9 @@ pub async fn cia402_state_machine_task(
             }
 
             Ok(event) = event_rx.recv() => {
+                trace!(
+                    "Cia402 received event: {event:?}",
+                );
                 if let MotorEvent::StatusWord(sw) = event {
                     match sw.try_into() {
                         Ok(new_state) => {
@@ -77,6 +84,8 @@ pub async fn cia402_state_machine_task(
                                 error!(
                                     "Unable to send cia402 state update event: {err}"
                                 );
+                            } else {
+                                trace!("cia402 SM send state update to orchestrator: {new_state:?}")
                             }
 
                             // Bonus: Notify event loop of the new Cia402 state
@@ -98,5 +107,3 @@ pub async fn cia402_state_machine_task(
         }
     }
 }
-
-pub async fn cia402_orchestrator() {}

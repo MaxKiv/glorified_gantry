@@ -17,7 +17,7 @@ use crate::{
     },
 };
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum TransmissionType {
     OnSync,
     OnChange,
@@ -118,6 +118,33 @@ async fn set_pdo_mapping(
         )
         .await
         .map_err(DriveError::CanOpen)?;
+
+    if let PdoType::TPDO(_) = pdo_mapping.pdo
+        && pdo_mapping.transmission_type == TransmissionType::OnChange
+    {
+        // Configure a periodic event to continously synchronise the driver with the latest device
+        // state
+        const SYNCHRONISATION_PERIOD_MS: u16 = 100;
+        const SYNCHRONISATION_SUB_IDX: u8 = 0x05;
+
+        trace!(
+            "1.C Transmission type is {:?} -> Configuring a periodic event to continously synchronise state in OD: {:#0x}:{} of val: {:x?}",
+            pdo_mapping.transmission_type,
+            communication_index,
+            SYNCHRONISATION_SUB_IDX,
+            SYNCHRONISATION_PERIOD_MS.to_le_bytes(),
+        );
+
+        sdo.lock()
+            .await
+            .download(
+                communication_index,
+                SYNCHRONISATION_SUB_IDX,
+                &SYNCHRONISATION_PERIOD_MS.to_le_bytes(),
+            )
+            .await
+            .map_err(DriveError::CanOpen)?;
+    }
 
     // 2. Deactivate the mapping by setting subindex 00h of the corresponding mapping parameter to \"0\".,
     let mapping_index = match pdo_mapping.pdo {

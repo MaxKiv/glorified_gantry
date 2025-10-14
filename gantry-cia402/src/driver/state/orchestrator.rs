@@ -7,11 +7,11 @@ use tokio::{
 use tracing::*;
 
 use crate::{
-    driver::{command::MotorCommand, event::MotorEvent, state::Cia402State},
+    driver::{command::MotorCommand, state::Cia402State},
     error::DriveError,
 };
 
-const CIA402_TRANSITION_TIMEOUT: Duration = Duration::from_millis(500);
+const CIA402_TRANSITION_TIMEOUT: Duration = Duration::from_millis(2500);
 
 pub async fn cia402_orchestrator_task(
     mut sm_cmd_tx: mpsc::Sender<Cia402State>,
@@ -19,12 +19,37 @@ pub async fn cia402_orchestrator_task(
     mut cmd_rx: broadcast::Receiver<MotorCommand>,
 ) {
     // We keep track of current known cia402 state
-    let mut current_state = Cia402State::SwitchOnDisabled;
+    let mut current_state: Option<Cia402State> = None;
+    trace!("Orchestrator task started");
+
+    trace!("Orchestrator task started; waiting for first state (10s timeout)");
+    match timeout(Duration::from_secs(10), sm_state_rx.recv()).await {
+        Ok(Some(state)) => {
+            current_state = Some(state);
+            trace!("Orchestrator: got initial state {:?}", current_state);
+        }
+        Ok(None) => {
+            error!("Orchestrator: sm_state_rx closed (no senders).");
+            return;
+        }
+        Err(_) => {
+            error!("Orchestrator: timed out waiting for an initial Cia402State.");
+            // continue anyway or return depending on policy
+            return;
+        }
+    }
+
+    trace!(
+        "Orchestrator task received initial cia402 state update ({current_state:?}), starting main routine"
+    );
+    let mut current_state = current_state
+        .expect("No current state after receiving one in orchestrator startup, wildy improbable!");
 
     // Subscribe to updates from the state machine
     loop {
         tokio::select! {
             Ok(cmd) = cmd_rx.recv() => {
+                trace!("Orchestrator Received Command: {cmd:?}");
                 match cmd {
                     MotorCommand::Cia402TransitionTo{target_state} => {
                         trace!("Orchestrator received request to transition from {:?} → {:?}", current_state, target_state);
@@ -33,13 +58,25 @@ pub async fn cia402_orchestrator_task(
                         }
                     }
                     MotorCommand::Enable => {
-                        let _ = transition_to_state(Cia402State::OperationEnabled, &mut current_state, &mut sm_cmd_tx, &mut sm_state_rx).await;
+                        trace!("{cmd:?} -> Transitioning to Cia402State::OperationEnabled");
+                        if let Err(e) = transition_to_state(Cia402State::OperationEnabled, &mut
+                        current_state, &mut sm_cmd_tx, &mut sm_state_rx).await {
+                            error!("Transition failed: {e}");
+                        }
                     }
                     MotorCommand::Disable => {
-                        let _ = transition_to_state(Cia402State::SwitchOnDisabled, &mut current_state, &mut sm_cmd_tx, &mut sm_state_rx).await;
+                        trace!("{cmd:?} -> Transitioning to Cia402State::SwitchOnDisabled");
+                        if let Err(e) = transition_to_state(Cia402State::SwitchOnDisabled, &mut
+                        current_state, &mut sm_cmd_tx, &mut sm_state_rx).await {
+                            error!("Transition failed: {e}");
+                        }
                     }
                     MotorCommand::ResetFault => {
-                        let _ = transition_to_state(Cia402State::SwitchOnDisabled, &mut current_state, &mut sm_cmd_tx, &mut sm_state_rx).await;
+                        trace!("{cmd:?} -> Transitioning to Cia402State::SwitchOnDisabled");
+                        if let Err(e) = transition_to_state(Cia402State::SwitchOnDisabled, &mut
+                        current_state, &mut sm_cmd_tx, &mut sm_state_rx).await {
+                            error!("Transition failed: {e}");
+                        }
                     }
                     _ => {}
                 }
@@ -59,27 +96,43 @@ async fn transition_to_state(
     sm_cmd_tx: &mut mpsc::Sender<Cia402State>,
     state_rx: &mut mpsc::Receiver<Cia402State>,
 ) -> Result<(), DriveError> {
-    let path = get_path(&from, &to).ok_or(DriveError::Cia402TransitionError(*from, to))?;
+    let path = get_path(from, &to).ok_or(DriveError::Cia402TransitionError(*from, to))?;
 
-    for state in path {
+    if path.is_empty() {
+        info!(
+            "requested transition from {from:?} to {to:?}, Orchestrator is already in this state"
+        );
+        return Ok(());
+    } else {
+        info!("requested transition from {from:?} to {to:?} => path: {path:?}");
+    }
+
+    for state in path.iter() {
+        info!(
+            "Requesting transition to state {state:?}, part of path: {:?}",
+            path,
+        );
         sm_cmd_tx
-            .send(state.clone())
+            .send(*state)
             .await
             .map_err(DriveError::Cia402SendError)?;
 
         // Wait for state change confirmation (with timeout)
         match timeout(CIA402_TRANSITION_TIMEOUT, state_rx.recv()).await {
             Ok(Some(new_state)) => {
-                error!("new_state: {new_state:?}");
+                trace!("orchestrator received new state from SM: {new_state:?}");
                 // Got an event within the timeout
-                if new_state == state {
+                if new_state == *state {
                     trace!("Reached target state: {:?}", new_state);
                     return Ok(());
                 }
             }
             _ => {
                 // Timeout expired
-                warn!("Timeout waiting for state transition to {:?}", to);
+                warn!(
+                    "Timeout waiting for state transition to {:?}, part of transition path {path:?}",
+                    to
+                );
                 return Err(DriveError::Cia402TransitionTimeout(*from, to));
             }
         }
@@ -92,8 +145,8 @@ async fn transition_to_state(
 fn get_path(from: &Cia402State, to: &Cia402State) -> Option<Vec<Cia402State>> {
     use Cia402State::*;
 
-    let path = match (from, to) {
-        (s, t) if s == t => return Some(vec![]),
+    match (from, to) {
+        (s, t) if s == t => Some(vec![]),
         (SwitchOnDisabled, OperationEnabled) => {
             Some(vec![ReadyToSwitchOn, SwitchedOn, OperationEnabled])
         }
@@ -107,7 +160,5 @@ fn get_path(from: &Cia402State, to: &Cia402State) -> Option<Vec<Cia402State>> {
         (Fault, _) => Some(vec![SwitchOnDisabled]),
         (QuickStopActive, _) => Some(vec![SwitchOnDisabled]),
         _ => None,
-    };
-
-    path
+    }
 }

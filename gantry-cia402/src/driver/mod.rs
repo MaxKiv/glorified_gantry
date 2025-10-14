@@ -7,6 +7,8 @@ pub mod startup;
 pub mod state;
 pub mod update;
 
+use std::time::Duration;
+
 use crate::{
     comms::{
         pdo::{Pdo, mapping::PdoMapping},
@@ -28,7 +30,7 @@ use crate::{
 use anyhow::Result;
 use oze_canopen::interface::CanOpenInterface;
 use tokio::{
-    sync::{broadcast, mpsc, oneshot},
+    sync::{broadcast, mpsc},
     task::{self, JoinHandle},
 };
 use tracing::*;
@@ -39,7 +41,8 @@ pub struct Cia402Driver {
     pub cmd_tx: broadcast::Sender<MotorCommand>,
     pub nmt_tx: mpsc::Sender<NmtState>,
     pub event_rx: broadcast::Receiver<MotorEvent>,
-    handles: Vec<JoinHandle<()>>,
+    canopen: CanOpenInterface,
+    _handles: Vec<JoinHandle<()>>,
 }
 
 impl Cia402Driver {
@@ -121,7 +124,7 @@ impl Cia402Driver {
         )));
 
         // Start the startup task for this motor, this does parametrisation and configures pdo mapping
-        trace!("Starting Startup Task for motor with node id {node_id}");
+        trace!("Performing Startup for motor at node id {node_id}");
         motor_startup_task(
             node_id,
             nmt_tx.clone(),
@@ -133,14 +136,9 @@ impl Cia402Driver {
         )
         .await?;
 
-        // mut event_rx: broadcast::Receiver<MotorEvent>,
-        // state_update_tx: mpsc::Sender<Cia402Flags>,
-        // sm_state_tx: mpsc::Sender<Cia402State>,
-        // mut sm_cmd_tx: mpsc::Receiver<Cia402State>,
-
         // Start the cia402 state machine task, this is responsible for
         // tracking the motors current cia402 state and single transition
-        trace!("Starting Cia402 State Machine task for motor with node id {node_id}");
+        trace!("Starting Cia402 State Machine for motor with node id {node_id}");
         handles.push(task::spawn(cia402_state_machine_task(
             event_rx_cia402,
             state_update_tx,
@@ -149,7 +147,7 @@ impl Cia402Driver {
             event_tx.clone(),
         )));
 
-        trace!("Starting Cia402 State Machine task for motor with node id {node_id}");
+        trace!("Starting Cia402 Orchestrator for motor with node id {node_id}");
         handles.push(task::spawn(cia402_orchestrator_task(
             sm_cmd_tx,
             sm_state_rx,
@@ -164,8 +162,9 @@ impl Cia402Driver {
             cmd_rx,
         )));
 
-        // tokio::time::sleep(std::time::Duration::from_millis(500)).await;
         info!("Cia402Driver for node id {node_id} constructed and initialized");
+
+        tokio::time::sleep(Duration::from_millis(5000)).await;
 
         // Drive is now parametrised, T/RPDO are configured and in NMT::Operational
         Ok(Cia402Driver {
@@ -173,7 +172,8 @@ impl Cia402Driver {
             cmd_tx,
             nmt_tx,
             event_rx: event_rx.resubscribe(),
-            handles,
+            canopen,
+            _handles: handles,
         })
     }
 }

@@ -21,8 +21,8 @@ bitflags::bitflags! {
         const SWITCH_ON              = 1 << 0;
         /// Bit 1: Enable voltage
         const ENABLE_VOLTAGE         = 1 << 1;
-        /// Bit 2: Quick stop
-        const QUICK_STOP             = 1 << 2;
+        /// Bit 2: Disable Quick stop
+        const QUICK_STOP_DISABLE     = 1 << 2;
         /// Bit 3: Enable operation
         const ENABLE_OPERATION       = 1 << 3;
 

@@ -1,7 +1,6 @@
 pub mod frame;
 pub mod mapping;
 
-use crate::comms::pdo;
 use crate::comms::pdo::mapping::PdoMapping;
 use crate::comms::pdo::mapping::PdoType;
 use crate::comms::pdo::mapping::custom::RPDO_CONTROL_OPMODE;
@@ -17,7 +16,6 @@ use crate::comms::pdo::mapping::custom::get_dlc;
 use crate::driver::oms::HomingSetpoint;
 use crate::od;
 use std::time::Duration;
-use std::usize;
 
 /// PDO based Cia402Transport impl for oze-canopen
 use oze_canopen::{
@@ -83,7 +81,9 @@ impl Pdo {
         self.set_controlword_rpdo(cw);
 
         match self.send_rpdo(RPDO_CONTROL_OPMODE).await {
-            Ok(_) => {}
+            Ok(_) => {
+                trace!("RPDO1 sent to effect cia402 transition");
+            }
             Err(err) => {
                 error!("ERR: {err}");
                 return Err(err);
@@ -300,7 +300,7 @@ impl Pdo {
             RPDO_CONTROL_OPMODE.sources[RPDO_IDX_CONTROL_WORD]
                 .bit_range
                 .start as usize,
-            &cw.bits().to_be_bytes(),
+            &cw.bits().to_le_bytes(),
         );
     }
 

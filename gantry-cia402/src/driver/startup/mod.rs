@@ -54,7 +54,7 @@ pub async fn motor_startup_task(
         // Wait for event indicating correct NMT state
         match timeout(NMT_SWITCH_TIMEOUT, nmt_event_rx.recv()).await {
             Ok(Ok(MotorEvent::NmtStateUpdate(new_state))) => {
-                error!("new_state: {new_state:?}");
+                trace!("new_state: {new_state:?}");
                 // Got an event within the timeout
                 if new_state == state {
                     break;
@@ -107,7 +107,7 @@ pub async fn motor_startup_task(
             );
             sleep(RETRY_DURATION).await;
         } else {
-            warn!("Succesful RPDO mapping for motor {node_id}");
+            info!("Succesful RPDO mapping for motor {node_id}");
             break;
         }
     }
@@ -122,7 +122,7 @@ pub async fn motor_startup_task(
             );
             sleep(RETRY_DURATION).await;
         } else {
-            warn!("Succesful TPDO mapping for motor {node_id}");
+            info!("Succesful TPDO mapping for motor {node_id}");
             break;
         }
     }

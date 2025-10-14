@@ -29,20 +29,23 @@ mod tests {
         let (canopen, _) = oze_canopen::canopen::start(String::from("can0"), Some(1000000));
 
         info!("Initializing Cia402Driver for motor driver at node id {node_id}");
-        let drive = Cia402Driver::init(node_id, canopen, PARAMS, RPDOS, TPDOS).await?;
+        let drive = Cia402Driver::init(node_id, canopen.clone(), PARAMS, RPDOS, TPDOS).await?;
 
+        info!("Sending Command Disable");
+        drive
+            .cmd_tx
+            .send(MotorCommand::Disable)
+            .map_err(DriveError::CommandError)?;
+
+        tokio::time::sleep(Duration::from_millis(5000)).await;
+
+        info!("Sending Command Enable");
         drive
             .cmd_tx
             .send(MotorCommand::Enable)
             .map_err(DriveError::CommandError)?;
 
-        tokio::time::sleep(Duration::from_millis(1000)).await;
-
-        drive
-            .cmd_tx
-            .send(MotorCommand::Disable)
-            .map_err(DriveError::CommandError)?;
-        tokio::time::sleep(Duration::from_millis(10000)).await;
+        tokio::time::sleep(Duration::from_millis(5000)).await;
 
         Ok(())
     }
