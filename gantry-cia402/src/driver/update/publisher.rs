@@ -9,8 +9,10 @@ use crate::{
     driver::{
         command::MotorCommand,
         oms::{
-            HomeFlags, HomingSetpoint, PositionModeFlags, PositionSetpoint, TorqueSetpoint,
-            VelocitySetpoint,
+            home::{HomeFlags, HomingSetpoint},
+            position::{PositionModeFlags, PositionSetpoint},
+            torque::TorqueSetpoint,
+            velocity::VelocitySetpoint,
         },
         state::Cia402Flags,
     },

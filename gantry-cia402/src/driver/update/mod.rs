@@ -4,7 +4,7 @@ use thiserror::Error;
 use tracing::info;
 
 use crate::driver::{
-    oms::{HomeFlags, PositionModeFlags},
+    oms::{home::HomeFlags, position::PositionModeFlags},
     state::{Cia402Flags, Cia402State},
 };
 

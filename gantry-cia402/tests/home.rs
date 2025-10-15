@@ -35,12 +35,6 @@ mod tests {
         info!("Initializing Cia402Driver for motor driver at node id {node_id}");
         let drive = Cia402Driver::init(node_id, canopen.clone(), PARAMS, RPDOS, TPDOS).await?;
 
-        info!("Sending Command Disable");
-        drive
-            .cmd_tx
-            .send(MotorCommand::Disable)
-            .map_err(DriveError::CommandError)?;
-
         info!("Wait for Cia402State::ReadyToSwitchOn");
         wait_for_event(
             drive.event_rx.resubscribe(),
@@ -62,6 +56,14 @@ mod tests {
             TIMEOUT,
         )
         .await?;
+
+        info!("Sending Home command");
+        drive
+            .cmd_tx
+            .send(MotorCommand::Home)
+            .map_err(DriveError::CommandError)?;
+
+        tokio::time::sleep(Duration::from_millis(2500)).await;
 
         Ok(())
     }

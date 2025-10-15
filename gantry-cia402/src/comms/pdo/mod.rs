@@ -13,7 +13,10 @@ use crate::comms::pdo::mapping::custom::RPDO_TARGET_POS;
 use crate::comms::pdo::mapping::custom::RPDO_TARGET_TORQUE;
 use crate::comms::pdo::mapping::custom::RPDO_TARGET_VEL;
 use crate::comms::pdo::mapping::custom::get_dlc;
-use crate::driver::oms::HomingSetpoint;
+use crate::driver::oms::home::*;
+use crate::driver::oms::position::*;
+use crate::driver::oms::torque::*;
+use crate::driver::oms::velocity::*;
 use crate::od;
 use std::time::Duration;
 
@@ -24,13 +27,14 @@ use oze_canopen::{
 };
 use tracing::*;
 
+use crate::driver::oms::home::*;
+use crate::driver::oms::position::*;
+use crate::driver::oms::torque::*;
+use crate::driver::oms::velocity::*;
+
 use crate::{
     comms::pdo::frame::PdoFrame,
-    driver::{
-        oms::{OperationMode, PositionSetpoint, TorqueSetpoint, VelocitySetpoint},
-        state::Cia402Flags,
-        update::ControlWord,
-    },
+    driver::{oms::OperationMode, state::Cia402Flags, update::ControlWord},
     error::DriveError,
     od::entry::ODEntry,
 };
@@ -185,8 +189,9 @@ impl Pdo {
         &mut self,
         HomingSetpoint { flags }: HomingSetpoint,
     ) -> Result<(), DriveError> {
-        // 1. Construct RPDO1: Set opmode to homing and toggle control_word Homing bits
+        trace!("Writing homing setpoint with flags {flags:?}");
 
+        // 1. Construct RPDO1: Set opmode to homing and toggle control_word Homing bits
         // 1.A Set Position Mode
         self.set_operational_mode(OperationMode::Homing);
 

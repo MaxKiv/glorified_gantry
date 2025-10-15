@@ -253,6 +253,8 @@ async fn handle_tpdo1(
         Ok(opmode) => {
             // Send operational mode update
             send_update(MotorEvent::OperationModeUpdate(opmode), event_tx);
+
+            // Parse Operational Mode Specific bits
         }
         Err(err) => {
             error!("Unable to read operational mode from TPDO1: {err}");
