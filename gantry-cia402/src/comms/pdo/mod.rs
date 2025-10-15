@@ -81,6 +81,8 @@ impl Pdo {
 
         // Set the cia402 controlword bits to represent the requested state
         let mut cw = self.get_current_controlword();
+        trace!("Fetched current controlword: {cw:?}");
+
         cw = cw.with_cia402_flags(flags);
         self.set_controlword_rpdo(cw);
 
@@ -195,13 +197,21 @@ impl Pdo {
         // 1.A Set Position Mode
         self.set_operational_mode(OperationMode::Homing);
 
+        trace!("Set Operation Mode Homing in RPDO1");
+
         // 1.B Set controlword homing bits
         let mut cw = self.get_current_controlword();
+        trace!("Fetched current controlword: {cw:?}");
+
         cw = cw.with_home_flags(flags);
         self.set_controlword_rpdo(cw);
 
+        trace!("Added homing flags to controlword: {cw:?} - sending RPDO1");
+
         // Send RPDO1
         self.send_rpdo(RPDO_CONTROL_OPMODE).await?;
+
+        trace!("RPDO1 sent succesfully to effect homing setpoint");
 
         Ok(())
     }
@@ -238,12 +248,17 @@ impl Pdo {
 
     /// Gets current control word
     fn get_current_controlword(&self) -> ControlWord {
-        // TODO: hardcoded
+        let PdoType::RPDO(num) = RPDO_CONTROL_OPMODE.pdo else {
+            panic!("Controlword is not mapped to RPDO");
+        };
+        let cw_idx = (num - 1) as usize;
+
         let cw_bytes = [
-            self.rpdo_frames[RPDO_IDX_CONTROL_WORD].data[0],
-            self.rpdo_frames[RPDO_IDX_CONTROL_WORD].data[1],
+            self.rpdo_frames[cw_idx].data[0],
+            self.rpdo_frames[cw_idx].data[1],
         ];
-        ControlWord::from_bits(u16::from_be_bytes(cw_bytes)).expect(
+
+        ControlWord::from_bits(u16::from_le_bytes(cw_bytes)).expect(
             "unable to fetch current controlword from saved RPDO1 in write_position_setpoint",
         )
     }
@@ -300,26 +315,33 @@ impl Pdo {
         };
         let cw_idx = (num - 1) as usize;
 
+        let cw_bytes = cw.bits().to_be_bytes();
+
         info!("setting controlword rpdo #{num} to new cw: {cw:?}");
         self.rpdo_frames[cw_idx].set(
             RPDO_CONTROL_OPMODE.sources[RPDO_IDX_CONTROL_WORD]
                 .bit_range
                 .start as usize,
-            &cw.bits().to_le_bytes(),
+            &cw_bytes,
         );
     }
 
     fn set_operational_mode(&mut self, mode: OperationMode) {
+        trace!("setting operational mode to {mode:?}");
+
         const OPMODE_IDX: usize = 1;
+        const OPMODE_OFFSET: usize = 2;
 
         let PdoType::RPDO(num) = RPDO_CONTROL_OPMODE.pdo else {
-            panic!("Controlword is not mapped to RPDO");
+            panic!("OPMODE is not mapped to RPDO");
         };
         let idx = (num - 1) as usize;
 
-        self.rpdo_frames[idx].set(
-            RPDO_CONTROL_OPMODE.sources[RPDO_IDX_OPMODE].bit_range.start as usize,
-            &[mode as u8],
+        self.rpdo_frames[idx].set(OPMODE_OFFSET, &[mode as u8]);
+
+        trace!(
+            "Operational mode {mode:?} applied to rpdo_frame: {:?}",
+            self.rpdo_frames[idx]
         );
     }
 }

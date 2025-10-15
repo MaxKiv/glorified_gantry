@@ -1,9 +1,10 @@
 # TODO
 
-- Give every motor a String name, derive it from node_id by default
+- Statusword feedback bit 10: target reached is parsed twice, move to a single location
 
-- Fuzz test orchestrator state transitions, this can be done in isolation
-  without CAN, easy wins
+- make function that checks sdo transaction success
+
+- Give every motor a String name, derive it from node_id by default
 
 - Parse R/TPDO mapping at configuration time or encode into type system. current hardcode setup is brittle
 
@@ -12,6 +13,12 @@
 
 - All R/TPDO code makes heavy assumptions on the R/TPDO mapping, which makes it
   hard to change anything. Generalising would be better.
+
+- Make error handling uniform across the driver
+
+- Unit test applicable logic, like bit fiddling/merging
+
+- Fuzz test orchestrator state orchestrator/machine, this can be done in isolation without CAN, easy wins
 
 # Set up physical CAN
 

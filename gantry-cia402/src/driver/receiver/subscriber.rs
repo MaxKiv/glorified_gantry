@@ -10,10 +10,13 @@ use crate::{
     driver::{
         event::MotorEvent,
         nmt::NmtState,
-        oms::OperationMode,
+        oms::{
+            OperationMode, home::HomeFlagsSW, position::PositionFlagsSW, torque::TorqueFlagsSW,
+            velocity::VelocityFlagsSW,
+        },
         receiver::{
             error::ReceiverError,
-            parse::{Frame, MessageType, ParseError, pdo_message::*},
+            parse::{Frame, MessageType, pdo_message::*},
             *,
         },
         state::{Cia402Flags, Cia402State},
@@ -233,7 +236,7 @@ async fn handle_tpdo1(
     assert!(tpdomessage.dlc == 3);
 
     // 1. Decode statusword
-    match read_statusword(&tpdomessage.data) {
+    let sw = match read_statusword(&tpdomessage.data) {
         Ok(statusword) => {
             // Parse NMT bits
             let new_nmt_state: NmtState = statusword.into();
@@ -242,11 +245,14 @@ async fn handle_tpdo1(
 
             // Send rest of statusword to subscribers
             send_update(MotorEvent::StatusWord(statusword), event_tx);
+
+            Some(statusword)
         }
         Err(err) => {
             error!("Error reading statusword from TPDO1: {err}");
+            None
         }
-    }
+    };
 
     // 2. Decode actual mode of operation
     match read_operational_mode(&tpdomessage.data) {
@@ -255,10 +261,49 @@ async fn handle_tpdo1(
             send_update(MotorEvent::OperationModeUpdate(opmode), event_tx);
 
             // Parse Operational Mode Specific bits
+            if let Some(statusword) = sw {
+                parse_oms_statusword_bits(opmode, statusword, event_tx);
+            }
         }
         Err(err) => {
             error!("Unable to read operational mode from TPDO1: {err}");
         }
+    }
+}
+
+fn parse_oms_statusword_bits(
+    opmode: OperationMode,
+    statusword: StatusWord,
+    event_tx: &broadcast::Sender<MotorEvent>,
+) {
+    // Parse Operation Mode Specific bits of the statusword
+    let event = match opmode {
+        OperationMode::ProfilePosition => {
+            let flags = PositionFlagsSW::from_status(statusword);
+            Some(flags.into_event())
+        }
+        OperationMode::ProfileVelocity => {
+            let flags = VelocityFlagsSW::from_status(statusword);
+            Some(flags.into_event())
+        }
+        OperationMode::ProfileTorque => {
+            let flags = TorqueFlagsSW::from_status(statusword);
+            Some(flags.into_event())
+        }
+        OperationMode::Homing => {
+            let flags = HomeFlagsSW::from_status(statusword);
+            Some(flags.into_event())
+        }
+        _ => {
+            trace!("No specific statusword parsing for current opmode {opmode:?}");
+            None
+        }
+    };
+
+    // Send anything interesting along
+    if let Some(event) = event {
+        trace!("Sending OMS event: {event:?}");
+        send_update(event, event_tx);
     }
 }
 

@@ -38,7 +38,6 @@ bitflags::bitflags! {
         const SWITCH_ON_DISABLED   = 1 << 6;
         /// Bit 7: Warning
         const WARNING              = 1 << 7;
-
         /// Bit 8: Manufacturer specific
         const MANUFACTURER_1       = 1 << 8;
         /// Bit 9: Remote (drive is under control via fieldbus)
@@ -47,15 +46,14 @@ bitflags::bitflags! {
         const TARGET_REACHED       = 1 << 10;
         /// Bit 11: Internal limit active
         const INTERNAL_LIMIT       = 1 << 11;
-
-        /// Bit 12: Manufacturer specific
-        const MANUFACTURER_2       = 1 << 12;
-        /// Bit 13: Manufacturer specific
-        const MANUFACTURER_3       = 1 << 13;
+        /// Bit 12: Operation mode specific
+        const OMS_1                = 1 << 12;
+        /// Bit 13: Operation mode specific
+        const OMS_2                = 1 << 13;
         /// Bit 14: Manufacturer specific
-        const MANUFACTURER_4       = 1 << 14;
-        /// Bit 15: Manufacturer specific
-        const MANUFACTURER_5       = 1 << 15;
+        const RESERVED             = 1 << 14;
+        /// Bit 15: Controller is in the operation enabled state & the closed-loop mode is activated
+        const CLOSED_LOOP_ACTIVE   = 1 << 15;
     }
 }
 

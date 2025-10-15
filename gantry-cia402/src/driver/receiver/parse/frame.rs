@@ -75,7 +75,7 @@ impl TryFrom<RxMessage> for Frame {
                 (node_id, MessageType::EMCY(EmergencyMessage { error }))
             }
 
-            // TPDO1..4 (0x180 + n*0x200)
+            // T/RPDO1..4 (0x180 + n*0x200)
             0x180..=0x57F => {
                 let (kind, base) = match id {
                     0x180..=0x1FF => (PdoType::TPDO(1), 0x180),

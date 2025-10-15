@@ -9,8 +9,8 @@ use crate::{
     driver::{
         command::MotorCommand,
         oms::{
-            home::{HomeFlags, HomingSetpoint},
-            position::{PositionModeFlags, PositionSetpoint},
+            home::{HomeFlagsCW, HomingSetpoint},
+            position::{PositionModeFlagsCW, PositionSetpoint},
             torque::TorqueSetpoint,
             velocity::VelocitySetpoint,
         },
@@ -48,26 +48,26 @@ pub async fn publish_updates(
                 if let Err(err) = match cmd {
                     MotorCommand::Halt => {
                         pdo.write_position_setpoint(PositionSetpoint {
-                            flags: PositionModeFlags::halt(),
+                            flags: PositionModeFlagsCW::halt(),
                             target: 0,
                             profile_velocity: 0,
                         }).await
                     }
                     MotorCommand::Home => {
                         pdo.write_homing_setpoint(HomingSetpoint {
-                            flags: HomeFlags::default(),
+                            flags: HomeFlagsCW::default(),
                         }).await
                     },
                     MotorCommand::MoveAbsolute { target, profile_velocity } => {
                         pdo.write_position_setpoint(PositionSetpoint {
-                            flags: PositionModeFlags::absolute(),
+                            flags: PositionModeFlagsCW::absolute(),
                             target,
                             profile_velocity
                         }).await
                     },
                     MotorCommand::MoveRelative { delta, profile_velocity } => {
                         pdo.write_position_setpoint(PositionSetpoint {
-                            flags: PositionModeFlags::relative(),
+                            flags: PositionModeFlagsCW::relative(),
                             target: delta,
                             profile_velocity
                         }).await

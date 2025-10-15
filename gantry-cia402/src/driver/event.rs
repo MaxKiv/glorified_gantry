@@ -32,6 +32,31 @@ pub enum MotorEvent {
     /// Torque feedback
     TorqueFeedback { actual_torque: i16 },
 
+    /// Homing feedback
+    /// Simplification of datasheet page 71
+    HomingFeedback {
+        at_home: bool,
+        homing_completed: bool,
+        homing_error: bool,
+    },
+
+    /// Position mode feedback
+    PositionModeFeedback {
+        target_reached: bool,
+        limit_exceeded: bool,
+        setpoint_acknowlegde: bool,
+        following_error: bool,
+    },
+
+    /// Velocity mode feedback
+    VelocityModeFeedback {
+        speed_is_zero: bool,
+        deviation_error: bool,
+    },
+
+    /// Torque mode feedback
+    TorqueModeFeedback { limit_exceeded: bool },
+
     /// Fault detected (e.g. fault bit set in statusword)
     Fault { code: u16, description: String },
 

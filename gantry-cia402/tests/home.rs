@@ -63,7 +63,17 @@ mod tests {
             .send(MotorCommand::Home)
             .map_err(DriveError::CommandError)?;
 
-        tokio::time::sleep(Duration::from_millis(2500)).await;
+        info!("Wait for Homing completed event");
+        wait_for_event(
+            drive.event_rx.resubscribe(),
+            MotorEvent::HomingFeedback {
+                at_home: true,
+                homing_completed: true,
+                homing_error: false,
+            },
+            TIMEOUT,
+        )
+        .await?;
 
         Ok(())
     }
