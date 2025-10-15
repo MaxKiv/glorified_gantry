@@ -128,7 +128,7 @@ impl Cia402Driver {
         // Initialize the Cia402 Orchestrator -> State Machine command channel
         let (sm_cmd_tx, sm_cmd_rx) = tokio::sync::mpsc::channel(10);
         // Initialize the State machine -> Orchestrator state feedback channel
-        let (sm_state_tx, sm_state_rx) = tokio::sync::mpsc::channel(10);
+        let (sm_state_tx, sm_state_rx) = tokio::sync::broadcast::channel(10);
 
         // Initialize Cia402 Task -> Publisher channel
         let (state_update_tx, state_update_rx) = tokio::sync::mpsc::channel(10);

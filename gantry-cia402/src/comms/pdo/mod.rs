@@ -295,7 +295,7 @@ impl Pdo {
         };
         let cw_idx = (num - 1) as usize;
 
-        warn!("setting controlword rpdo #{num} to new cw: {cw:?}");
+        info!("setting controlword rpdo #{num} to new cw: {cw:?}");
         self.rpdo_frames[cw_idx].set(
             RPDO_CONTROL_OPMODE.sources[RPDO_IDX_CONTROL_WORD]
                 .bit_range

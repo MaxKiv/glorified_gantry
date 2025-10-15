@@ -89,7 +89,7 @@ mod tests {
             .await
             .map_err(|err| format!("Error during RPDO mapping configuration: {err}").to_string())?;
 
-        warn!("Configuring TPDO_mapping of motor at node id {node_id}");
+        info!("Configuring TPDO_mapping of motor at node id {node_id}");
         configure_pdo_mappings(node_id, sdo.clone(), TPDOS)
             .await
             .map_err(|err| format!("Error during TPDO mapping configuration: {err}").to_string())?;

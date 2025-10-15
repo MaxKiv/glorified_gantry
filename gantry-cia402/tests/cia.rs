@@ -23,7 +23,8 @@ mod tests {
     use super::*;
 
     #[tokio::test]
-    async fn test_homing() -> Result<(), DriveError> {
+    /// Test basic cia402 state transitions
+    async fn test_cia402() -> Result<(), DriveError> {
         gantry_demo::setup_tracing();
 
         let node_id = NODE_ID;
@@ -40,13 +41,13 @@ mod tests {
             .send(MotorCommand::Disable)
             .map_err(DriveError::CommandError)?;
 
-        // info!("Wait for Cia402State::SwitchOnDisabled");
-        // wait_for_event(
-        //     drive.event_rx.resubscribe(),
-        //     MotorEvent::Cia402StateUpdate(Cia402State::SwitchOnDisabled),
-        //     TIMEOUT,
-        // )
-        // .await?;
+        info!("Wait for Cia402State::SwitchOnDisabled");
+        wait_for_event(
+            drive.event_rx.resubscribe(),
+            MotorEvent::Cia402StateUpdate(Cia402State::SwitchOnDisabled),
+            TIMEOUT,
+        )
+        .await?;
 
         info!("Sending Command Enable");
         drive

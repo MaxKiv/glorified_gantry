@@ -32,8 +32,8 @@ bitflags::bitflags! {
         const FAULT                = 1 << 3;
         /// Bit 4: Voltage enabled
         const VOLTAGE_ENABLED      = 1 << 4;
-        /// Bit 5: Quick stop
-        const QUICK_STOP           = 1 << 5;
+        /// Bit 5: Quick stop enabled
+        const QUICK_STOP_ENABLED   = 1 << 5;
         /// Bit 6: Switch on disabled
         const SWITCH_ON_DISABLED   = 1 << 6;
         /// Bit 7: Warning

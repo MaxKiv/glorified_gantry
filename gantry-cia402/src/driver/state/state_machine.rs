@@ -40,7 +40,7 @@ impl Cia402StateMachine {
 pub async fn cia402_state_machine_task(
     mut event_rx: broadcast::Receiver<MotorEvent>,
     state_update_tx: mpsc::Sender<Cia402Flags>,
-    sm_state_tx: mpsc::Sender<Cia402State>,
+    sm_state_tx: broadcast::Sender<Cia402State>,
     mut sm_cmd_rx: mpsc::Receiver<Cia402State>,
     event_tx: broadcast::Sender<MotorEvent>,
 ) {
@@ -58,7 +58,7 @@ pub async fn cia402_state_machine_task(
                     );
 
                     // Notify the cia402 orchestrator
-                    if let Err(err) = sm_state_tx.send(state).await {
+                    if let Err(err) = sm_state_tx.send(state) {
                         error!("Unable to send cia402 state update event: {err}");
                     } else {
                         trace!("cia402 SM send state update to orchestrator: {state:?}")
@@ -114,7 +114,7 @@ pub async fn cia402_state_machine_task(
                             );
 
                             // Notify the cia402 orchestrator
-                            if let Err(err) = sm_state_tx.send(new_state).await {
+                            if let Err(err) = sm_state_tx.send(new_state){
                                 error!(
                                     "Unable to send cia402 state update event: {err}"
                                 );

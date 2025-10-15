@@ -2,7 +2,8 @@
 
 - Give every motor a String name, derive it from node_id by default
 
-- Orchestrate task spawning, at least make startup task run first
+- Fuzz test orchestrator state transitions, this can be done in isolation
+  without CAN, easy wins
 
 - Parse R/TPDO mapping at configuration time or encode into type system. current hardcode setup is brittle
 
