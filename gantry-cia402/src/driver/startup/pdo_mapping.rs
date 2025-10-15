@@ -124,7 +124,7 @@ async fn set_pdo_mapping(
     {
         // Configure a periodic event to continously synchronise the driver with the latest device
         // state
-        const SYNCHRONISATION_PERIOD_MS: u16 = 100;
+        const SYNCHRONISATION_PERIOD_MS: u16 = 500;
         const SYNCHRONISATION_SUB_IDX: u8 = 0x05;
 
         trace!(

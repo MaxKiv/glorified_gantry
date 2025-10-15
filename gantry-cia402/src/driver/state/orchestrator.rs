@@ -18,32 +18,19 @@ pub async fn cia402_orchestrator_task(
     mut sm_state_rx: mpsc::Receiver<Cia402State>,
     mut cmd_rx: broadcast::Receiver<MotorCommand>,
 ) {
-    // We keep track of current known cia402 state
-    let mut current_state: Option<Cia402State> = None;
-    trace!("Orchestrator task started");
+    trace!("Orchestrator task started; waiting for initial state from SM task");
 
-    trace!("Orchestrator task started; waiting for first state (10s timeout)");
-    match timeout(Duration::from_secs(10), sm_state_rx.recv()).await {
-        Ok(Some(state)) => {
-            current_state = Some(state);
-            trace!("Orchestrator: got initial state {:?}", current_state);
+    // We keep track of the current cia402 State machine state
+    let mut current_state = loop {
+        if let Some(state) = sm_state_rx.recv().await {
+            break state;
         }
-        Ok(None) => {
-            error!("Orchestrator: sm_state_rx closed (no senders).");
-            return;
-        }
-        Err(_) => {
-            error!("Orchestrator: timed out waiting for an initial Cia402State.");
-            // continue anyway or return depending on policy
-            return;
-        }
-    }
+    };
 
     trace!(
-        "Orchestrator task received initial cia402 state update ({current_state:?}), starting main routine"
+        "Cia402 Orchestrator received initial state from SM task: {:?} - Starting main cia402 orchestrator routine",
+        current_state
     );
-    let mut current_state = current_state
-        .expect("No current state after receiving one in orchestrator startup, wildy improbable!");
 
     // Subscribe to updates from the state machine
     loop {

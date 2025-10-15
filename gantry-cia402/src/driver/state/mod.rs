@@ -30,18 +30,23 @@ impl TryFrom<StatusWord> for Cia402State {
 
     // Extract relevant bits according to datasheet page 47
     fn try_from(status: StatusWord) -> Result<Self, Self::Error> {
-        // Mask bits 0–6
-        const MASK: u16 = 0b11_1111;
+        // Mask bits - see datasheet page 336
+        const MASK: u16 = 0b110_1111;
+
+        trace!(
+            "parsing status: {status:?} (bits: {:#0b}) into Cia402State",
+            status.bits()
+        );
 
         Ok(match status.bits() & MASK {
-            0x0000 => Cia402State::NotReadyToSwitchOn,
-            0x0040 => Cia402State::SwitchOnDisabled,
-            0x0021 => Cia402State::ReadyToSwitchOn,
-            0x0023 => Cia402State::SwitchedOn,
-            0x0027 => Cia402State::OperationEnabled,
-            0x0007 => Cia402State::QuickStopActive,
-            0x000F => Cia402State::FaultReactionActive,
-            0x0008 => Cia402State::Fault,
+            0b000_0000 => Cia402State::NotReadyToSwitchOn,
+            0b100_0000 => Cia402State::SwitchOnDisabled,
+            0b010_0001 => Cia402State::ReadyToSwitchOn,
+            0b010_0011 => Cia402State::SwitchedOn,
+            0b010_0111 => Cia402State::OperationEnabled,
+            0b000_0111 => Cia402State::QuickStopActive,
+            0b000_1111 => Cia402State::FaultReactionActive,
+            0b000_1000 => Cia402State::Fault,
             _ => return Err(DriveError::Cia402StateDecode(status)),
         })
     }

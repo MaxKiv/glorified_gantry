@@ -1,6 +1,6 @@
 use thiserror::Error;
 
-use crate::driver::receiver::parse::{RPDOMessage, TPDOMessage};
+use crate::driver::receiver::parse::{RPDOMessage, TPDOMessage, pdo_message::ParsedPDO};
 
 #[derive(Debug, Error)]
 pub enum ReceiverError {
@@ -10,4 +10,6 @@ pub enum ReceiverError {
     UnknownTPDO(TPDOMessage),
     #[error("Received unknown / unmapped RPDO: {0:?}")]
     UnknownRPDO(RPDOMessage),
+    #[error("Received unknown / unmapped PDO: {0:?}")]
+    UnknownPDO(ParsedPDO),
 }

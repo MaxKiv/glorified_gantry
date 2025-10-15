@@ -13,7 +13,7 @@ use crate::{
         oms::OperationMode,
         receiver::{
             error::ReceiverError,
-            parse::{Frame, MessageType, ParseError},
+            parse::{Frame, MessageType, ParseError, pdo_message::*},
             *,
         },
         state::{Cia402Flags, Cia402State},
@@ -33,8 +33,8 @@ pub async fn handle_feedback(
     trace!("Starting feedback handling loop");
 
     loop {
-        match canopen.rx.recv().await {
-            Ok(message) => {
+        match tokio::time::timeout(Duration::from_secs(2), canopen.clone().rx.recv()).await {
+            Ok(Ok(message)) => {
                 let span = span!(Level::TRACE, "receiver");
                 let _enter = span.enter();
 
@@ -52,6 +52,7 @@ pub async fn handle_feedback(
                     .node_id
                     .is_some_and(|message_id| message_id == this_node_id)
                 {
+                    trace!("message {message:?} is for this node {this_node_id} - processing");
                     // Our node talked, you love to see it
                     last_seen = Instant::now();
 
@@ -64,6 +65,8 @@ pub async fn handle_feedback(
                             parsed.message
                         );
                     }
+                } else {
+                    trace!("message not for node {this_node_id}: {message:?} - skipping")
                 }
 
                 if Instant::now() - last_seen > COMMS_TIMEOUT
@@ -72,8 +75,14 @@ pub async fn handle_feedback(
                     error!("Unable to broadcast CommunicationLost message: {err}");
                 }
             }
-            Err(err) => {
-                error!("Error while trying to receive raw can frame: {err}");
+            Ok(Err(err)) => {
+                error!("feedback error: {err}");
+            }
+            Err(_) => {
+                error!(
+                    "feedback idle >2s, this might indicate a stalled receiver -> resubscribing"
+                );
+                canopen.rx = canopen.rx.resubscribe();
             }
         }
     }
@@ -100,18 +109,51 @@ async fn handle_message(
         MessageType::TPDO(tpdomessage) => {
             handle_tpdo(tpdomessage, tpdo_mapping, event_tx).await?;
         }
-
         MessageType::RPDO(_) => {
             // We sent this: Ignore
+        }
+        MessageType::PDO(parsed_pdo) => {
+            handle_parsed_pdo(parsed_pdo, event_tx).await;
         }
         MessageType::NmtMonitor(nmt_monitor_message) => {
             handle_nmt_monitor(nmt_monitor_message, event_tx).await;
         }
         // SYNC and UNKNOWN are both not addressed to a single node, we not adress those here: Ignore
-        _ => unreachable!(),
+        MessageType::Sync(_) | MessageType::Unknown(_) => {
+            // Not for us: Ignore
+        }
     };
 
     Ok(())
+}
+
+async fn handle_parsed_pdo(
+    parsed_pdo: &parse::pdo_message::ParsedPDO,
+    event_tx: &broadcast::Sender<MotorEvent>,
+) {
+    match &parsed_pdo.message {
+        parse::pdo_message::PDOMessage::TPDO1(tpdo1_message) => {
+            handle_parsed_tpdo1(tpdo1_message, event_tx).await;
+        }
+        parse::pdo_message::PDOMessage::TPDO2(tpdo2_message) => {
+            handle_parsed_tpdo2(tpdo2_message, event_tx).await;
+        }
+        parse::pdo_message::PDOMessage::TPDO3(tpdo3_message) => {
+            handle_parsed_tpdo3(tpdo3_message, event_tx).await;
+        }
+        parse::pdo_message::PDOMessage::TPDO4(tpdo4_message) => {
+            // TPDO4 is unmapped
+            warn!(
+                "Received TPDO4: {tpdo4_message:?}, however this should be unmapped 🤔, ignoring..."
+            );
+        }
+        parse::pdo_message::PDOMessage::Raw(raw_pdomessage) => {
+            warn!("Received weird parsed pdo: {raw_pdomessage:?}, ignoring...");
+        }
+        _ => {
+            // RPDO messages are sent by us, purposfully ignored here
+        }
+    }
 }
 
 async fn handle_sdo_response(
@@ -164,6 +206,25 @@ async fn handle_nmt_monitor(
     );
 }
 
+async fn handle_parsed_tpdo1(
+    tpdo1_message: &TPDO1Message,
+    event_tx: &broadcast::Sender<MotorEvent>,
+) {
+    // Parse NMT bits
+    let new_nmt_state: NmtState = tpdo1_message.statusword.into();
+    // Send fresh NMT state to subscribers
+    send_update(MotorEvent::NmtStateUpdate(new_nmt_state), event_tx);
+
+    // Send rest of statusword to subscribers
+    send_update(MotorEvent::StatusWord(tpdo1_message.statusword), event_tx);
+
+    // Send operational mode update
+    send_update(
+        MotorEvent::OperationModeUpdate(tpdo1_message.actual_opmode),
+        event_tx,
+    );
+}
+
 async fn handle_tpdo1(
     tpdomessage: &parse::TPDOMessage,
     tpdo1_mapping: &PdoMapping,
@@ -197,6 +258,27 @@ async fn handle_tpdo1(
             error!("Unable to read operational mode from TPDO1: {err}");
         }
     }
+}
+
+async fn handle_parsed_tpdo2(
+    tpdo2_message: &TPDO2Message,
+    event_tx: &broadcast::Sender<MotorEvent>,
+) {
+    // Send actual position update
+    send_update(
+        MotorEvent::PositionFeedback {
+            actual_position: tpdo2_message.actual_pos,
+        },
+        event_tx,
+    );
+
+    // Send actual velocity update
+    send_update(
+        MotorEvent::VelocityFeedback {
+            actual_velocity: tpdo2_message.actual_vel,
+        },
+        event_tx,
+    );
 }
 
 async fn handle_tpdo2(
@@ -235,6 +317,19 @@ async fn handle_tpdo2(
             error!("Error reading actual velocity: {err}");
         }
     }
+}
+
+async fn handle_parsed_tpdo3(
+    tpdo3_message: &TPDO3Message,
+    event_tx: &broadcast::Sender<MotorEvent>,
+) {
+    // Send actual torque update
+    send_update(
+        MotorEvent::TorqueFeedback {
+            actual_torque: tpdo3_message.actual_torque,
+        },
+        event_tx,
+    );
 }
 
 async fn handle_tpdo3(

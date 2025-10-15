@@ -10,12 +10,15 @@ mod tests {
 
     use gantry_cia402::{
         comms::pdo::mapping::custom::CUSTOM_TPDOS,
-        driver::{Cia402Driver, command::MotorCommand},
+        driver::{
+            Cia402Driver, command::MotorCommand, event::MotorEvent,
+            receiver::subscriber::wait_for_event, state::Cia402State,
+        },
         error::DriveError,
         log::log_events,
     };
 
-    use crate::common::{NODE_ID, PARAMS, RPDOS, TPDOS, start_feedback_task};
+    use crate::common::{NODE_ID, PARAMS, RPDOS, TIMEOUT, TPDOS, start_feedback_task};
 
     use super::*;
 
@@ -37,7 +40,13 @@ mod tests {
             .send(MotorCommand::Disable)
             .map_err(DriveError::CommandError)?;
 
-        tokio::time::sleep(Duration::from_millis(5000)).await;
+        // info!("Wait for Cia402State::SwitchOnDisabled");
+        // wait_for_event(
+        //     drive.event_rx.resubscribe(),
+        //     MotorEvent::Cia402StateUpdate(Cia402State::SwitchOnDisabled),
+        //     TIMEOUT,
+        // )
+        // .await?;
 
         info!("Sending Command Enable");
         drive
@@ -45,7 +54,13 @@ mod tests {
             .send(MotorCommand::Enable)
             .map_err(DriveError::CommandError)?;
 
-        tokio::time::sleep(Duration::from_millis(5000)).await;
+        info!("Wait for Cia402State::OperationEnabled");
+        wait_for_event(
+            drive.event_rx.resubscribe(),
+            MotorEvent::Cia402StateUpdate(Cia402State::OperationEnabled),
+            TIMEOUT,
+        )
+        .await?;
 
         Ok(())
     }

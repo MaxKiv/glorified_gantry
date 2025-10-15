@@ -42,11 +42,45 @@ pub async fn cia402_state_machine_task(
     state_update_tx: mpsc::Sender<Cia402Flags>,
     sm_state_tx: mpsc::Sender<Cia402State>,
     mut sm_cmd_rx: mpsc::Receiver<Cia402State>,
-    mut event_tx: broadcast::Sender<MotorEvent>,
+    event_tx: broadcast::Sender<MotorEvent>,
 ) {
+    trace!("Cia402 SM task started - waiting on initial state");
+
     let mut sm = Cia402StateMachine {
-        state: Cia402State::SwitchOnDisabled,
+        state: loop {
+            if let Ok(MotorEvent::StatusWord(sw)) = event_rx.recv().await {
+                trace!("Cia402 SM received initial state update event: {sw:?}");
+
+                // Parse it into a Cia402State
+                if let Ok(state) = sw.try_into() {
+                    trace!(
+                        "Cia402 SM parsed initial state update event: {sw:?} into Cia402State: {state:?}"
+                    );
+
+                    // Notify the cia402 orchestrator
+                    if let Err(err) = sm_state_tx.send(state).await {
+                        error!("Unable to send cia402 state update event: {err}");
+                    } else {
+                        trace!("cia402 SM send state update to orchestrator: {state:?}")
+                    }
+
+                    // Bonus: Notify event loop of the new Cia402 state
+                    // This is not strictly required, but nice for [`log::log_events`]
+                    if let Err(err) = event_tx.send(MotorEvent::Cia402StateUpdate(state)) {
+                        error!("Unable to send cia402 state update event: {err}");
+                    }
+
+                    // Initial state received, continue with main routine
+                    break state;
+                }
+            }
+        },
     };
+
+    trace!(
+        "Cia402 SM received initial state from device: {:?} - Starting main cia402 state machine routine",
+        sm.state
+    );
 
     loop {
         tokio::select! {

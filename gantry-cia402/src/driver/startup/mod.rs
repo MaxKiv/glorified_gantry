@@ -17,7 +17,6 @@ use crate::{
     driver::{
         event::MotorEvent,
         nmt::NmtState,
-        receiver::subscriber::wait_for_event,
         startup::{parametrise::parametrise_motor, pdo_mapping::configure_pdo_mappings},
     },
     error::DriveError,
@@ -35,7 +34,7 @@ pub async fn motor_startup_task(
     parameters: &[SdoAction<'_>],
     rpdo_mapping: &'static [PdoMapping],
     tpdo_mapping: &'static [PdoMapping],
-    mut event_rx: broadcast::Receiver<MotorEvent>,
+    event_rx: broadcast::Receiver<MotorEvent>,
 ) -> Result<(), DriveError> {
     trace!("Starting up motor at node id {node_id}");
 
@@ -166,26 +165,7 @@ pub async fn motor_startup_task(
             );
         }
     }
+    trace!("Device reporst NMT Opertional -> Startup Completed!");
 
     Ok(())
-}
-
-pub async fn switch_to_nmt(
-    state: NmtState,
-    node_id: u8,
-    nmt_tx: &mpsc::Sender<NmtState>,
-    event_rx: broadcast::Receiver<MotorEvent>,
-) -> Result<(), DriveError> {
-    trace!("Switching motor {node_id} to {:?}", state.clone());
-    nmt_tx
-        .send(state.clone())
-        .await
-        .map_err(|err| DriveError::NMTSendError(state.clone(), err))?;
-
-    wait_for_event(
-        event_rx,
-        MotorEvent::NmtStateUpdate(state.clone()),
-        NMT_SWITCH_TIMEOUT,
-    )
-    .await
 }

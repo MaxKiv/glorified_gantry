@@ -7,7 +7,7 @@ pub mod startup;
 pub mod state;
 pub mod update;
 
-use std::time::Duration;
+use std::sync::Arc;
 
 use crate::{
     comms::{
@@ -28,9 +28,9 @@ use crate::{
 };
 
 use anyhow::Result;
-use oze_canopen::interface::CanOpenInterface;
+use oze_canopen::{interface::CanOpenInterface, sdo_client::SdoClient};
 use tokio::{
-    sync::{broadcast, mpsc},
+    sync::{Mutex, broadcast, mpsc},
     task::{self, JoinHandle},
 };
 use tracing::*;
@@ -43,6 +43,7 @@ pub struct Cia402Driver {
     pub event_rx: broadcast::Receiver<MotorEvent>,
     canopen: CanOpenInterface,
     _handles: Vec<JoinHandle<()>>,
+    sdo: Arc<Mutex<SdoClient>>,
 }
 
 impl Cia402Driver {
@@ -80,19 +81,49 @@ impl Cia402Driver {
         let event_rx_nmt = event_rx.resubscribe();
         let event_rx_startup = event_rx.resubscribe();
         let event_rx_cia402 = event_rx.resubscribe();
+        let event_tx_feedback = event_tx.clone();
+        let event_tx_cia402_sm = event_tx.clone();
+
+        let cmd_rx_cia402_orch = cmd_rx.resubscribe();
+        let cmd_rx_publisher = cmd_rx.resubscribe();
+
+        let canopen_feedback = canopen.clone();
+        let canopen_nmt = canopen.clone();
+        // let canopen_logger = canopen.clone();
 
         // Initialize the event_logger
-        task::spawn(log_events(event_rx_logger, node_id));
+        handles.push(task::spawn(async move {
+            match log_events(event_rx_logger, node_id).await {
+                Ok(_) => error!("Event logger finished succesfully, this should never happen"),
+                Err(err) => error!("Event Logger panicked: {err}"),
+            }
+        }));
+
+        // trace!("Starting canopen pretty logger");
+        // handles.push(tokio::task::spawn(async move {
+        //     match crate::log::log_canopen_pretty(canopen_logger).await {
+        //         Ok(_) => {
+        //             error!("Update Publisher task finished succesfully, this should never happen")
+        //         }
+        //         Err(err) => {
+        //             error!("Update Publisher task panicked: {err}")
+        //         }
+        //     }
+        // }));
 
         // Start the device feedback task responsible for receiving and parsing device feedback,
         // and broadcasting these as events
         trace!("Starting device feedback handler for motor with node id {node_id}");
-        handles.push(task::spawn(handle_feedback(
-            node_id,
-            canopen.clone(),
-            tpdo_mapping_set,
-            event_tx.clone(),
-        )));
+        handles.push(task::spawn(async move {
+            handle_feedback(
+                node_id,
+                canopen_feedback,
+                tpdo_mapping_set,
+                event_tx_feedback,
+            )
+            .await;
+            error!("Feedback task finished succesfully, this should never happen");
+        }));
 
         // Initialize the Cia402 Orchestrator -> State Machine command channel
         let (sm_cmd_tx, sm_cmd_rx) = tokio::sync::mpsc::channel(10);
@@ -107,66 +138,76 @@ impl Cia402Driver {
 
         // Get the SDO client for this node id, we use this to make SDO read/writes
         let sdo = canopen
+            .clone()
             .get_sdo_client(node_id)
-            .unwrap_or_else(|| panic!("Unable to construct SDO client for node id {node_id}"));
+            .expect("Unable to construct SDO client for node id {node_id}");
 
         // Get the PDO client for this node id, we use this to manage R/TPDOs
         let pdo = Pdo::new(canopen.clone(), node_id, rpdo_mapping_set)
-            .unwrap_or_else(|_| panic!("unable to construct PDO client for node id {node_id}"));
+            .expect("unable to construct PDO client for node id {node_id}");
 
         // Start the NMT task
         trace!("Starting NMT State Machine task for motor with node id {node_id}");
-        handles.push(task::spawn(nmt_task(
-            node_id,
-            canopen.clone(),
-            nmt_rx,
-            event_rx_nmt,
-        )));
+        handles.push(task::spawn(async move {
+            nmt_task(node_id, canopen_nmt, nmt_rx, event_rx_nmt).await;
+            error!("NMT task finished succesfully, this should never happen");
+        }));
+
+        // Start the cia402 state machine task, this is responsible for
+        // tracking the motors current cia402 state and single transition
+        trace!("Starting Cia402 State Machine for motor with node id {node_id}");
+        handles.push(task::spawn(async move {
+            cia402_state_machine_task(
+                event_rx_cia402,
+                state_update_tx,
+                sm_state_tx,
+                sm_cmd_rx,
+                event_tx_cia402_sm,
+            )
+            .await;
+            error!("Cia402 State machine task finished succesfully, this should never happen");
+        }));
+
+        trace!("Starting Cia402 Orchestrator for motor with node id {node_id}");
+        handles.push(task::spawn(async move {
+            cia402_orchestrator_task(sm_cmd_tx, sm_state_rx, cmd_rx_cia402_orch).await;
+            error!("Cia402 Orchestrator task finished succesfully, this should never happen");
+        }));
+
+        // Start the publisher task, responsible for update aggregation and device communication
+        trace!("Starting update publisher task for motor with node id {node_id}");
+        handles.push(tokio::task::spawn(async move {
+            publish_updates(pdo, state_update_rx, cmd_rx_publisher).await;
+            error!("Update Publisher task finished succesfully, this should never happen");
+        }));
 
         // Start the startup task for this motor, this does parametrisation and configures pdo mapping
         trace!("Performing Startup for motor at node id {node_id}");
-        motor_startup_task(
+        if let Err(err) = motor_startup_task(
             node_id,
             nmt_tx.clone(),
-            sdo,
+            sdo.clone(),
             parameters,
             rpdo_mapping_set,
             tpdo_mapping_set,
             event_rx_startup,
         )
-        .await?;
+        .await
+        {
+            error!("Unable to perform startup for motor at node id {node_id}: {err}");
+            return Err(err);
+        }
+        trace!("Startup done for motor at node id {node_id}");
 
-        // Start the cia402 state machine task, this is responsible for
-        // tracking the motors current cia402 state and single transition
-        trace!("Starting Cia402 State Machine for motor with node id {node_id}");
-        handles.push(task::spawn(cia402_state_machine_task(
-            event_rx_cia402,
-            state_update_tx,
-            sm_state_tx,
-            sm_cmd_rx,
-            event_tx.clone(),
-        )));
-
-        trace!("Starting Cia402 Orchestrator for motor with node id {node_id}");
-        handles.push(task::spawn(cia402_orchestrator_task(
-            sm_cmd_tx,
-            sm_state_rx,
-            cmd_rx.resubscribe(),
-        )));
-
-        // Start the publisher task, responsible for update aggregation and device communication
-        trace!("Starting update publisher task for motor with node id {node_id}");
-        handles.push(tokio::task::spawn(publish_updates(
-            pdo,
-            state_update_rx,
-            cmd_rx,
-        )));
-
-        info!("Cia402Driver for node id {node_id} constructed and initialized");
-
-        tokio::time::sleep(Duration::from_millis(5000)).await;
+        // let mut rx_test = canopen.clone().rx;
+        // match tokio::time::timeout(Duration::from_secs(1), rx_test.recv()).await {
+        //     Ok(Ok(frame)) => error!("yay received frame: {frame:?}"),
+        //     Ok(Err(err)) => error!("no timeout, but error: {err}"),
+        //     Err(err) => error!("timeout elapsed - unable to receive after startup: {err}"),
+        // }
 
         // Drive is now parametrised, T/RPDO are configured and in NMT::Operational
+        info!("Cia402Driver for node id {node_id} constructed and initialized");
         Ok(Cia402Driver {
             node_id,
             cmd_tx,
@@ -174,6 +215,7 @@ impl Cia402Driver {
             event_rx: event_rx.resubscribe(),
             canopen,
             _handles: handles,
+            sdo,
         })
     }
 }

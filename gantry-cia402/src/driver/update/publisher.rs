@@ -41,6 +41,8 @@ pub async fn publish_updates(
             }
 
             Ok(cmd) = cmd_rx.recv() => {
+                trace!("update publisher received command: {cmd:?}");
+
                 if let Err(err) = match cmd {
                     MotorCommand::Halt => {
                         pdo.write_position_setpoint(PositionSetpoint {
@@ -83,6 +85,7 @@ pub async fn publish_updates(
                         }).await
                     },
                     _ => {
+                        trace!("update publisher ignoring command: {cmd:?}");
                         Ok(())
                     },
                 } {
