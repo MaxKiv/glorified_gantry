@@ -4,19 +4,6 @@ pub mod subscriber;
 
 use std::time::Duration;
 
-const COB_ID_SYNC: u16 = 0x80;
-const COB_ID_TPDO1: u16 = 0x180;
-const COB_ID_RPDO1: u16 = 0x200;
-const COB_ID_TPDO2: u16 = 0x280;
-const COB_ID_RPDO2: u16 = 0x300;
-const COB_ID_TPDO3: u16 = 0x380;
-const COB_ID_RPDO3: u16 = 0x400;
-const COB_ID_TPDO4: u16 = 0x480;
-const COB_ID_RPDO4: u16 = 0x500;
-const COB_ID_SDO_RX: u16 = 0x600;
-const COB_ID_SDO_TX: u16 = 0x580;
-const COB_ID_HEARTBEAT: u16 = 0x700;
-
 const COMMS_TIMEOUT: Duration = Duration::from_secs(1);
 
 bitflags::bitflags! {

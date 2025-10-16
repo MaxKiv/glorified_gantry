@@ -6,7 +6,6 @@ pub mod velocity;
 use home::*;
 use position::*;
 use torque::*;
-use tracing::*;
 use velocity::*;
 
 pub const STARTUP_SETPOINT: Setpoint = Setpoint::ProfilePosition(STARTUP_POSITIONMODE_SETPOINT);

@@ -1,5 +1,5 @@
 use ::tracing::info;
-use gantry_cia402::{comms::sdo::SdoAction, log::log_canopen_pretty, od::DEVICE_TYPE};
+use gantry_cia402::log::log_canopen_pretty;
 use gantry_demo::setup_tracing;
 use oze_canopen::canopen;
 use tracing::*;

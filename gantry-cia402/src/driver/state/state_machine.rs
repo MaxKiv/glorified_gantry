@@ -2,39 +2,12 @@ use tokio::sync::{broadcast, mpsc};
 use tracing::*;
 
 use crate::driver::{
-    command::MotorCommand,
     event::MotorEvent,
     state::{Cia402Flags, Cia402State},
 };
 
 pub struct Cia402StateMachine {
     pub state: Cia402State,
-}
-
-impl Cia402StateMachine {
-    pub fn next_controlword(&self, cmd: &MotorCommand) -> Option<Cia402Flags> {
-        use Cia402State::*;
-
-        match (self.state, cmd) {
-            (Fault, MotorCommand::ResetFault) => Some(Cia402Flags::FAULT_RESET),
-            (SwitchOnDisabled, MotorCommand::Enable) => {
-                Some(Cia402Flags::ENABLE_VOLTAGE | Cia402Flags::DISABLE_QUICK_STOP)
-            }
-            (ReadyToSwitchOn, MotorCommand::Enable) => Some(
-                Cia402Flags::ENABLE_VOLTAGE
-                    | Cia402Flags::DISABLE_QUICK_STOP
-                    | Cia402Flags::SWITCH_ON,
-            ),
-            (SwitchedOn, MotorCommand::Enable) => Some(
-                Cia402Flags::ENABLE_VOLTAGE
-                    | Cia402Flags::DISABLE_QUICK_STOP
-                    | Cia402Flags::SWITCH_ON
-                    | Cia402Flags::ENABLE_OPERATION,
-            ),
-            (OperationEnabled, MotorCommand::Disable) => Some(Cia402Flags::DISABLE_QUICK_STOP),
-            _ => None,
-        }
-    }
 }
 
 pub async fn cia402_state_machine_task(

@@ -1,4 +1,4 @@
-use oze_canopen::{canopen::RxMessage, interface::CanOpenInterface};
+use oze_canopen::interface::CanOpenInterface;
 use tokio::{
     sync::broadcast,
     time::{self, Instant},
@@ -9,7 +9,6 @@ use crate::{
     comms::pdo::mapping::PdoMapping,
     driver::{
         event::MotorEvent,
-        nmt::NmtState,
         oms::{
             OperationMode, home::HomeFlagsSW, position::PositionFlagsSW, torque::TorqueFlagsSW,
             velocity::VelocityFlagsSW,
@@ -19,7 +18,6 @@ use crate::{
             parse::{Frame, MessageType, pdo_message::*},
             *,
         },
-        state::{Cia402Flags, Cia402State},
     },
     error::DriveError,
     log::format_frame,
@@ -109,12 +107,6 @@ async fn handle_message(
         MessageType::RSDO(_) => {
             // We sent this: Ignore
         }
-        MessageType::TPDO(tpdomessage) => {
-            handle_tpdo(tpdomessage, tpdo_mapping, event_tx).await?;
-        }
-        MessageType::RPDO(_) => {
-            // We sent this: Ignore
-        }
         MessageType::PDO(parsed_pdo) => {
             handle_parsed_pdo(parsed_pdo, event_tx).await;
         }
@@ -173,32 +165,6 @@ async fn handle_emcy(
     send_update(MotorEvent::EMCY(emergency_message.error.clone()), event_tx);
 }
 
-async fn handle_tpdo(
-    tpdomessage: &parse::TPDOMessage,
-    tpdo_mapping: &'static [PdoMapping],
-    event_tx: &broadcast::Sender<MotorEvent>,
-) -> Result<(), ReceiverError> {
-    match &tpdomessage.num {
-        1 => {
-            handle_tpdo1(tpdomessage, &tpdo_mapping[0], event_tx).await;
-            Ok(())
-        }
-        2 => {
-            handle_tpdo2(tpdomessage, &tpdo_mapping[1], event_tx).await;
-            Ok(())
-        }
-        3 => {
-            handle_tpdo3(tpdomessage, &tpdo_mapping[2], event_tx).await;
-            Ok(())
-        }
-        _ => {
-            // Err(ReceiverError::UnknownTPDO(tpdomessage.clone())),
-            warn!("Received unknown / unmapped RPDO: {:?}", tpdomessage);
-            Ok(())
-        }
-    }
-}
-
 async fn handle_nmt_monitor(
     nmt_monitor_message: &parse::NmtMonitorMessage,
     event_tx: &broadcast::Sender<MotorEvent>,
@@ -213,12 +179,7 @@ async fn handle_parsed_tpdo1(
     tpdo1_message: &TPDO1Message,
     event_tx: &broadcast::Sender<MotorEvent>,
 ) {
-    // Parse NMT bits
-    let new_nmt_state: NmtState = tpdo1_message.statusword.into();
-    // Send fresh NMT state to subscribers
-    send_update(MotorEvent::NmtStateUpdate(new_nmt_state), event_tx);
-
-    // Send rest of statusword to subscribers
+    // Send full statusword update to subscribers
     send_update(MotorEvent::StatusWord(tpdo1_message.statusword), event_tx);
 
     // Send operational mode update
@@ -226,58 +187,20 @@ async fn handle_parsed_tpdo1(
         MotorEvent::OperationModeUpdate(tpdo1_message.actual_opmode),
         event_tx,
     );
-}
 
-async fn handle_tpdo1(
-    tpdomessage: &parse::TPDOMessage,
-    tpdo1_mapping: &PdoMapping,
-    event_tx: &broadcast::Sender<MotorEvent>,
-) {
-    assert!(tpdomessage.dlc == 3);
-
-    // 1. Decode statusword
-    let sw = match read_statusword(&tpdomessage.data) {
-        Ok(statusword) => {
-            // Parse NMT bits
-            let new_nmt_state: NmtState = statusword.into();
-            // Send fresh NMT state to subscribers
-            send_update(MotorEvent::NmtStateUpdate(new_nmt_state), event_tx);
-
-            // Send rest of statusword to subscribers
-            send_update(MotorEvent::StatusWord(statusword), event_tx);
-
-            Some(statusword)
-        }
-        Err(err) => {
-            error!("Error reading statusword from TPDO1: {err}");
-            None
-        }
-    };
-
-    // 2. Decode actual mode of operation
-    match read_operational_mode(&tpdomessage.data) {
-        Ok(opmode) => {
-            // Send operational mode update
-            send_update(MotorEvent::OperationModeUpdate(opmode), event_tx);
-
-            // Parse Operational Mode Specific bits
-            if let Some(statusword) = sw {
-                parse_oms_statusword_bits(opmode, statusword, event_tx);
-            }
-        }
-        Err(err) => {
-            error!("Unable to read operational mode from TPDO1: {err}");
-        }
+    // Parse Operational Mode Specific bits
+    if let Some(event) =
+        parse_oms_statusword_bits(tpdo1_message.actual_opmode, tpdo1_message.statusword)
+    {
+        // Send anything interesting along
+        trace!("Sending OMS event: {event:?}");
+        send_update(event, event_tx);
     }
 }
 
-fn parse_oms_statusword_bits(
-    opmode: OperationMode,
-    statusword: StatusWord,
-    event_tx: &broadcast::Sender<MotorEvent>,
-) {
+fn parse_oms_statusword_bits(opmode: OperationMode, statusword: StatusWord) -> Option<MotorEvent> {
     // Parse Operation Mode Specific bits of the statusword
-    let event = match opmode {
+    match opmode {
         OperationMode::ProfilePosition => {
             let flags = PositionFlagsSW::from_status(statusword);
             Some(flags.into_event())
@@ -298,12 +221,6 @@ fn parse_oms_statusword_bits(
             trace!("No specific statusword parsing for current opmode {opmode:?}");
             None
         }
-    };
-
-    // Send anything interesting along
-    if let Some(event) = event {
-        trace!("Sending OMS event: {event:?}");
-        send_update(event, event_tx);
     }
 }
 
@@ -328,44 +245,6 @@ async fn handle_parsed_tpdo2(
     );
 }
 
-async fn handle_tpdo2(
-    tpdomessage: &parse::TPDOMessage,
-    tpdo2_mappings: &PdoMapping,
-    event_tx: &broadcast::Sender<MotorEvent>,
-) {
-    assert!(tpdomessage.dlc == 8);
-
-    match read_actual_position(&tpdomessage.data) {
-        Ok(actual_position) => {
-            // Send actual position update
-            send_update(
-                MotorEvent::PositionFeedback {
-                    actual_position: actual_position.value,
-                },
-                event_tx,
-            );
-        }
-        Err(err) => {
-            error!("Error reading actual position: {err}");
-        }
-    }
-
-    match read_actual_velocity(&tpdomessage.data) {
-        Ok(actual_velocity) => {
-            // Send actual velocity update
-            send_update(
-                MotorEvent::VelocityFeedback {
-                    actual_velocity: actual_velocity.value,
-                },
-                event_tx,
-            );
-        }
-        Err(err) => {
-            error!("Error reading actual velocity: {err}");
-        }
-    }
-}
-
 async fn handle_parsed_tpdo3(
     tpdo3_message: &TPDO3Message,
     event_tx: &broadcast::Sender<MotorEvent>,
@@ -377,29 +256,6 @@ async fn handle_parsed_tpdo3(
         },
         event_tx,
     );
-}
-
-async fn handle_tpdo3(
-    tpdomessage: &parse::TPDOMessage,
-    tpdo2_mappings: &PdoMapping,
-    event_tx: &broadcast::Sender<MotorEvent>,
-) {
-    assert!(tpdomessage.dlc == 2);
-
-    match read_actual_torque(&tpdomessage.data) {
-        Ok(actual_torque) => {
-            // Send actual torque update
-            send_update(
-                MotorEvent::TorqueFeedback {
-                    actual_torque: actual_torque.value,
-                },
-                event_tx,
-            );
-        }
-        Err(err) => {
-            error!("Error reading actual torque: {err}");
-        }
-    }
 }
 
 fn read_statusword(data: &[u8; 8]) -> anyhow::Result<StatusWord> {

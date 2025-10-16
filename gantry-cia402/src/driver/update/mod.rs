@@ -22,7 +22,7 @@ bitflags::bitflags! {
         /// Bit 1: Enable voltage
         const ENABLE_VOLTAGE         = 1 << 1;
         /// Bit 2: Disable Quick stop
-        const QUICK_STOP_DISABLE     = 1 << 2;
+        const DISABLE_QUICK_STOP     = 1 << 2;
         /// Bit 3: Enable operation
         const ENABLE_OPERATION       = 1 << 3;
 
@@ -70,19 +70,19 @@ impl ControlWord {
     }
 
     pub fn with_cia402_flags(self, flags: Cia402Flags) -> Self {
-        // info!("adding cia402flags to cw: {flags:?}");
+        info!("adding cia402flags to cw: {flags:?}");
 
         let mask = Cia402Flags::all().bits();
 
-        // info!("Cia402flags mask: {:#0b}", mask);
-        // info!("self.bits() & !mask: {:#0b}", self.bits() & !mask);
-        // info!("(flags.bits() & mask): {:#0b}", (flags.bits() & mask));
+        info!("Cia402flags mask: {:#0b}", mask);
+        info!("self.bits() & !mask: {:#0b}", self.bits() & !mask);
+        info!("(flags.bits() & mask): {:#0b}", (flags.bits() & mask));
 
         let new_bits = (self.bits() & !mask) | (flags.bits() & mask);
-        // info!("new_bits {:#0b}", new_bits);
+        info!("new_bits {:#0b}", new_bits);
 
         let cw = ControlWord::from_bits(new_bits).expect("Bits size mismatch in with_cia402_flags");
-        // trace!("new cw: {cw:?}");
+        info!("new cw: {cw:?}");
 
         cw
     }

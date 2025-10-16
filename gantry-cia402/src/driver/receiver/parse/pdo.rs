@@ -1,4 +1,3 @@
-use tracing::error;
 
 use crate::driver::{
     oms::OperationMode,

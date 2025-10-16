@@ -17,7 +17,7 @@ pub enum PdoType {
 }
 
 impl PdoType {
-    pub fn to_string(&self) -> String {
+    pub fn to_string_pretty(&self) -> String {
         match self {
             PdoType::RPDO(num) => format!("RPDO{num}"),
             PdoType::TPDO(num) => format!("TPDO{num}"),

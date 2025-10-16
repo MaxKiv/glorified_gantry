@@ -1,25 +1,18 @@
-use gantry_cia402::driver::receiver::parse::pdo_message::PDOMessage;
-use gantry_cia402::driver::{event::MotorEvent, receiver::parse::MessageType};
-use oze_canopen::{canopen::RxMessage, interface::CanOpenInterface};
-use tokio::sync::broadcast::{self, error::RecvError};
-use tracing::{Level, *};
+use tracing::*;
 use tracing_subscriber::filter::filter_fn;
-use tracing_subscriber::fmt::time::SystemTime;
 use tracing_subscriber::{
-    FmtSubscriber, Registry, filter, fmt::time::Uptime, layer::SubscriberExt,
+    Registry, layer::SubscriberExt,
 };
-use tracing_subscriber::{Layer, filter::LevelFilter, prelude::*};
+use tracing_subscriber::{Layer, prelude::*};
 
 use std::fmt::Debug;
-use std::time::Duration;
 
 use chrono::{SecondsFormat, Utc};
 use owo_colors::OwoColorize;
-use tokio::time::{self, Instant};
 use tracing::field::{Field, Visit};
 use tracing_subscriber::fmt::*;
 use tracing_subscriber::{
-    fmt::{self, format::Writer},
+    fmt::format::Writer,
     registry::LookupSpan,
 };
 

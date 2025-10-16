@@ -1,4 +1,3 @@
-use std::time::Instant;
 
 use oze_canopen::canopen::NodeId;
 
@@ -38,7 +37,7 @@ pub struct PrettyPdo {
 
 impl From<ParsedPDO> for PrettyPdo {
     fn from(value: ParsedPDO) -> Self {
-        let header = value.kind.to_string();
+        let header = value.kind.to_string_pretty();
         let raw = format!("{0:x?}", value.raw_data[..value.raw_dlc].to_vec());
 
         let parsed = match &value.message {

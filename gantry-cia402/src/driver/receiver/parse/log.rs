@@ -19,23 +19,7 @@ impl Frame {
                     message = %format!("{:?}", msg.error)
                 );
             }
-            MessageType::TPDO(msg) => {
-                info!(
-                    target: "canopen",
-                    frame = "TPDO",
-                    node = self.node_id.unwrap_or(0) as u64,
-                    num = msg.num as u64,
-                    data = %hex_dump(&msg.data[..msg.dlc])
-                );
-            }
             MessageType::Sync(_) => info!(target: "canopen", frame = "SYNC"),
-            MessageType::RPDO(msg) => info!(
-                target: "canopen",
-                frame = "RPDO",
-                node = self.node_id.unwrap_or(0) as u64,
-                num = msg.num as u64,
-                data = %hex_dump(&msg.data[..msg.dlc])
-            ),
             MessageType::NmtMonitor(msg) => {
                 info!(
                     target: "canopen",

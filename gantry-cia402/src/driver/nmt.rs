@@ -1,17 +1,13 @@
-use std::time::Duration;
 
 use oze_canopen::{
     interface::CanOpenInterface,
     proto::nmt::{NmtCommand, NmtCommandSpecifier},
 };
-use tokio::{
-    sync::{broadcast, mpsc},
-    task,
-};
+use tokio::sync::{broadcast, mpsc};
 use tracing::*;
 
 use crate::{
-    driver::{event::MotorEvent, receiver::StatusWord},
+    driver::event::MotorEvent,
     error::DriveError,
 };
 
@@ -21,22 +17,6 @@ pub enum NmtState {
     Stopped,
     PreOperational,
     Operational,
-}
-
-impl From<StatusWord> for NmtState {
-    fn from(status: StatusWord) -> Self {
-        if status.intersects(
-            StatusWord::OPERATION_ENABLED
-                | StatusWord::SWITCHED_ON
-                | StatusWord::READY_TO_SWITCH_ON,
-        ) {
-            NmtState::Operational
-        } else if status.intersects(StatusWord::SWITCHED_ON | StatusWord::READY_TO_SWITCH_ON) {
-            NmtState::PreOperational
-        } else {
-            NmtState::Stopped
-        }
-    }
 }
 
 impl Into<NmtCommandSpecifier> for NmtState {

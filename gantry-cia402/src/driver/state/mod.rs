@@ -1,14 +1,10 @@
 pub mod orchestrator;
 pub mod state_machine;
 
-use tokio::sync::{
-    broadcast::{self, Receiver},
-    mpsc::{self},
-};
 use tracing::*;
 
 use crate::{
-    driver::{command::MotorCommand, event::MotorEvent, receiver::StatusWord},
+    driver::receiver::StatusWord,
     error::DriveError,
 };
 

@@ -11,7 +11,7 @@ use crate::{
     driver::{
         nmt::NmtState,
         receiver::parse::{
-            pdo_message::{PDOMessage, ParsedPDO},
+            pdo_message::ParsedPDO,
             sdo_response::{SdoRequest, SdoResponse},
         },
     },
@@ -34,8 +34,6 @@ pub enum MessageType {
     EMCY(EmergencyMessage),
     TSDO(SdoResponse),
     RSDO(SdoRequest),
-    TPDO(TPDOMessage),
-    RPDO(RPDOMessage),
     PDO(ParsedPDO),
     NmtMonitor(NmtMonitorMessage),
     Unknown(RxMessage), // No node id

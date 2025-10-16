@@ -5,7 +5,6 @@ use crate::comms::pdo::mapping::PdoMapping;
 use crate::comms::pdo::mapping::PdoType;
 use crate::comms::pdo::mapping::custom::RPDO_CONTROL_OPMODE;
 use crate::comms::pdo::mapping::custom::RPDO_IDX_CONTROL_WORD;
-use crate::comms::pdo::mapping::custom::RPDO_IDX_OPMODE;
 use crate::comms::pdo::mapping::custom::RPDO_IDX_TARGET_POS;
 use crate::comms::pdo::mapping::custom::RPDO_IDX_TARGET_TORQUE;
 use crate::comms::pdo::mapping::custom::RPDO_IDX_TARGET_VEL;
@@ -26,11 +25,6 @@ use oze_canopen::{
     transmitter::TxPacket,
 };
 use tracing::*;
-
-use crate::driver::oms::home::*;
-use crate::driver::oms::position::*;
-use crate::driver::oms::torque::*;
-use crate::driver::oms::velocity::*;
 
 use crate::{
     comms::pdo::frame::PdoFrame,
@@ -246,23 +240,6 @@ impl Pdo {
         false
     }
 
-    /// Gets current control word
-    fn get_current_controlword(&self) -> ControlWord {
-        let PdoType::RPDO(num) = RPDO_CONTROL_OPMODE.pdo else {
-            panic!("Controlword is not mapped to RPDO");
-        };
-        let cw_idx = (num - 1) as usize;
-
-        let cw_bytes = [
-            self.rpdo_frames[cw_idx].data[0],
-            self.rpdo_frames[cw_idx].data[1],
-        ];
-
-        ControlWord::from_bits(u16::from_le_bytes(cw_bytes)).expect(
-            "unable to fetch current controlword from saved RPDO1 in write_position_setpoint",
-        )
-    }
-
     async fn send_rpdo(&mut self, pdo_mapping: PdoMapping) -> Result<(), DriveError> {
         let PdoType::RPDO(num) = pdo_mapping.pdo else {
             return Err(DriveError::ViolatedInvariant(
@@ -308,6 +285,23 @@ impl Pdo {
         Ok(())
     }
 
+    /// Gets current control word
+    fn get_current_controlword(&self) -> ControlWord {
+        let PdoType::RPDO(num) = RPDO_CONTROL_OPMODE.pdo else {
+            panic!("Controlword is not mapped to RPDO");
+        };
+        let cw_idx = (num - 1) as usize;
+
+        let cw_bytes = [
+            self.rpdo_frames[cw_idx].data[0],
+            self.rpdo_frames[cw_idx].data[1],
+        ];
+
+        ControlWord::from_bits(u16::from_be_bytes(cw_bytes)).expect(
+            "unable to fetch current controlword from saved RPDO1 in write_position_setpoint",
+        )
+    }
+
     /// Saves new controlword in the appropriate RPDO frame, to be sent later
     fn set_controlword_rpdo(&mut self, cw: ControlWord) {
         let PdoType::RPDO(num) = RPDO_CONTROL_OPMODE.pdo else {
@@ -329,7 +323,6 @@ impl Pdo {
     fn set_operational_mode(&mut self, mode: OperationMode) {
         trace!("setting operational mode to {mode:?}");
 
-        const OPMODE_IDX: usize = 1;
         const OPMODE_OFFSET: usize = 2;
 
         let PdoType::RPDO(num) = RPDO_CONTROL_OPMODE.pdo else {
