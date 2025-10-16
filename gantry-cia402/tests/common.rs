@@ -46,6 +46,8 @@ pub enum TestError {
     BroadcastClosed(MotorEvent, RecvError),
     #[error("Error switching to NMT state: {0:?}: {1:?}")]
     NMTSendError(NmtState, SendError<NmtState>),
+    #[error("Generic test error")]
+    Generic,
 }
 
 /// Start the device feedback task responsible for receiving and parsing device feedback and broadcasting these as events

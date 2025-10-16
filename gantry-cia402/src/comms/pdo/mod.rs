@@ -80,6 +80,18 @@ impl Pdo {
         cw = cw.with_cia402_flags(flags);
         self.set_controlword_rpdo(cw);
 
+        // error!("Sending hacky SDO Controlword");
+        // self.canopen
+        //     .get_sdo_client(3)
+        //     .ok_or(DriveError::ViolatedInvariant(String::from(
+        //         "SDO test issue",
+        //     )))?
+        //     .lock()
+        //     .await
+        //     .download(0x6040, 0x0, &cw.bits().to_le_bytes())
+        //     .await
+        //     .unwrap();
+
         match self.send_rpdo(RPDO_CONTROL_OPMODE).await {
             Ok(_) => {
                 trace!("RPDO1 sent to effect cia402 transition");
@@ -297,7 +309,7 @@ impl Pdo {
             self.rpdo_frames[cw_idx].data[1],
         ];
 
-        ControlWord::from_bits(u16::from_be_bytes(cw_bytes)).expect(
+        ControlWord::from_bits(u16::from_le_bytes(cw_bytes)).expect(
             "unable to fetch current controlword from saved RPDO1 in write_position_setpoint",
         )
     }
@@ -309,7 +321,7 @@ impl Pdo {
         };
         let cw_idx = (num - 1) as usize;
 
-        let cw_bytes = cw.bits().to_be_bytes();
+        let cw_bytes = cw.bits().to_le_bytes();
 
         info!("setting controlword rpdo #{num} to new cw: {cw:?}");
         self.rpdo_frames[cw_idx].set(

@@ -35,10 +35,18 @@ mod tests {
         info!("Initializing Cia402Driver for motor driver at node id {node_id}");
         let drive = Cia402Driver::init(node_id, canopen.clone(), PARAMS, RPDOS, TPDOS).await?;
 
+        info!("Sending Command Disable");
+        drive
+            .cmd_tx
+            .send(MotorCommand::Cia402TransitionTo {
+                target_state: Cia402State::SwitchOnDisabled,
+            })
+            .map_err(DriveError::CommandError)?;
+
         info!("Wait for Cia402State::ReadyToSwitchOn");
         wait_for_event(
             drive.event_rx.resubscribe(),
-            MotorEvent::Cia402StateUpdate(Cia402State::ReadyToSwitchOn),
+            MotorEvent::Cia402StateUpdate(Cia402State::SwitchOnDisabled),
             TIMEOUT,
         )
         .await?;
