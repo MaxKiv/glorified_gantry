@@ -117,9 +117,16 @@ impl Pdo {
     ) -> Result<(), DriveError> {
         // 1. Construct RPDO1: Set opmode to position and toggle control_word OMS bits
 
+        trace!(
+            "Writing position setpoint - target: {target} - profile_velocity: {profile_velocity} = flags: {flags:?}"
+        );
+
         // Set Controlword
         let mut cw = self.get_current_controlword();
+
+        trace!("Writing position setpoint - current Controlword: {cw:?}");
         cw = cw.with_position_flags(flags);
+        trace!("Writing position setpoint - with position flags: {cw:?}");
         self.set_controlword_rpdo(cw);
 
         // Set Position Mode
@@ -131,12 +138,12 @@ impl Pdo {
         // 2. Construct RPDO2: Set position and velocity target
         // TODO: hardcoded offsets
         self.rpdo_frames[RPDO_IDX_TARGET_POS].set(
-            RPDO_TARGET_POS.sources[0].bit_range.start as usize,
-            &(target as u32).to_be_bytes(),
+            (RPDO_TARGET_POS.sources[0].bit_range.start / 8) as usize,
+            &(target as u32).to_le_bytes(),
         );
         self.rpdo_frames[RPDO_IDX_TARGET_POS].set(
-            RPDO_TARGET_POS.sources[1].bit_range.start as usize,
-            &(profile_velocity.to_be_bytes()),
+            (RPDO_TARGET_POS.sources[1].bit_range.start / 8) as usize,
+            &(profile_velocity.to_le_bytes()),
         );
 
         // Send RPDO2
@@ -160,8 +167,8 @@ impl Pdo {
         self.rpdo_frames[RPDO_IDX_TARGET_VEL]
             // TODO: hardcoded offset
             .set(
-                RPDO_TARGET_VEL.sources[0].bit_range.start as usize,
-                &target.to_be_bytes(),
+                (RPDO_TARGET_VEL.sources[0].bit_range.start / 8) as usize,
+                &target.to_le_bytes(),
             );
 
         self.send_rpdo(RPDO_TARGET_VEL).await?;
@@ -184,8 +191,8 @@ impl Pdo {
         self.rpdo_frames[RPDO_IDX_TARGET_TORQUE]
             // TODO: hardcoded offset
             .set(
-                RPDO_TARGET_TORQUE.sources[0].bit_range.start as usize,
-                &target.to_be_bytes(),
+                (RPDO_TARGET_TORQUE.sources[0].bit_range.start / 8) as usize,
+                &target.to_le_bytes(),
             );
 
         self.send_rpdo(RPDO_TARGET_TORQUE).await?;
