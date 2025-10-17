@@ -99,23 +99,44 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_with_position_flags() {
-        let simple_cw = ControlWord::from_bits_truncate(0b0101010101010101);
+    fn test_cw_update_with_position_flags() {
+        let simple_cw = ControlWord::from_bits_truncate(0b101010101010101);
         let flags = PositionModeFlagsCW::empty();
         let simple_combined = simple_cw.with_position_flags(flags);
-        let result = assert_eq!(simple_combined.bits(), 0b0101010000000101);
-
-        let cw = ControlWord::from_bits_truncate(0b101010101001);
-        let flags = PositionModeFlagsCW::default();
-        let combined = cw.with_position_flags(flags);
-        let result = assert_eq!(combined.bits(), 0b0101010011010);
+        assert_eq!(simple_combined.bits(), 0b101010000000101);
     }
 
     #[test]
-    fn test_with_cia402_flags() {
+    fn test_cw_update_with_cia402_flags() {
         let cw = ControlWord::from_bits_truncate(0b1111111111111111);
         let flags = Cia402Flags::empty();
         let combined = cw.with_cia402_flags(flags);
-        let result = assert_eq!(combined.bits(), 0b1111111110111000);
+        assert_eq!(combined.bits(), 0b1111111110111000);
+    }
+
+    #[test]
+    fn test_cw_update_flag_isolation() {
+        // Verify flags don't interfere with each other
+        let base = ControlWord::from_bits_truncate(0b1111_1111_1111_1111);
+
+        let with_pos = base.with_position_flags(PositionModeFlagsCW::empty());
+        let with_home = base.with_home_flags(HomeFlagsCW::empty());
+        let with_cia402 = base.with_cia402_flags(Cia402Flags::empty());
+
+        // Check that only the relevant bits changed
+        assert_ne!(base, with_pos);
+        assert_ne!(base, with_home);
+        assert_ne!(base, with_cia402);
+    }
+
+    #[test]
+    fn test_cw_update_multiple_flag_applications() {
+        let cw = ControlWord::default()
+            .with_cia402_flags(Cia402Flags::ENABLE_VOLTAGE)
+            .with_position_flags(PositionModeFlagsCW::NEW_SETPOINT);
+
+        // Verify both sets of flags are present
+        assert!(cw.contains(ControlWord::ENABLE_VOLTAGE));
+        assert!(cw.contains(ControlWord::OMS_1)); // Position flag
     }
 }

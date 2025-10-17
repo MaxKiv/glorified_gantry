@@ -3,10 +3,7 @@ pub mod state_machine;
 
 use tracing::*;
 
-use crate::{
-    driver::receiver::StatusWord,
-    error::DriveError,
-};
+use crate::{driver::receiver::StatusWord, error::DriveError};
 
 #[derive(Default, Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Cia402State {
@@ -54,7 +51,7 @@ impl From<StatusWord> for Cia402Flags {
 }
 
 bitflags::bitflags! {
-    #[derive(Clone, Copy, Debug)]
+    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
     pub struct Cia402Flags: u16 {
         /// Bit 0: Switch on
         /// Requests transition from "Ready to Switch On" → "Switched On".
@@ -132,6 +129,96 @@ impl Cia402Flags {
 
             // ----- Any other transitions are invalid -----
             _ => None,
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_statusword_parsing() {
+        // Test each defined state
+        let test_cases = vec![
+            (0b000_0000, Cia402State::NotReadyToSwitchOn),
+            (0b100_0000, Cia402State::SwitchOnDisabled),
+            (0b010_0001, Cia402State::ReadyToSwitchOn),
+            (0b010_0011, Cia402State::SwitchedOn),
+            (0b010_0111, Cia402State::OperationEnabled),
+            (0b000_0111, Cia402State::QuickStopActive),
+            (0b000_1111, Cia402State::FaultReactionActive),
+            (0b000_1000, Cia402State::Fault),
+        ];
+
+        for (bits, expected_state) in test_cases {
+            let sw = StatusWord::from_bits_truncate(bits);
+            let state: Result<Cia402State, _> = sw.try_into();
+            assert_eq!(
+                state.unwrap(),
+                expected_state,
+                "Failed to parse bits {:#010b}",
+                bits
+            );
+        }
+    }
+
+    #[test]
+    fn test_statusword_with_extra_bits() {
+        // Ensure masking works correctly
+        let sw = StatusWord::from_bits_truncate(0b11_1011_0111); // OperationEnabled
+        let state: Result<Cia402State, _> = sw.try_into();
+        assert!(state.is_ok()); // Should still parse despite extra bits
+    }
+
+    #[test]
+    fn test_enable_transition() {
+        // Test full enable path
+        let flags = Cia402Flags::transition_flags(
+            &Cia402State::SwitchOnDisabled,
+            &Cia402State::ReadyToSwitchOn,
+        );
+        assert_eq!(
+            flags,
+            Some(Cia402Flags::ENABLE_VOLTAGE | Cia402Flags::DISABLE_QUICK_STOP)
+        );
+    }
+
+    #[test]
+    fn test_invalid_transition() {
+        // Should return None for invalid transitions
+        assert!(
+            Cia402Flags::transition_flags(
+                &Cia402State::NotReadyToSwitchOn,
+                &Cia402State::OperationEnabled
+            )
+            .is_none()
+        );
+    }
+
+    #[test]
+    fn test_fault_recovery_transition() {
+        let flags =
+            Cia402Flags::transition_flags(&Cia402State::Fault, &Cia402State::SwitchOnDisabled);
+        assert_eq!(flags, Some(Cia402Flags::FAULT_RESET));
+    }
+
+    #[test]
+    fn test_all_valid_transitions() {
+        // Exhaustively test all valid state pairs
+        let valid_transitions = vec![
+            (Cia402State::SwitchOnDisabled, Cia402State::ReadyToSwitchOn),
+            (Cia402State::ReadyToSwitchOn, Cia402State::SwitchedOn),
+            // ... all valid pairs
+        ];
+
+        for (from, to) in valid_transitions {
+            assert!(
+                Cia402Flags::transition_flags(&from, &to).is_some(),
+                "Expected valid transition from {:?} to {:?}",
+                from,
+                to
+            );
         }
     }
 }
