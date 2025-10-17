@@ -258,60 +258,6 @@ async fn handle_parsed_tpdo3(
     );
 }
 
-fn read_statusword(data: &[u8; 8]) -> anyhow::Result<StatusWord> {
-    // TODO: move range and type info to central place
-    const STATUSWORD_BYTES: std::ops::RangeInclusive<usize> = 0..=1;
-
-    let raw_statusword = u16::from_le_bytes(data[STATUSWORD_BYTES].try_into()?);
-    // trace!("Decoding raw statusword: {:#0x}", raw_statusword);
-    let sw = StatusWord::from_bits(raw_statusword).ok_or(anyhow::anyhow!(
-        "unable to decode raw statusword: {raw_statusword:?} into u16"
-    ))?;
-
-    // trace!("Decoded statusword from tpdo1: {sw:?}");
-    Ok(sw)
-}
-
-fn read_operational_mode(data: &[u8; 8]) -> anyhow::Result<OperationMode> {
-    // TODO: move range and type info to central place
-    const OPMODE_BYTE: usize = 2;
-
-    let raw_mode = data[OPMODE_BYTE] as i8;
-    OperationMode::try_from(raw_mode).map_err(|_| {
-        anyhow::anyhow!(
-            "invalid raw mode: {} while decoding operational mode from TPDO1 (byte {OPMODE_BYTE})",
-            raw_mode
-        )
-    })
-}
-
-fn read_actual_position(data: &[u8; 8]) -> anyhow::Result<ActualPosition> {
-    // TODO: move range and type info to central place
-    const ACTUAL_POS_BYTES: std::ops::RangeInclusive<usize> = 0..=3;
-
-    Ok(ActualPosition {
-        value: i32::from_be_bytes(data[ACTUAL_POS_BYTES].try_into()?),
-    })
-}
-
-fn read_actual_velocity(data: &[u8; 8]) -> anyhow::Result<ActualVelocity> {
-    // TODO: move range and type info to central place
-    const ACTUAL_VEL_BYTES: std::ops::RangeInclusive<usize> = 4..=7;
-
-    Ok(ActualVelocity {
-        value: i32::from_be_bytes(data[ACTUAL_VEL_BYTES].try_into()?),
-    })
-}
-
-fn read_actual_torque(data: &[u8; 8]) -> anyhow::Result<ActualTorque> {
-    // TODO: move range and type info to central place
-    const ACTUAL_TORQUE_BYTES: std::ops::RangeInclusive<usize> = 0..=1;
-
-    Ok(ActualTorque {
-        value: i16::from_be_bytes(data[ACTUAL_TORQUE_BYTES].try_into()?),
-    })
-}
-
 fn send_update(event: MotorEvent, event_tx: &broadcast::Sender<MotorEvent>) {
     match event_tx.send(event.clone()) {
         Ok(num_subscribers) => {

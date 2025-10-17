@@ -13,5 +13,5 @@ pub enum ODValue {
     F64(f64),
     VisibleString(String),
     OctetString(Vec<u8>),
-    Array(usize), // Indicates the presence of sub-entries
+    Array(usize), // Indicates the presence of sub-indices
 }

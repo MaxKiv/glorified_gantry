@@ -8,6 +8,9 @@ use tracing::*;
 #[cfg(test)]
 mod tests {
 
+    const TEST_POSITION: i32 = -200;
+    const TEST_SPEED: u32 = 100;
+
     use gantry_cia402::{
         comms::pdo::mapping::custom::CUSTOM_TPDOS,
         driver::{
@@ -87,8 +90,8 @@ mod tests {
         drive
             .cmd_tx
             .send(MotorCommand::MoveRelative {
-                delta: -3200,
-                profile_velocity: 0x000001F4, // Default
+                delta: TEST_POSITION,
+                profile_velocity: TEST_SPEED,
             })
             .map_err(DriveError::CommandError)?;
 
