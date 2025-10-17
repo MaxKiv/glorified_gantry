@@ -34,7 +34,6 @@ pub fn get_dlc(mapping: &PdoMapping) -> usize {
         dlc += source.bit_range.len / 8;
     }
 
-    assert!(dlc <= 8);
     dlc as usize
 }
 

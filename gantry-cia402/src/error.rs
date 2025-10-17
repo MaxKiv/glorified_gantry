@@ -12,8 +12,8 @@ use tokio::{
 };
 
 use crate::driver::{
-    command::MotorCommand, event::MotorEvent, nmt::NmtState, receiver::StatusWord,
-    state::Cia402State,
+    command::MotorCommand, event::MotorEvent, nmt::NmtState, oms::setpoint::Setpoint,
+    receiver::StatusWord, state::Cia402State,
 };
 
 #[derive(Debug, Error)]
@@ -42,6 +42,8 @@ pub enum DriveError {
     BroadcastClosed(MotorEvent, RecvError),
     #[error("Error switching to NMT state: {0:?}: {1:?}")]
     NMTSendError(NmtState, SendError<NmtState>),
+    #[error("Error sending new setpoint do setpoint manager: {0:?}: {1:?}")]
+    NewSetpointSendError(Setpoint, SendError<Setpoint>),
     #[error("Unable to decode {0:?} into Cia402State")]
     Cia402StateDecode(StatusWord),
     #[error("Unable to send motor command {0:?}")]

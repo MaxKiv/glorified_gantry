@@ -1,5 +1,6 @@
 pub mod error;
 pub mod parse;
+pub mod setpoint_manager;
 pub mod subscriber;
 
 use std::time::Duration;

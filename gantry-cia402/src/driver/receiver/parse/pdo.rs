@@ -1,6 +1,5 @@
-
 use crate::driver::{
-    oms::OperationMode,
+    oms::{OMSFlagsSW, OperationMode},
     receiver::{
         StatusWord,
         parse::{ParseError, pdo_message::*},
@@ -22,9 +21,12 @@ impl TryFrom<[u8; 8]> for TPDO1Message {
             ))
         })?;
 
+        let oms_flags = OMSFlagsSW::from_statusword_and_opmode(statusword, actual_opmode);
+
         Ok(TPDO1Message {
             statusword,
             actual_opmode,
+            oms_flags,
         })
     }
 }
@@ -65,7 +67,7 @@ impl TryFrom<[u8; 8]> for RPDO1Message {
     type Error = ParseError;
 
     fn try_from(value: [u8; 8]) -> Result<Self, Self::Error> {
-        let controlword = ControlWord::from_bits_truncate(u16::from_be_bytes([value[0], value[1]]));
+        let controlword = ControlWord::from_bits_truncate(u16::from_le_bytes([value[0], value[1]]));
 
         const OPMODE_BYTE: usize = 2;
         let opmode = value[OPMODE_BYTE] as i8;

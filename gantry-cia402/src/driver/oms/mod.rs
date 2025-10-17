@@ -1,5 +1,6 @@
 pub mod home;
 pub mod position;
+pub mod setpoint;
 pub mod torque;
 pub mod velocity;
 
@@ -7,6 +8,8 @@ use home::*;
 use position::*;
 use torque::*;
 use velocity::*;
+
+use crate::driver::{oms::setpoint::Setpoint, receiver::StatusWord};
 
 pub const STARTUP_SETPOINT: Setpoint = Setpoint::ProfilePosition(STARTUP_POSITIONMODE_SETPOINT);
 
@@ -50,9 +53,32 @@ impl TryFrom<i8> for OperationMode {
 }
 
 #[derive(Clone, Debug)]
-pub enum Setpoint {
-    ProfilePosition(PositionSetpoint),
-    ProfileVelocity(VelocitySetpoint),
-    ProfileTorque(TorqueSetpoint),
-    Home(HomingSetpoint),
+pub enum OMSFlagsSW {
+    Homing(HomeFlagsSW),
+    ProfilePosition(PositionFlagsSW),
+    ProfileVelocity(VelocityFlagsSW),
+    ProfileTorque(TorqueFlagsSW),
+    None,
+}
+
+impl OMSFlagsSW {
+    pub fn from_statusword_and_opmode(statusword: StatusWord, opmode: OperationMode) -> Self {
+        // Parse Operation Mode Specific bits of the statusword
+        match opmode {
+            OperationMode::ProfilePosition => {
+                OMSFlagsSW::ProfilePosition(PositionFlagsSW::from_status(statusword))
+            }
+            OperationMode::ProfileVelocity => {
+                OMSFlagsSW::ProfileVelocity(VelocityFlagsSW::from_status(statusword))
+            }
+            OperationMode::ProfileTorque => {
+                OMSFlagsSW::ProfileTorque(TorqueFlagsSW::from_status(statusword))
+            }
+            OperationMode::Homing => OMSFlagsSW::Homing(HomeFlagsSW::from_status(statusword)),
+            _ => {
+                tracing::trace!("No specific statusword parsing for current opmode {opmode:?}");
+                OMSFlagsSW::None
+            }
+        }
+    }
 }

@@ -1,9 +1,12 @@
-
 use oze_canopen::canopen::NodeId;
 
 use crate::{
     comms::pdo::mapping::PdoType,
-    driver::{oms::OperationMode, receiver::StatusWord, update::ControlWord},
+    driver::{
+        oms::{OMSFlagsSW, OperationMode},
+        receiver::StatusWord,
+        update::ControlWord,
+    },
 };
 
 #[derive(Debug, Clone)]
@@ -41,7 +44,10 @@ impl From<ParsedPDO> for PrettyPdo {
         let raw = format!("{0:x?}", value.raw_data[..value.raw_dlc].to_vec());
 
         let parsed = match &value.message {
-            PDOMessage::TPDO1(m) => format!("{0:?} - {1:?}", m.statusword, m.actual_opmode),
+            PDOMessage::TPDO1(m) => format!(
+                "{0:?} - {1:?} => {2:?}",
+                m.statusword, m.actual_opmode, m.oms_flags
+            ),
             PDOMessage::TPDO2(m) => format!("pos: {0:?} - vel: {1:?}", m.actual_pos, m.actual_vel),
             PDOMessage::TPDO3(m) => format!("torque {0:?}", m.actual_torque),
             PDOMessage::TPDO4(_) => String::new(),
@@ -74,6 +80,7 @@ pub struct RawPDOMessage {
 pub struct TPDO1Message {
     pub statusword: StatusWord,
     pub actual_opmode: OperationMode,
+    pub oms_flags: OMSFlagsSW,
 }
 
 #[derive(Debug, Clone)]

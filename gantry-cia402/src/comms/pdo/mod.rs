@@ -14,8 +14,10 @@ use crate::comms::pdo::mapping::custom::RPDO_TARGET_VEL;
 use crate::comms::pdo::mapping::custom::get_dlc;
 use crate::driver::oms::home::*;
 use crate::driver::oms::position::*;
+use crate::driver::oms::setpoint::Setpoint;
 use crate::driver::oms::torque::*;
 use crate::driver::oms::velocity::*;
+use crate::driver::receiver::setpoint_manager::SetpointManager;
 use crate::od;
 use std::time::Duration;
 
@@ -69,7 +71,7 @@ impl Pdo {
     // sending the PDO that has controlword mapped out to the device
     pub async fn write_cia402_state_transition(
         &mut self,
-        flags: Cia402Flags,
+        flags: &Cia402Flags,
     ) -> Result<(), DriveError> {
         trace!("cia402 state transition requested - flags {flags:?}");
 
@@ -79,18 +81,6 @@ impl Pdo {
 
         cw = cw.with_cia402_flags(flags);
         self.set_controlword_rpdo(cw);
-
-        // error!("Sending hacky SDO Controlword");
-        // self.canopen
-        //     .get_sdo_client(3)
-        //     .ok_or(DriveError::ViolatedInvariant(String::from(
-        //         "SDO test issue",
-        //     )))?
-        //     .lock()
-        //     .await
-        //     .download(0x6040, 0x0, &cw.bits().to_le_bytes())
-        //     .await
-        //     .unwrap();
 
         match self.send_rpdo(RPDO_CONTROL_OPMODE).await {
             Ok(_) => {
@@ -105,6 +95,21 @@ impl Pdo {
         Ok(())
     }
 
+    pub async fn write_setpoint(&mut self, setpoint: &Setpoint) -> Result<(), DriveError> {
+        match setpoint {
+            Setpoint::ProfilePosition(position_setpoint) => {
+                self.write_position_setpoint(position_setpoint).await
+            }
+            Setpoint::ProfileVelocity(position_setpoint) => {
+                self.write_velocity_setpoint(position_setpoint).await
+            }
+            Setpoint::ProfileTorque(torque_setpoint) => {
+                self.write_torque_setpoint(torque_setpoint).await
+            }
+            Setpoint::Home(homing_setpoint) => self.write_homing_setpoint(homing_setpoint).await,
+        }
+    }
+
     // TODO: cleanup all the hardcoded addresses and offsets when you have time... I will have time
     // for that, right?
     pub async fn write_position_setpoint(
@@ -113,7 +118,7 @@ impl Pdo {
             flags,
             target,
             profile_velocity,
-        }: PositionSetpoint,
+        }: &PositionSetpoint,
     ) -> Result<(), DriveError> {
         // 1. Construct RPDO1: Set opmode to position and toggle control_word OMS bits
 
@@ -139,7 +144,7 @@ impl Pdo {
         // TODO: hardcoded offsets
         self.rpdo_frames[RPDO_IDX_TARGET_POS].set(
             (RPDO_TARGET_POS.sources[0].bit_range.start / 8) as usize,
-            &(target as u32).to_le_bytes(),
+            &(*target as u32).to_le_bytes(),
         );
         self.rpdo_frames[RPDO_IDX_TARGET_POS].set(
             (RPDO_TARGET_POS.sources[1].bit_range.start / 8) as usize,
@@ -156,7 +161,7 @@ impl Pdo {
         &mut self,
         VelocitySetpoint {
             target_velocity: target,
-        }: VelocitySetpoint,
+        }: &VelocitySetpoint,
     ) -> Result<(), DriveError> {
         // Set Velocity Mode
         self.set_operational_mode(OperationMode::ProfileVelocity);
@@ -180,7 +185,7 @@ impl Pdo {
         &mut self,
         TorqueSetpoint {
             target_torque: target,
-        }: TorqueSetpoint,
+        }: &TorqueSetpoint,
     ) -> Result<(), DriveError> {
         // Set Torque Mode
         self.set_operational_mode(OperationMode::ProfileTorque);
@@ -202,7 +207,7 @@ impl Pdo {
 
     pub async fn write_homing_setpoint(
         &mut self,
-        HomingSetpoint { flags }: HomingSetpoint,
+        HomingSetpoint { flags }: &HomingSetpoint,
     ) -> Result<(), DriveError> {
         trace!("Writing homing setpoint with flags {flags:?}");
 
@@ -331,12 +336,18 @@ impl Pdo {
         let cw_bytes = cw.bits().to_le_bytes();
 
         info!("setting controlword rpdo #{num} to new cw: {cw:?}");
+        let mut cw = self.get_current_controlword();
+        info!("Controlword before Set: {cw:?}");
+
         self.rpdo_frames[cw_idx].set(
             RPDO_CONTROL_OPMODE.sources[RPDO_IDX_CONTROL_WORD]
                 .bit_range
                 .start as usize,
             &cw_bytes,
         );
+
+        let mut cw = self.get_current_controlword();
+        info!("Controlword after Set: {cw:?}");
     }
 
     fn set_operational_mode(&mut self, mode: OperationMode) {

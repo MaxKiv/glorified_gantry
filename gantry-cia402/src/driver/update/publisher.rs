@@ -1,5 +1,7 @@
+use std::sync::Arc;
+
 use tokio::sync::{
-    broadcast,
+    Mutex, broadcast,
     mpsc::{self},
 };
 use tracing::*;
@@ -10,10 +12,12 @@ use crate::{
         command::MotorCommand,
         oms::{
             home::{HomeFlagsCW, HomingSetpoint},
-            position::{PositionModeFlagsCW, PositionSetpoint},
+            position::{PositionFlagsCW, PositionSetpoint},
+            setpoint::Setpoint,
             torque::TorqueSetpoint,
             velocity::VelocitySetpoint,
         },
+        receiver::setpoint_manager::SetpointManager,
         state::Cia402Flags,
     },
 };
@@ -23,9 +27,10 @@ use crate::{
 /// It encodes these changes into the appropriate controlword bits or OD object
 /// It then sends these changes out on the CANopen bus using the accessor
 pub async fn publish_updates(
-    mut pdo: Pdo,
+    pdo: Arc<Mutex<Pdo>>,
     mut state_update_rx: mpsc::Receiver<Cia402Flags>,
     mut cmd_rx: broadcast::Receiver<MotorCommand>,
+    new_setpoint_tx: mpsc::Sender<Setpoint>,
 ) {
     loop {
         tokio::select! {
@@ -35,7 +40,7 @@ pub async fn publish_updates(
                     "Cia402 state update received, new cia402flags: {new_state_flags:?}",
                 );
 
-                if let Err(err) = pdo.write_cia402_state_transition(new_state_flags).await {
+                if let Err(err) = pdo.lock().await.write_cia402_state_transition(&new_state_flags).await {
                     error!(
                         "Unable to write cia402 state transition: {err}",
                     );
@@ -45,46 +50,52 @@ pub async fn publish_updates(
             Ok(cmd) = cmd_rx.recv() => {
                 trace!("update publisher received command: {cmd:?}");
 
-                if let Err(err) = match cmd {
+                if let Err(err) = match cmd.clone() {
                     MotorCommand::Halt => {
-                        pdo.write_position_setpoint(PositionSetpoint {
-                            flags: PositionModeFlagsCW::halt(),
+                        let setpoint = PositionSetpoint {
+                            flags: PositionFlagsCW::halt(),
                             target: 0,
                             profile_velocity: 0,
-                        }).await
+                        };
+                        SetpointManager::write_new_setpoint(&new_setpoint_tx, Setpoint::ProfilePosition(setpoint)).await
                     }
                     MotorCommand::Home => {
-                        pdo.write_homing_setpoint(HomingSetpoint {
+                        let setpoint = HomingSetpoint {
                             flags: HomeFlagsCW::default(),
-                        }).await
+                        };
+                        SetpointManager::write_new_setpoint(&new_setpoint_tx, Setpoint::Home(setpoint)).await
                     },
                     MotorCommand::MoveAbsolute { target, profile_velocity } => {
-                        pdo.write_position_setpoint(PositionSetpoint {
-                            flags: PositionModeFlagsCW::absolute(),
+                        let setpoint = PositionSetpoint {
+                            flags: PositionFlagsCW::absolute(),
                             target,
                             profile_velocity
-                        }).await
+                        };
+                        SetpointManager::write_new_setpoint(&new_setpoint_tx,Setpoint::ProfilePosition(setpoint)).await
                     },
                     MotorCommand::MoveRelative { delta, profile_velocity } => {
-                        pdo.write_position_setpoint(PositionSetpoint {
-                            flags: PositionModeFlagsCW::relative(),
+                        let setpoint = PositionSetpoint {
+                            flags: PositionFlagsCW::relative(),
                             target: delta,
                             profile_velocity
-                        }).await
+                        };
+                        SetpointManager::write_new_setpoint(&new_setpoint_tx,Setpoint::ProfilePosition(setpoint)).await
                     },
                     MotorCommand::SetVelocity { target_velocity }=> {
-                        pdo.write_velocity_setpoint(VelocitySetpoint {
+                        let setpoint = VelocitySetpoint {
                             // flags: PositionModeFlags::relative(),
                             target_velocity,
                             // profile_velocity
-                        }).await
+                        };
+                        SetpointManager::write_new_setpoint(&new_setpoint_tx, Setpoint::ProfileVelocity(setpoint)).await
                     },
                     MotorCommand::SetTorque { target_torque }=> {
-                        pdo.write_torque_setpoint(TorqueSetpoint {
+                        let setpoint = TorqueSetpoint {
                             // flags: PositionModeFlags::relative(),
                             target_torque,
                             // profile_torque
-                        }).await
+                        };
+                        SetpointManager::write_new_setpoint(&new_setpoint_tx, Setpoint::ProfileTorque(setpoint)).await
                     },
                     _ => {
                         trace!("update publisher ignoring command: {cmd:?}");

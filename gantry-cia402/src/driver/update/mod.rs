@@ -4,7 +4,7 @@ use thiserror::Error;
 use tracing::info;
 
 use crate::driver::{
-    oms::{home::HomeFlagsCW, position::PositionModeFlagsCW},
+    oms::{home::HomeFlagsCW, position::PositionFlagsCW},
     state::{Cia402Flags, Cia402State},
 };
 
@@ -14,6 +14,7 @@ pub enum UpdateError {
     InvalidTransition(Cia402State, Cia402State),
 }
 
+// ControlWord(ENABLE_VOLTAGE | HALT | OMS_4 | RESERVED_2 | RESERVED_3 | MANUFACTURER_1 | MANUFACTURER_2) - ProfilePosition
 bitflags::bitflags! {
     #[derive(Clone, Copy, Debug, PartialEq)]
     pub struct ControlWord: u16 {
@@ -57,19 +58,19 @@ bitflags::bitflags! {
 }
 
 impl ControlWord {
-    pub fn with_position_flags(self, flags: PositionModeFlagsCW) -> Self {
-        let mask = PositionModeFlagsCW::all().bits();
+    pub fn with_position_flags(self, flags: &PositionFlagsCW) -> Self {
+        let mask = PositionFlagsCW::all().bits();
         let new_bits = (self.bits() & !mask) | (flags.bits() & mask);
         ControlWord::from_bits_truncate(new_bits)
     }
 
-    pub fn with_home_flags(self, flags: HomeFlagsCW) -> Self {
+    pub fn with_home_flags(self, flags: &HomeFlagsCW) -> Self {
         let mask = HomeFlagsCW::all().bits();
         let new_bits = (self.bits() & !mask) | (flags.bits() & mask);
         ControlWord::from_bits_truncate(new_bits)
     }
 
-    pub fn with_cia402_flags(self, flags: Cia402Flags) -> Self {
+    pub fn with_cia402_flags(self, flags: &Cia402Flags) -> Self {
         info!("adding cia402flags to cw: {flags:?}");
 
         let mask = Cia402Flags::all().bits();
@@ -101,7 +102,7 @@ mod tests {
     #[test]
     fn test_cw_update_with_position_flags() {
         let simple_cw = ControlWord::from_bits_truncate(0b101010101010101);
-        let flags = PositionModeFlagsCW::empty();
+        let flags = PositionFlagsCW::empty();
         let simple_combined = simple_cw.with_position_flags(flags);
         assert_eq!(simple_combined.bits(), 0b101010000000101);
     }
@@ -119,7 +120,7 @@ mod tests {
         // Verify flags don't interfere with each other
         let base = ControlWord::from_bits_truncate(0b1111_1111_1111_1111);
 
-        let with_pos = base.with_position_flags(PositionModeFlagsCW::empty());
+        let with_pos = base.with_position_flags(PositionFlagsCW::empty());
         let with_home = base.with_home_flags(HomeFlagsCW::empty());
         let with_cia402 = base.with_cia402_flags(Cia402Flags::empty());
 
@@ -133,7 +134,7 @@ mod tests {
     fn test_cw_update_multiple_flag_applications() {
         let cw = ControlWord::default()
             .with_cia402_flags(Cia402Flags::ENABLE_VOLTAGE)
-            .with_position_flags(PositionModeFlagsCW::NEW_SETPOINT);
+            .with_position_flags(PositionFlagsCW::NEW_SETPOINT);
 
         // Verify both sets of flags are present
         assert!(cw.contains(ControlWord::ENABLE_VOLTAGE));

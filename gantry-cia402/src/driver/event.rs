@@ -44,7 +44,7 @@ pub enum MotorEvent {
     PositionModeFeedback {
         target_reached: bool,
         limit_exceeded: bool,
-        setpoint_acknowlegde: bool,
+        setpoint_acknowlegded: bool,
         following_error: bool,
     },
 

@@ -1,9 +1,7 @@
 use tracing::*;
+use tracing_subscriber::Layer;
 use tracing_subscriber::filter::filter_fn;
-use tracing_subscriber::{
-    Registry, layer::SubscriberExt,
-};
-use tracing_subscriber::{Layer, prelude::*};
+use tracing_subscriber::{Registry, layer::SubscriberExt};
 
 use std::fmt::Debug;
 
@@ -11,10 +9,7 @@ use chrono::{SecondsFormat, Utc};
 use owo_colors::OwoColorize;
 use tracing::field::{Field, Visit};
 use tracing_subscriber::fmt::*;
-use tracing_subscriber::{
-    fmt::format::Writer,
-    registry::LookupSpan,
-};
+use tracing_subscriber::{fmt::format::Writer, registry::LookupSpan};
 
 pub fn setup_tracing() {
     // your custom formatter for canopen

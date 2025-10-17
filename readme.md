@@ -1,5 +1,7 @@
 # TODO
 
+- Consecutive movement is broken using `PositionModeFlagsCW::DECELERATE_AFTER_REACHING`
+
 - Statusword feedback bit 10: target reached is parsed twice, move to a single location
 
 - make function that checks sdo transaction success

@@ -1,4 +1,4 @@
-use crate::driver::state::Cia402State;
+use crate::driver::{oms::setpoint::Setpoint, state::Cia402State};
 
 // Commands that can be sent to the motor
 #[derive(Debug, Clone)]

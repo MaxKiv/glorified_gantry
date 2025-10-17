@@ -1,24 +1,21 @@
 pub mod common;
 
-use std::time::Duration;
-
 use tokio::task::{self};
 use tracing::*;
 
 #[cfg(test)]
 mod tests {
 
-    const TEST_POSITION: i32 = -200;
+    const TEST_POSITION: i32 = -50;
+    // const TEST_POSITION: i32 = 100;
     const TEST_SPEED: u32 = 100;
 
     use gantry_cia402::{
-        comms::pdo::mapping::custom::CUSTOM_TPDOS,
         driver::{
             Cia402Driver, command::MotorCommand, event::MotorEvent,
             receiver::subscriber::wait_for_event, state::Cia402State,
         },
         error::DriveError,
-        log::log_events,
     };
 
     use crate::common::{NODE_ID, PARAMS, RPDOS, TIMEOUT, TPDOS, start_feedback_task};
@@ -86,27 +83,73 @@ mod tests {
         )
         .await?;
 
-        info!("Doing position movement");
-        drive
-            .cmd_tx
-            .send(MotorCommand::MoveRelative {
-                delta: TEST_POSITION,
-                profile_velocity: TEST_SPEED,
-            })
-            .map_err(DriveError::CommandError)?;
+        for num in 1..=10 {
+            info!("Doing absolute position movement forward # {num}");
+            drive
+                .cmd_tx
+                .send(MotorCommand::MoveAbsolute {
+                    target: TEST_POSITION,
+                    profile_velocity: TEST_SPEED,
+                })
+                .map_err(DriveError::CommandError)?;
 
-        info!("Wait for PositionModeFeedback - target_reached");
-        wait_for_event(
-            drive.event_rx.resubscribe(),
-            MotorEvent::PositionModeFeedback {
-                target_reached: true,
-                limit_exceeded: false,
-                setpoint_acknowlegde: true,
-                following_error: false,
-            },
-            TIMEOUT,
-        )
-        .await?;
+            info!("Wait for PositionModeFeedback - setpoint_acknowlegded");
+            wait_for_event(
+                drive.event_rx.resubscribe(),
+                MotorEvent::PositionModeFeedback {
+                    target_reached: false,
+                    limit_exceeded: false,
+                    setpoint_acknowlegded: true,
+                    following_error: false,
+                },
+                TIMEOUT,
+            )
+            .await?;
+            wait_for_event(
+                drive.event_rx.resubscribe(),
+                MotorEvent::PositionModeFeedback {
+                    target_reached: true,
+                    limit_exceeded: false,
+                    setpoint_acknowlegded: false,
+                    following_error: false,
+                },
+                TIMEOUT,
+            )
+            .await?;
+
+            info!("Doing position relative position movement backward # {num}");
+            drive
+                .cmd_tx
+                .send(MotorCommand::MoveAbsolute {
+                    target: -TEST_POSITION,
+                    profile_velocity: TEST_SPEED,
+                })
+                .map_err(DriveError::CommandError)?;
+
+            info!("Wait for PositionModeFeedback - target_reached");
+            wait_for_event(
+                drive.event_rx.resubscribe(),
+                MotorEvent::PositionModeFeedback {
+                    target_reached: false,
+                    limit_exceeded: false,
+                    setpoint_acknowlegded: true,
+                    following_error: false,
+                },
+                TIMEOUT,
+            )
+            .await?;
+            wait_for_event(
+                drive.event_rx.resubscribe(),
+                MotorEvent::PositionModeFeedback {
+                    target_reached: true,
+                    limit_exceeded: false,
+                    setpoint_acknowlegded: false,
+                    following_error: false,
+                },
+                TIMEOUT,
+            )
+            .await?;
+        }
 
         Ok(())
     }

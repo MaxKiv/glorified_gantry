@@ -1,7 +1,7 @@
 use crate::driver::{event::MotorEvent, receiver::StatusWord};
 
 pub const STARTUP_POSITIONMODE_SETPOINT: PositionSetpoint = PositionSetpoint {
-    flags: PositionModeFlagsCW::empty(),
+    flags: PositionFlagsCW::empty(),
     target: 0,
     profile_velocity: 0,
 };
@@ -9,44 +9,44 @@ pub const STARTUP_POSITIONMODE_SETPOINT: PositionSetpoint = PositionSetpoint {
 // Controlword OMS flags for Profile Position mode
 bitflags::bitflags! {
 #[derive(Clone, Copy, Debug)]
-    pub struct PositionModeFlagsCW: u16 {
-        const NEW_SETPOINT       = 1 << 4; // Bit 4: Rising edge triggers start of movement
-        const CHANGE_IMMEDIATELY = 1 << 5; // Bit 5: Should the motor instantly adapt to the new setpoint, or first reach the previous target?
-        const RELATIVE           = 1 << 6; // Bit 6: Interpret this target as a relative position, see 0x60F2
-        const HALT               = 1 << 8; // Bit 8: Halt the motor
-        const CHANGE_ON_SETPOINT = 1 << 9; // Bit 9: Should the motor have velocity 0 at target position? see page 60
+    pub struct PositionFlagsCW: u16 {
+        const NEW_SETPOINT              = 1 << 4; // Bit 4: Rising edge triggers start of movement
+        const CHANGE_IMMEDIATELY        = 1 << 5; // Bit 5: Should the motor instantly adapt to the new setpoint, or first reach the previous target?
+        const RELATIVE                  = 1 << 6; // Bit 6: Interpret this target as a relative position, see 0x60F2
+        const HALT                      = 1 << 8; // Bit 8: Halt the motor
+        const DECELERATE_AFTER_REACHING = 1 << 9; // Bit 9: Should the motor have velocity 0 at target position? see page 60
     }
 }
 
-impl Default for PositionModeFlagsCW {
+impl Default for PositionFlagsCW {
     fn default() -> Self {
-        PositionModeFlagsCW::NEW_SETPOINT// By default start movement when new setpoint is given
-        | PositionModeFlagsCW::CHANGE_IMMEDIATELY  // By default instantly adopt new setpoint, overriding old
-        & !(PositionModeFlagsCW::RELATIVE)         // By default interpret target position as absolute position
-        & !(PositionModeFlagsCW::HALT)             // By default do not halt
-        | PositionModeFlagsCW::CHANGE_ON_SETPOINT // By default have zero velocity when reaching setpoint
+        PositionFlagsCW::NEW_SETPOINT                   // By default start movement when new setpoint is given
+        | PositionFlagsCW::CHANGE_IMMEDIATELY           // By default instantly adopt new setpoint, overriding old
+        & !(PositionFlagsCW::RELATIVE)                  // By default interpret target position as absolute position
+        & !(PositionFlagsCW::HALT)                      // By default do not halt
+        & !(PositionFlagsCW::DECELERATE_AFTER_REACHING) // By default have zero velocity when reaching setpoint
     }
 }
-impl PositionModeFlagsCW {
+impl PositionFlagsCW {
     pub fn absolute() -> Self {
         Self::default()
     }
 
     pub fn relative() -> Self {
-        Self::default() | PositionModeFlagsCW::RELATIVE
+        Self::default() | PositionFlagsCW::RELATIVE
     }
 
     pub fn halt() -> Self {
-        PositionModeFlagsCW::NEW_SETPOINT// By default start movement when new setpoint is given
-        | PositionModeFlagsCW::CHANGE_IMMEDIATELY  // By default instantly adopt new setpoint, overriding old
-        | PositionModeFlagsCW::CHANGE_ON_SETPOINT // By default have zero velocity when reaching setpoint
-        | PositionModeFlagsCW::HALT // Stop!
+        PositionFlagsCW::NEW_SETPOINT// By default start movement when new setpoint is given
+        | PositionFlagsCW::CHANGE_IMMEDIATELY  // By default instantly adopt new setpoint, overriding old
+        | PositionFlagsCW::DECELERATE_AFTER_REACHING // By default have zero velocity when reaching setpoint
+        | PositionFlagsCW::HALT // Stop!
     }
 }
 
 #[derive(Clone, Debug)]
 pub struct PositionSetpoint {
-    pub flags: PositionModeFlagsCW,
+    pub flags: PositionFlagsCW,
     pub target: i32,
     pub profile_velocity: u32,
 }
@@ -73,7 +73,7 @@ impl PositionFlagsSW {
         MotorEvent::PositionModeFeedback {
             target_reached: self.intersects(Self::TARGET_REACHED),
             limit_exceeded: self.intersects(Self::LIMIT_EXCEEDED),
-            setpoint_acknowlegde: self.intersects(Self::SETPOINT_ACKNOWLEGDE),
+            setpoint_acknowlegded: self.intersects(Self::SETPOINT_ACKNOWLEGDE),
             following_error: self.intersects(Self::FOLLOWING_ERROR),
         }
     }

@@ -18,7 +18,7 @@ use crate::{
         command::MotorCommand,
         event::MotorEvent,
         nmt::{NmtState, nmt_task},
-        receiver::subscriber::handle_feedback,
+        receiver::{setpoint_manager::SetpointManager, subscriber::handle_feedback},
         startup::motor_startup_task,
         state::{orchestrator::cia402_orchestrator_task, state_machine::cia402_state_machine_task},
         update::publisher::publish_updates,
@@ -81,6 +81,7 @@ impl Cia402Driver {
         let event_rx_nmt = event_rx.resubscribe();
         let event_rx_startup = event_rx.resubscribe();
         let event_rx_cia402 = event_rx.resubscribe();
+        let event_rx_setpoint_manager = event_rx.resubscribe();
         let event_tx_feedback = event_tx.clone();
         let event_tx_cia402_sm = event_tx.clone();
 
@@ -89,7 +90,6 @@ impl Cia402Driver {
 
         let canopen_feedback = canopen.clone();
         let canopen_nmt = canopen.clone();
-        // let canopen_logger = canopen.clone();
 
         // Initialize the event_logger
         handles.push(task::spawn(async move {
@@ -98,18 +98,6 @@ impl Cia402Driver {
                 Err(err) => error!("Event Logger panicked: {err}"),
             }
         }));
-
-        // trace!("Starting canopen pretty logger");
-        // handles.push(tokio::task::spawn(async move {
-        //     match crate::log::log_canopen_pretty(canopen_logger).await {
-        //         Ok(_) => {
-        //             error!("Update Publisher task finished succesfully, this should never happen")
-        //         }
-        //         Err(err) => {
-        //             error!("Update Publisher task panicked: {err}")
-        //         }
-        //     }
-        // }));
 
         // Start the device feedback task responsible for receiving and parsing device feedback,
         // and broadcasting these as events
@@ -143,8 +131,15 @@ impl Cia402Driver {
             .expect("Unable to construct SDO client for node id {node_id}");
 
         // Get the PDO client for this node id, we use this to manage R/TPDOs
-        let pdo = Pdo::new(canopen.clone(), node_id, rpdo_mapping_set)
-            .expect("unable to construct PDO client for node id {node_id}");
+        let pdo = Arc::new(Mutex::new(
+            Pdo::new(canopen.clone(), node_id, rpdo_mapping_set)
+                .expect("unable to construct PDO client for node id {node_id}"),
+        ));
+
+        // Start the setpoint manager for this node, this encapsulates reactive setpoint logic by clearing CW bit 4 when device posts SW 12
+        let (setpoint_manager_handle, new_setpoint_tx) =
+            SetpointManager::init(event_rx_setpoint_manager, pdo.clone());
+        handles.push(setpoint_manager_handle);
 
         // Start the NMT task
         trace!("Starting NMT State Machine task for motor with node id {node_id}");
@@ -177,7 +172,13 @@ impl Cia402Driver {
         // Start the publisher task, responsible for update aggregation and device communication
         trace!("Starting update publisher task for motor with node id {node_id}");
         handles.push(tokio::task::spawn(async move {
-            publish_updates(pdo, state_update_rx, cmd_rx_publisher).await;
+            publish_updates(
+                pdo.clone(),
+                state_update_rx,
+                cmd_rx_publisher,
+                new_setpoint_tx,
+            )
+            .await;
             error!("Update Publisher task finished succesfully, this should never happen");
         }));
 
@@ -198,13 +199,6 @@ impl Cia402Driver {
             return Err(err);
         }
         trace!("Startup done for motor at node id {node_id}");
-
-        // let mut rx_test = canopen.clone().rx;
-        // match tokio::time::timeout(Duration::from_secs(1), rx_test.recv()).await {
-        //     Ok(Ok(frame)) => error!("yay received frame: {frame:?}"),
-        //     Ok(Err(err)) => error!("no timeout, but error: {err}"),
-        //     Err(err) => error!("timeout elapsed - unable to receive after startup: {err}"),
-        // }
 
         // Drive is now parametrised, T/RPDO are configured and in NMT::Operational
         info!("Cia402Driver for node id {node_id} constructed and initialized");

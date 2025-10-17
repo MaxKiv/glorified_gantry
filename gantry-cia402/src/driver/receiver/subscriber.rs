@@ -10,8 +10,8 @@ use crate::{
     driver::{
         event::MotorEvent,
         oms::{
-            OperationMode, home::HomeFlagsSW, position::PositionFlagsSW, torque::TorqueFlagsSW,
-            velocity::VelocityFlagsSW,
+            OMSFlagsSW, OperationMode, home::HomeFlagsSW, position::PositionFlagsSW,
+            torque::TorqueFlagsSW, velocity::VelocityFlagsSW,
         },
         receiver::{
             error::ReceiverError,
@@ -189,38 +189,17 @@ async fn handle_parsed_tpdo1(
     );
 
     // Parse Operational Mode Specific bits
-    if let Some(event) =
-        parse_oms_statusword_bits(tpdo1_message.actual_opmode, tpdo1_message.statusword)
-    {
-        // Send anything interesting along
+    let event = match tpdo1_message.oms_flags {
+        OMSFlagsSW::Homing(home_flags_sw) => Some(home_flags_sw.into_event()),
+        OMSFlagsSW::ProfilePosition(position_flags_sw) => Some(position_flags_sw.into_event()),
+        OMSFlagsSW::ProfileVelocity(velocity_flags_sw) => Some(velocity_flags_sw.into_event()),
+        OMSFlagsSW::ProfileTorque(torque_flags_sw) => Some(torque_flags_sw.into_event()),
+        OMSFlagsSW::None => None,
+    };
+    // Send anything interesting along
+    if let Some(event) = event {
         trace!("Sending OMS event: {event:?}");
         send_update(event, event_tx);
-    }
-}
-
-fn parse_oms_statusword_bits(opmode: OperationMode, statusword: StatusWord) -> Option<MotorEvent> {
-    // Parse Operation Mode Specific bits of the statusword
-    match opmode {
-        OperationMode::ProfilePosition => {
-            let flags = PositionFlagsSW::from_status(statusword);
-            Some(flags.into_event())
-        }
-        OperationMode::ProfileVelocity => {
-            let flags = VelocityFlagsSW::from_status(statusword);
-            Some(flags.into_event())
-        }
-        OperationMode::ProfileTorque => {
-            let flags = TorqueFlagsSW::from_status(statusword);
-            Some(flags.into_event())
-        }
-        OperationMode::Homing => {
-            let flags = HomeFlagsSW::from_status(statusword);
-            Some(flags.into_event())
-        }
-        _ => {
-            trace!("No specific statusword parsing for current opmode {opmode:?}");
-            None
-        }
     }
 }
 
@@ -250,12 +229,12 @@ async fn handle_parsed_tpdo3(
     event_tx: &broadcast::Sender<MotorEvent>,
 ) {
     // Send actual torque update
-    send_update(
-        MotorEvent::TorqueFeedback {
-            actual_torque: tpdo3_message.actual_torque,
-        },
-        event_tx,
-    );
+    // send_update(
+    //     MotorEvent::TorqueFeedback {
+    //         actual_torque: tpdo3_message.actual_torque,
+    //     },
+    //     event_tx,
+    // );
 }
 
 fn send_update(event: MotorEvent, event_tx: &broadcast::Sender<MotorEvent>) {
