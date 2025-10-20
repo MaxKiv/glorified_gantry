@@ -1,13 +1,11 @@
-use std::sync::Arc;
-
 use tokio::{
-    sync::{Mutex, broadcast, mpsc},
+    sync::{broadcast, mpsc},
     task::JoinHandle,
 };
 use tracing::*;
 
 use crate::{
-    comms::pdo::Pdo,
+    comms::pdo::cmd::PdoCommand,
     driver::{event::MotorEvent, oms::setpoint::Setpoint},
     error::DriveError,
 };
@@ -23,13 +21,13 @@ pub struct SetpointManager {
     handshake: HandshakeState,
     new_setpoint_rx: mpsc::Receiver<Setpoint>,
     event_rx: broadcast::Receiver<MotorEvent>,
-    pdo: Arc<Mutex<Pdo>>,
+    pdo_tx: mpsc::Sender<PdoCommand>,
 }
 
 impl SetpointManager {
     pub fn init(
         event_rx: broadcast::Receiver<MotorEvent>,
-        pdo: Arc<Mutex<Pdo>>,
+        pdo_tx: mpsc::Sender<PdoCommand>,
     ) -> (JoinHandle<()>, mpsc::Sender<Setpoint>) {
         let (new_setpoint_tx, new_setpoint_rx) = mpsc::channel(16);
 
@@ -37,7 +35,7 @@ impl SetpointManager {
             handshake: HandshakeState::Idle,
             new_setpoint_rx,
             event_rx,
-            pdo,
+            pdo_tx,
         };
 
         // Run the setpoint manager task
@@ -70,10 +68,8 @@ impl SetpointManager {
                                setpoint.acknowledge_setpoint_received();
 
                                // Complete acknowledge procedure by writing the updated setpoint to the device
-                               if let Err(err) = self.pdo.lock().await.write_setpoint(setpoint).await {
-                                   error!(
-                                   "Setpoint manager unable to complete setpoint acknowledge procedure by writing new setpoint (sans cw bit 4) to device: {err}"
-                                   );
+                               if let Err(err) = self.pdo_tx.send(PdoCommand::WriteSetpoint(setpoint.clone())).await {
+                                   error!("Setpoint Manager unable to complete setpoint handshake procedure: {err}");
                                }
 
                                // Setpoint acknowledged
@@ -88,11 +84,9 @@ impl SetpointManager {
                Some(new_setpoint) = self.new_setpoint_rx.recv() => {
                     trace!("Setpoint manager writing new setpoint {new_setpoint:?}");
 
-                   if let Err(err) = self.pdo.lock().await.write_setpoint(&new_setpoint).await {
-                       error!(
-                           "Setpoint manager unable send new setpoint to device: {err}"
-                       );
-                    }
+                   if let Err(err) = self.pdo_tx.send(PdoCommand::WriteSetpoint(new_setpoint.clone())).await {
+                       error!("Setpoint manager unable send new setpoint to device: {err}");
+                   }
 
                     // Start handshake procedure if required
                    if Self::handshake_required_for_setpoint(&new_setpoint) {

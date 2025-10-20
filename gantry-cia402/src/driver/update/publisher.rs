@@ -1,13 +1,11 @@
-use std::sync::Arc;
-
 use tokio::sync::{
-    Mutex, broadcast,
+    broadcast,
     mpsc::{self},
 };
 use tracing::*;
 
 use crate::{
-    comms::pdo::Pdo,
+    comms::pdo::cmd::PdoCommand,
     driver::{
         command::MotorCommand,
         oms::{
@@ -27,7 +25,7 @@ use crate::{
 /// It encodes these changes into the appropriate controlword bits or OD object
 /// It then sends these changes out on the CANopen bus using the accessor
 pub async fn publish_updates(
-    pdo: Arc<Mutex<Pdo>>,
+    pdo_tx: mpsc::Sender<PdoCommand>,
     mut state_update_rx: mpsc::Receiver<Cia402Flags>,
     mut cmd_rx: broadcast::Receiver<MotorCommand>,
     new_setpoint_tx: mpsc::Sender<Setpoint>,
@@ -40,11 +38,11 @@ pub async fn publish_updates(
                     "Cia402 state update received, new cia402flags: {new_state_flags:?}",
                 );
 
-                if let Err(err) = pdo.lock().await.write_cia402_state_transition(&new_state_flags).await {
+               if let Err(err) = pdo_tx.send(PdoCommand::WriteCia402Transition(new_state_flags)).await {
                     error!(
                         "Unable to write cia402 state transition: {err}",
                     );
-                }
+               }
             }
 
             Ok(cmd) = cmd_rx.recv() => {

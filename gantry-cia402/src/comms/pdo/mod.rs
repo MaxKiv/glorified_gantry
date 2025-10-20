@@ -1,6 +1,8 @@
+pub mod cmd;
 pub mod frame;
 pub mod mapping;
 
+use crate::comms::pdo::cmd::PdoCommand;
 use crate::comms::pdo::mapping::PdoMapping;
 use crate::comms::pdo::mapping::PdoType;
 use crate::comms::pdo::mapping::custom::RPDO_CONTROL_OPMODE;
@@ -17,7 +19,6 @@ use crate::driver::oms::position::*;
 use crate::driver::oms::setpoint::Setpoint;
 use crate::driver::oms::torque::*;
 use crate::driver::oms::velocity::*;
-use crate::driver::receiver::setpoint_manager::SetpointManager;
 use crate::od;
 use std::time::Duration;
 
@@ -26,6 +27,8 @@ use oze_canopen::{
     interface::{CanOpenInterface, SEND_TIMOUT},
     transmitter::TxPacket,
 };
+use tokio::sync::mpsc;
+use tokio::task::JoinHandle;
 use tracing::*;
 
 use crate::{
@@ -36,13 +39,14 @@ use crate::{
 };
 
 /// Low level CANopen PDO transport implementation
-/// Manages PDO communication to a single node_id / motor
-/// Used by the update publisher
+/// Manages PDO communication to a single node_id / motor in a seperate task
+/// Used by the update publisher & Setpoint Manager
 pub struct Pdo {
     canopen: CanOpenInterface,
     node_id: u8,
     rpdo_mapping_set: &'static [PdoMapping],
     rpdo_frames: [PdoFrame; 4],
+    pdo_rx: mpsc::Receiver<PdoCommand>,
 }
 
 impl Pdo {
@@ -50,21 +54,75 @@ impl Pdo {
         canopen: CanOpenInterface,
         node_id: u8,
         rpdo_mapping_set: &'static [PdoMapping],
-    ) -> Result<Self, DriveError> {
+    ) -> Result<(JoinHandle<()>, mpsc::Sender<PdoCommand>), DriveError> {
         // Check if all required mappings are present
         Pdo::check_required_rpdo_mappings(rpdo_mapping_set)?;
 
+        // Initialize communication channels
+        let (pdo_tx, pdo_rx) = tokio::sync::mpsc::channel(10);
+
+        // Calculate PDO Data Length Codes
         let mut dlcs = [0usize; 8];
         for (idx, mappings) in rpdo_mapping_set.iter().enumerate() {
             dlcs[idx] = get_dlc(mappings);
         }
 
-        Ok(Self {
+        let pdo = Self {
             canopen,
             node_id,
             rpdo_mapping_set,
             rpdo_frames: core::array::from_fn(|idx| PdoFrame::with_dlc(dlcs[idx])),
-        })
+            pdo_rx,
+        };
+
+        // Run the PDO communication task
+        let handle = tokio::spawn(pdo.run());
+
+        Ok((handle, pdo_tx))
+    }
+
+    // PDO communication task routine
+    async fn run(mut self) {
+        loop {
+            // Await a new PDO command
+            match self.pdo_rx.recv().await {
+                Some(cmd) => {
+                    // Handle received commands
+                    match cmd {
+                        // Write requested cia402 state transitions to the device
+                        PdoCommand::WriteCia402Transition(cia402_flags) => {
+                            if let Err(err) =
+                                self.write_cia402_state_transition(&cia402_flags).await
+                            {
+                                error!(
+                                    "PDO unable to write cia402 state transition: 
+                                    {cia402_flags:?} to device id {} - {err}",
+                                    self.node_id
+                                );
+                            }
+                        }
+
+                        // Write requested new setpoints to the device
+                        PdoCommand::WriteSetpoint(setpoint) => {
+                            if let Err(err) = self.write_setpoint(&setpoint).await {
+                                error!(
+                                    "PDO unable to send setpoint: {setpoint:?} 
+                                    to device id {} - {err}",
+                                    self.node_id
+                                );
+                            }
+                        }
+                    }
+                }
+                None => {
+                    error!(
+                        "PDO receiver channel closed -> update publisher and 
+                        setpoint manager both dropped their pdo_tx,
+                        nothing to do but continue.."
+                    );
+                }
+            }
+        }
     }
 
     // Perform the given cia402 state transition by writing the corresponding controlword flags and
@@ -336,7 +394,7 @@ impl Pdo {
         let cw_bytes = cw.bits().to_le_bytes();
 
         info!("setting controlword rpdo #{num} to new cw: {cw:?}");
-        let mut cw = self.get_current_controlword();
+        let cw = self.get_current_controlword();
         info!("Controlword before Set: {cw:?}");
 
         self.rpdo_frames[cw_idx].set(
@@ -346,7 +404,7 @@ impl Pdo {
             &cw_bytes,
         );
 
-        let mut cw = self.get_current_controlword();
+        let cw = self.get_current_controlword();
         info!("Controlword after Set: {cw:?}");
     }
 

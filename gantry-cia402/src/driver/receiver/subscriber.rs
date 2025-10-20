@@ -9,10 +9,7 @@ use crate::{
     comms::pdo::mapping::PdoMapping,
     driver::{
         event::MotorEvent,
-        oms::{
-            OMSFlagsSW, OperationMode, home::HomeFlagsSW, position::PositionFlagsSW,
-            torque::TorqueFlagsSW, velocity::VelocityFlagsSW,
-        },
+        oms::OMSFlagsSW,
         receiver::{
             error::ReceiverError,
             parse::{Frame, MessageType, pdo_message::*},

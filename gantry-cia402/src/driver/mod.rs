@@ -63,7 +63,7 @@ impl Cia402Driver {
         rpdo_mapping_set: &'static [PdoMapping],
         tpdo_mapping_set: &'static [PdoMapping],
     ) -> Result<Self, DriveError> {
-        // Track task handles that we are about to spawn
+        // Track task handles that we are about to spawn to bind their lifetimes to this object
         let mut handles: Vec<JoinHandle<()>> = Vec::new();
 
         // Initialize input interfaces
@@ -131,14 +131,13 @@ impl Cia402Driver {
             .expect("Unable to construct SDO client for node id {node_id}");
 
         // Get the PDO client for this node id, we use this to manage R/TPDOs
-        let pdo = Arc::new(Mutex::new(
-            Pdo::new(canopen.clone(), node_id, rpdo_mapping_set)
-                .expect("unable to construct PDO client for node id {node_id}"),
-        ));
+        let (pdo_handle, pdo_tx) = Pdo::new(canopen.clone(), node_id, rpdo_mapping_set)
+            .expect("unable to construct PDO client for node id {node_id}");
+        handles.push(pdo_handle);
 
         // Start the setpoint manager for this node, this encapsulates reactive setpoint logic by clearing CW bit 4 when device posts SW 12
         let (setpoint_manager_handle, new_setpoint_tx) =
-            SetpointManager::init(event_rx_setpoint_manager, pdo.clone());
+            SetpointManager::init(event_rx_setpoint_manager, pdo_tx.clone());
         handles.push(setpoint_manager_handle);
 
         // Start the NMT task
@@ -173,7 +172,7 @@ impl Cia402Driver {
         trace!("Starting update publisher task for motor with node id {node_id}");
         handles.push(tokio::task::spawn(async move {
             publish_updates(
-                pdo.clone(),
+                pdo_tx.clone(),
                 state_update_rx,
                 cmd_rx_publisher,
                 new_setpoint_tx,
