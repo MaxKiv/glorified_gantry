@@ -8,3 +8,6 @@ setup-can:
 
 check:
     cargo check
+
+snif:
+    cargo run -p gantry-demo

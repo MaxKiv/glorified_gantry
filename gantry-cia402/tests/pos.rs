@@ -1,6 +1,5 @@
 pub mod common;
 
-use tokio::task::{self};
 use tracing::*;
 
 #[cfg(test)]
@@ -18,7 +17,7 @@ mod tests {
         error::DriveError,
     };
 
-    use crate::common::{NODE_ID, PARAMS, RPDOS, TIMEOUT, TPDOS, start_feedback_task};
+    use crate::common::{NODE_ID, PARAMS, RPDOS, TIMEOUT, TPDOS};
 
     use super::*;
 
