@@ -2,6 +2,8 @@
 
 - Consecutive movement is broken using `PositionModeFlagsCW::DECELERATE_AFTER_REACHING`
 
+- Cia402State::OperationEnabled -> SwitchOnDisabled seems broken, should use quick stop transition?
+
 - Statusword feedback bit 10: target reached is parsed twice, move to a single location
 
 - make function that checks sdo transaction success

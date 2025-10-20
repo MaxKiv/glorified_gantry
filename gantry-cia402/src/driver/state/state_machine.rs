@@ -76,9 +76,9 @@ pub async fn cia402_state_machine_task(
             }
 
             Ok(event) = event_rx.recv() => {
-                trace!(
-                    "Cia402 received event: {event:?}",
-                );
+                // trace!(
+                //     "Cia402 received event: {event:?}",
+                // );
                 if let MotorEvent::StatusWord(sw) = event {
                     match sw.try_into() {
                         Ok(new_state) => {

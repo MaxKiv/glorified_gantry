@@ -115,7 +115,8 @@ pub const SET_TARGET_VELOCITY: ODEntry = ODEntry::new(
     ODValue::I32(0),
 );
 
-/// Target torque [0.1 % of nominal torque]
+/// Target torque — Desired torque setpoint in thousandths of the maximum torque.
+/// 1000 corresponds to the maximum torque (rated current).
 pub const SET_TARGET_TORQUE: ODEntry = ODEntry::new(
     0x6071,
     0x00,
@@ -394,6 +395,45 @@ pub const BLOCK_DETECTION_PERIOD: ODEntry = ODEntry::new(
     ODValue::I32(0xC8), // 200ms
 );
 
+/// Max torque — Limit for torque during the entire ramp (accelerate, maintain, decelerate)
+/// expressed in thousandths of maximum torque.
+pub const MAX_TORQUE: ODEntry = ODEntry::new(
+    0x6072,
+    0x00,
+    AccessType::ReadWrite,
+    MappableType::RPDO,
+    ODValue::U16(0x64), // 100 = 1/10 of max rated torque
+);
+
+/// Max current — Maximum current in thousandths of rated current.
+/// The minimum of this and 6072h limits the torque in 6071h.
+pub const MAX_CURRENT: ODEntry = ODEntry::new(
+    0x6073,
+    0x00,
+    AccessType::ReadWrite,
+    MappableType::RPDO,
+    ODValue::U16(1000), // 1000 ‰ = rated current
+);
+
+/// Torque demand — Current output torque (from ramp generator) in thousandths of max torque.
+pub const TORQUE_DEMAND: ODEntry = ODEntry::new(
+    0x6074,
+    0x00,
+    AccessType::ReadOnly,
+    MappableType::TPDO,
+    ODValue::I16(0x0000),
+);
+
+/// Torque slope — Maximum allowed change in torque per second [thousandths/s].
+/// Defines the torque ramp rate.
+pub const TORQUE_SLOPE: ODEntry = ODEntry::new(
+    0x6087,
+    0x00,
+    AccessType::ReadWrite,
+    MappableType::RPDO,
+    ODValue::U32(100), // Example: 100 thousandths/s = 10% of max rated torque change per second
+);
+
 // PDO related (datasheet page 118)
 // NOTE: these only work when in NMT::PreOperational
 
@@ -460,6 +500,9 @@ pub const HOMING_MODE_MINIMUM_PARAMS: &[ODEntry] = &[
     BLOCK_DETECTION_PERIOD,      // 203Ah:02h
 ];
 
+/// Minimum set of Object Dictionary entries required for Profile Torque Mode
+pub const TORQUE_MODE_MINIMUM_PARAMS: &[ODEntry] = &[MAX_TORQUE, MAX_CURRENT, TORQUE_SLOPE];
+
 pub const FULL_OBJECT_DICTIONARY: &[ODEntry] = &[
     DEVICE_TYPE,
     CONTROL_WORD,
@@ -497,6 +540,9 @@ pub const FULL_OBJECT_DICTIONARY: &[ODEntry] = &[
     POSITIONING_OPTION_CODE,
     SI_UNIT_POSITION,
     SI_UNIT_SPEED,
+    MAX_TORQUE,
+    MAX_CURRENT,
+    TORQUE_SLOPE,
 ];
 
 #[derive(Eq, PartialEq, Hash, Debug)]

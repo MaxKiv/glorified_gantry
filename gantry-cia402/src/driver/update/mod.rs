@@ -103,7 +103,7 @@ mod tests {
     fn test_cw_update_with_position_flags() {
         let simple_cw = ControlWord::from_bits_truncate(0b101010101010101);
         let flags = PositionFlagsCW::empty();
-        let simple_combined = simple_cw.with_position_flags(flags);
+        let simple_combined = simple_cw.with_position_flags(&flags);
         assert_eq!(simple_combined.bits(), 0b101010000000101);
     }
 
@@ -111,7 +111,7 @@ mod tests {
     fn test_cw_update_with_cia402_flags() {
         let cw = ControlWord::from_bits_truncate(0b1111111111111111);
         let flags = Cia402Flags::empty();
-        let combined = cw.with_cia402_flags(flags);
+        let combined = cw.with_cia402_flags(&flags);
         assert_eq!(combined.bits(), 0b1111111110111000);
     }
 
@@ -120,9 +120,9 @@ mod tests {
         // Verify flags don't interfere with each other
         let base = ControlWord::from_bits_truncate(0b1111_1111_1111_1111);
 
-        let with_pos = base.with_position_flags(PositionFlagsCW::empty());
-        let with_home = base.with_home_flags(HomeFlagsCW::empty());
-        let with_cia402 = base.with_cia402_flags(Cia402Flags::empty());
+        let with_pos = base.with_position_flags(&PositionFlagsCW::empty());
+        let with_home = base.with_home_flags(&HomeFlagsCW::empty());
+        let with_cia402 = base.with_cia402_flags(&Cia402Flags::empty());
 
         // Check that only the relevant bits changed
         assert_ne!(base, with_pos);
@@ -133,8 +133,8 @@ mod tests {
     #[test]
     fn test_cw_update_multiple_flag_applications() {
         let cw = ControlWord::default()
-            .with_cia402_flags(Cia402Flags::ENABLE_VOLTAGE)
-            .with_position_flags(PositionFlagsCW::NEW_SETPOINT);
+            .with_cia402_flags(&Cia402Flags::ENABLE_VOLTAGE)
+            .with_position_flags(&PositionFlagsCW::NEW_SETPOINT);
 
         // Verify both sets of flags are present
         assert!(cw.contains(ControlWord::ENABLE_VOLTAGE));

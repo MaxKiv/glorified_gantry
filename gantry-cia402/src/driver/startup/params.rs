@@ -113,4 +113,20 @@ pub const PARAMS: &[SdoAction] = &[
         entry: &BLOCK_DETECTION_PERIOD,
         data: &0xC6i32.to_le_bytes(),
     },
+    // --- Profile Torque Mode Parameters (page 70) ---
+    // 6072h:00h – Max Torque [‰ of rated torque]
+    SdoAction::Download {
+        entry: &MAX_TORQUE,
+        data: &1000u16.to_le_bytes(),
+    },
+    // 6073h:00h – Max Current [‰ of rated current]
+    SdoAction::Download {
+        entry: &MAX_CURRENT,
+        data: &1000u16.to_le_bytes(),
+    },
+    // 6087h:00h – Torque Slope [‰/s]
+    SdoAction::Download {
+        entry: &TORQUE_SLOPE,
+        data: &100u32.to_le_bytes(),
+    },
 ];

@@ -269,6 +269,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "gantry-axis"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "bitflags",
+ "gantry-cia402",
+ "gantry-demo",
+ "heapless",
+ "once_cell",
+ "owo-colors 4.2.3",
+ "oze-canopen 0.1.0",
+ "thiserror 2.0.17",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
 name = "gantry-cia402"
 version = "0.1.0"
 dependencies = [

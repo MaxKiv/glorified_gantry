@@ -23,8 +23,8 @@ mod tests {
     use super::*;
 
     #[tokio::test]
-    /// Test basic cia402 state transitions
-    async fn test_cia402() -> Result<(), DriveError> {
+    /// Test basic cia402 state transitions using PDO
+    async fn test_cia402_pdo() -> Result<(), DriveError> {
         gantry_demo::setup_tracing();
 
         let node_id = NODE_ID;

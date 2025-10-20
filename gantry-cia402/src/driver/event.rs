@@ -55,7 +55,11 @@ pub enum MotorEvent {
     },
 
     /// Torque mode feedback
-    TorqueModeFeedback { limit_exceeded: bool },
+    TorqueModeFeedback {
+        axis_braked: bool,
+        setpoint_reached: bool,
+        limit_exceeded: bool,
+    },
 
     /// Fault detected (e.g. fault bit set in statusword)
     Fault { code: u16, description: String },

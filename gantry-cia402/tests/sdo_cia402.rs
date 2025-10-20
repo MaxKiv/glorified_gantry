@@ -16,7 +16,7 @@ const NODE_ID: u8 = 3;
 /// Quick test of oze-canopen
 /// Attempts some SDO down/uploads to a single node
 /// Useful to see if your socketCAN setup is correct (if not: run `just setup-can`)
-async fn test_oze_canopen() -> Result<(), TestError> {
+async fn test_sdo_cia402_transitions_logic() -> Result<(), TestError> {
     info!("Starting can interface");
     let (interface, mut handles) = oze_canopen::canopen::start(String::from("can0"), Some(1000000));
 
@@ -149,10 +149,10 @@ mod tests {
     use super::*;
 
     #[tokio::test]
-    async fn basic_canopen_test() -> Result<(), TestError> {
+    async fn test_sdo_cia402_transitions() -> Result<(), TestError> {
         gantry_demo::setup_tracing();
 
-        test_oze_canopen().await?;
+        test_sdo_cia402_transitions_logic().await?;
 
         Ok(())
     }
