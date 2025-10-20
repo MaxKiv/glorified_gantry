@@ -1,9 +1,12 @@
 use tokio::sync::{broadcast, mpsc};
 use tracing::*;
 
-use crate::driver::{
-    event::MotorEvent,
-    state::{Cia402Flags, Cia402State},
+use crate::{
+    driver::{
+        event::MotorEvent,
+        state::{Cia402Flags, Cia402State},
+    },
+    error::DriveError,
 };
 
 pub struct Cia402StateMachine {
@@ -16,7 +19,7 @@ pub async fn cia402_state_machine_task(
     sm_state_tx: broadcast::Sender<Cia402State>,
     mut sm_cmd_rx: mpsc::Receiver<Cia402State>,
     event_tx: broadcast::Sender<MotorEvent>,
-) {
+) -> Result<(), DriveError> {
     trace!("Cia402 SM task started - waiting on initial state");
 
     let mut sm = Cia402StateMachine {

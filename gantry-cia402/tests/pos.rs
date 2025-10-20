@@ -11,7 +11,7 @@ mod tests {
 
     use gantry_cia402::{
         driver::{
-            Cia402Driver, command::MotorCommand, event::MotorEvent,
+            Cia402Driver, builder::Cia402DriverBuilder, command::MotorCommand, event::MotorEvent,
             receiver::subscriber::wait_for_event, state::Cia402State,
         },
         error::DriveError,
@@ -32,7 +32,12 @@ mod tests {
         let (canopen, _) = oze_canopen::canopen::start(String::from("can0"), Some(1000000));
 
         info!("Initializing Cia402Driver for motor driver at node id {node_id}");
-        let drive = Cia402Driver::init(node_id, canopen.clone(), PARAMS, RPDOS, TPDOS).await?;
+        let drive = Cia402DriverBuilder::new(node_id)
+            .with_canopen(canopen.clone())
+            .with_pdo_mappings(RPDOS, TPDOS)
+            .with_parameters(PARAMS)
+            .build()
+            .await?;
 
         info!("Sending Command Disable");
         drive

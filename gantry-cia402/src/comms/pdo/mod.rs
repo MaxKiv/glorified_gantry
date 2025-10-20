@@ -50,7 +50,7 @@ pub struct Pdo {
 }
 
 impl Pdo {
-    pub fn new(
+    pub fn init(
         canopen: CanOpenInterface,
         node_id: u8,
         rpdo_mapping_set: &'static [PdoMapping],

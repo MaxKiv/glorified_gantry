@@ -13,7 +13,7 @@ mod tests {
 
     use gantry_cia402::{
         driver::{
-            Cia402Driver, command::MotorCommand, event::MotorEvent,
+            Cia402Driver, builder::Cia402DriverBuilder, command::MotorCommand, event::MotorEvent,
             receiver::subscriber::wait_for_event, state::Cia402State,
         },
         error::DriveError,
@@ -35,7 +35,12 @@ mod tests {
         let (canopen, _) = oze_canopen::canopen::start(String::from("can0"), Some(1000000));
 
         info!("Initializing Cia402Driver for motor driver at node id {node_id}");
-        let drive = Cia402Driver::init(node_id, canopen.clone(), PARAMS, RPDOS, TPDOS).await?;
+        let drive = Cia402DriverBuilder::new(node_id)
+            .with_canopen(canopen.clone())
+            .with_pdo_mappings(RPDOS, TPDOS)
+            .with_parameters(PARAMS)
+            .build()
+            .await?;
 
         // Create a task for the test logic
         let test_task = tokio::spawn(torque_test_logic(drive));
@@ -147,6 +152,24 @@ mod tests {
                 .send(MotorCommand::SetTorque {
                     target_torque: -TEST_TORQUE,
                 })
+                .map_err(DriveError::CommandError)?;
+
+            info!("#{num} Wait for Torque Setpoint Reached event");
+            wait_for_event(
+                drive.event_rx.resubscribe(),
+                MotorEvent::TorqueModeFeedback {
+                    axis_braked: false,
+                    setpoint_reached: true,
+                    limit_exceeded: false,
+                },
+                TORQUE_TIMEOUT,
+            )
+            .await?;
+
+            info!("#{num} Setting 0 torque");
+            drive
+                .cmd_tx
+                .send(MotorCommand::SetTorque { target_torque: 0 })
                 .map_err(DriveError::CommandError)?;
 
             info!("#{num} Wait for Torque Setpoint Reached event");

@@ -13,30 +13,6 @@ use tokio::{
 };
 use tracing::*;
 
-/// Start the device feedback task responsible for receiving and parsing device feedback and broadcasting these as events
-fn start_feedback_task(
-    canopen: CanOpenInterface,
-    node_id: u8,
-    tpdo_mapping_set: &'static [PdoMapping],
-) -> (JoinHandle<()>, broadcast::Receiver<MotorEvent>) {
-    // Initialize output interfaces
-    let (event_tx, event_rx): (
-        broadcast::Sender<MotorEvent>,
-        broadcast::Receiver<MotorEvent>,
-    ) = tokio::sync::broadcast::channel(10);
-
-    trace!("Starting device feedback handler for motor with node id {node_id}");
-    (
-        task::spawn(handle_feedback(
-            node_id,
-            canopen,
-            tpdo_mapping_set,
-            event_tx,
-        )),
-        event_rx,
-    )
-}
-
 #[cfg(test)]
 mod tests {
 
@@ -50,7 +26,7 @@ mod tests {
         log::{log_canopen_pretty, log_events},
     };
 
-    use crate::common::{NODE_ID, TIMEOUT};
+    use crate::common::{NODE_ID, TIMEOUT, start_feedback_task};
 
     use super::*;
 

@@ -25,7 +25,7 @@ pub async fn handle_feedback(
     mut canopen: CanOpenInterface,
     tpdo_mapping: &'static [PdoMapping],
     event_tx: broadcast::Sender<MotorEvent>,
-) {
+) -> Result<(), DriveError> {
     let mut last_seen = Instant::now();
 
     trace!("Starting feedback handling loop");

@@ -9,7 +9,7 @@ use gantry_cia402::{
         sdo::SdoAction,
     },
     driver::{event::MotorEvent, nmt::NmtState, receiver::subscriber::handle_feedback, startup},
-    log::{log_canopen_pretty, log_events},
+    error::DriveError,
 };
 use oze_canopen::{error::CoError, interface::CanOpenInterface};
 use thiserror::Error;
@@ -55,7 +55,10 @@ pub fn start_feedback_task(
     canopen: CanOpenInterface,
     node_id: u8,
     tpdo_mapping_set: &'static [PdoMapping],
-) -> (JoinHandle<()>, broadcast::Receiver<MotorEvent>) {
+) -> (
+    JoinHandle<Result<(), DriveError>>,
+    broadcast::Receiver<MotorEvent>,
+) {
     // Initialize output interfaces
     let (event_tx, event_rx): (
         broadcast::Sender<MotorEvent>,

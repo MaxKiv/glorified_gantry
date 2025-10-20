@@ -18,7 +18,7 @@ pub async fn cia402_orchestrator_task(
     sm_cmd_tx: mpsc::Sender<Cia402State>,
     mut sm_state_rx: broadcast::Receiver<Cia402State>,
     mut cmd_rx: broadcast::Receiver<MotorCommand>,
-) {
+) -> Result<(), DriveError> {
     trace!("Orchestrator task started; waiting for initial state from SM task");
 
     // We keep track of the current cia402 State machine state

@@ -1,5 +1,3 @@
-mod common;
-
 use std::time::Duration;
 
 use gantry_cia402::{driver::receiver::StatusWord, od::STATUS_WORD};
@@ -16,7 +14,7 @@ const NODE_ID: u8 = 3;
 /// Quick test of oze-canopen
 /// Attempts some SDO down/uploads to a single node
 /// Useful to see if your socketCAN setup is correct (if not: run `just setup-can`)
-async fn test_sdo_cia402_transitions_logic() -> Result<(), TestError> {
+async fn test_oze_canopen() -> Result<(), TestError> {
     info!("Starting can interface");
     let (interface, mut handles) = oze_canopen::canopen::start(String::from("can0"), Some(1000000));
 
@@ -91,7 +89,7 @@ async fn test_sdo_cia402_transitions_logic() -> Result<(), TestError> {
         .map_err(TestError::CANOpenError)?;
 
     let sw =
-        u16::from_le_bytes(dat[..2].try_into().map_err(|_| {
+        u16::from_le_bytes(dat[..2].try_into().map_err(|e| {
             TestError::ConversionError(format!("Unable to convert {dat:?} into u16"))
         })?);
     let sw = StatusWord::from_bits(sw).ok_or(TestError::ConversionError(format!(
@@ -100,44 +98,6 @@ async fn test_sdo_cia402_transitions_logic() -> Result<(), TestError> {
 
     info!("Current Statusword: {sw:?}");
 
-    let dat = s
-        .lock()
-        .await
-        .upload(0x1001, 0x0)
-        .await
-        .map_err(TestError::CANOpenError)?;
-    let error: u8 = dat[0];
-    info!("Error Register: {error}");
-
-    info!("Attempting Cia402 Transitions");
-    const CW: u16 = 0x6040;
-
-    info!("Transition to ReadyToSwitchOn");
-    let val = (1u16 << 1) | (1u16 << 2);
-    let val = val.to_le_bytes();
-    s.lock()
-        .await
-        .download(CW, 0, &[val[0], val[1]])
-        .await
-        .map_err(TestError::CANOpenError)?;
-
-    info!("Transition to SwitchedOn");
-    let val = (1u16 << 0) | (1u16 << 1) | (1u16 << 2);
-    let val = val.to_le_bytes();
-    s.lock()
-        .await
-        .download(CW, 0, &[val[0], val[1]])
-        .await
-        .map_err(TestError::CANOpenError)?;
-
-    info!("Transition to Operation Enabled");
-    let val = (1u16 << 0) | (1u16 << 1) | (1u16 << 2) | (1u16 << 3);
-    let val = val.to_le_bytes();
-    s.lock()
-        .await
-        .download(CW, 0, &[val[0], val[1]])
-        .await
-        .map_err(TestError::CANOpenError)?;
     // stop tasks
     handles.close_and_join().await;
 
@@ -149,10 +109,10 @@ mod tests {
     use super::*;
 
     #[tokio::test]
-    async fn test_sdo_cia402_transitions() -> Result<(), TestError> {
+    async fn basic_canopen_test() -> Result<(), TestError> {
         gantry_demo::setup_tracing();
 
-        test_sdo_cia402_transitions_logic().await?;
+        test_oze_canopen().await?;
 
         Ok(())
     }

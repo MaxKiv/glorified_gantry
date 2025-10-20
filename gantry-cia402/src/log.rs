@@ -2,16 +2,16 @@ use oze_canopen::{canopen::RxMessage, interface::CanOpenInterface};
 use tokio::sync::broadcast::{self, error::RecvError};
 use tracing::{instrument, *};
 
-use crate::driver::{
-    event::MotorEvent,
-    receiver::parse::Frame,
+use crate::{
+    driver::{event::MotorEvent, receiver::parse::Frame},
+    error::DriveError,
 };
 
 #[instrument(skip(event_rx))]
 pub async fn log_events(
     mut event_rx: broadcast::Receiver<MotorEvent>,
     node_id: u8,
-) -> Result<(), RecvError> {
+) -> Result<(), DriveError> {
     loop {
         tokio::select! {
             Ok(event) = event_rx.recv() => {

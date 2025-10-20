@@ -54,4 +54,6 @@ pub enum DriveError {
     Cia402TransitionError(Cia402State, Cia402State),
     #[error("Timeout asking cia402 SM to transition from {0:?} to {1:?}")]
     Cia402TransitionTimeout(Cia402State, Cia402State),
+    #[error("Error in inter-task communication: {0}")]
+    InterTaskCommunicationError(String),
 }

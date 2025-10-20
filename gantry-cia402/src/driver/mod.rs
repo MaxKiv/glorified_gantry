@@ -1,3 +1,4 @@
+pub mod builder;
 pub mod command;
 pub mod event;
 pub mod nmt;
@@ -56,7 +57,7 @@ impl Cia402Driver {
     /// Dropping this also cancels the managed tasks.
     /// NOTE: the initialisation order matters here, you could use the typestate pattern to encode
     /// that information in the type system, but who has the time?
-    pub async fn init(
+    async fn spawn_tasks(
         node_id: u8,
         canopen: CanOpenInterface,
         parameters: &'static [SdoAction<'_>],
@@ -92,25 +93,22 @@ impl Cia402Driver {
         let canopen_nmt = canopen.clone();
 
         // Initialize the event_logger
-        handles.push(task::spawn(async move {
-            match log_events(event_rx_logger, node_id).await {
-                Ok(_) => error!("Event logger finished succesfully, this should never happen"),
-                Err(err) => error!("Event Logger panicked: {err}"),
-            }
+        trace!("Starting Event Logger for node id {node_id}");
+        handles.push(spawn_logged("EVENT", async move {
+            log_events(event_rx_logger, node_id).await
         }));
 
         // Start the device feedback task responsible for receiving and parsing device feedback,
         // and broadcasting these as events
         trace!("Starting device feedback handler for motor with node id {node_id}");
-        handles.push(task::spawn(async move {
+        handles.push(spawn_logged("FEEDBACK", async move {
             handle_feedback(
                 node_id,
                 canopen_feedback,
                 tpdo_mapping_set,
                 event_tx_feedback,
             )
-            .await;
-            error!("Feedback task finished succesfully, this should never happen");
+            .await
         }));
 
         // Initialize the Cia402 Orchestrator -> State Machine command channel
@@ -131,7 +129,8 @@ impl Cia402Driver {
             .expect("Unable to construct SDO client for node id {node_id}");
 
         // Get the PDO client for this node id, we use this to manage R/TPDOs
-        let (pdo_handle, pdo_tx) = Pdo::new(canopen.clone(), node_id, rpdo_mapping_set)
+        trace!("Starting PDO task for device {node_id}");
+        let (pdo_handle, pdo_tx) = Pdo::init(canopen.clone(), node_id, rpdo_mapping_set)
             .expect("unable to construct PDO client for node id {node_id}");
         handles.push(pdo_handle);
 
@@ -142,15 +141,14 @@ impl Cia402Driver {
 
         // Start the NMT task
         trace!("Starting NMT State Machine task for motor with node id {node_id}");
-        handles.push(task::spawn(async move {
-            nmt_task(node_id, canopen_nmt, nmt_rx, event_rx_nmt).await;
-            error!("NMT task finished succesfully, this should never happen");
+        handles.push(spawn_logged("NMT", async move {
+            nmt_task(node_id, canopen_nmt, nmt_rx, event_rx_nmt).await
         }));
 
         // Start the cia402 state machine task, this is responsible for
         // tracking the motors current cia402 state and single transition
         trace!("Starting Cia402 State Machine for motor with node id {node_id}");
-        handles.push(task::spawn(async move {
+        handles.push(spawn_logged("CIA-SM", async move {
             cia402_state_machine_task(
                 event_rx_cia402,
                 state_update_tx,
@@ -158,27 +156,24 @@ impl Cia402Driver {
                 sm_cmd_rx,
                 event_tx_cia402_sm,
             )
-            .await;
-            error!("Cia402 State machine task finished succesfully, this should never happen");
+            .await
         }));
 
         trace!("Starting Cia402 Orchestrator for motor with node id {node_id}");
-        handles.push(task::spawn(async move {
-            cia402_orchestrator_task(sm_cmd_tx, sm_state_rx, cmd_rx_cia402_orch).await;
-            error!("Cia402 Orchestrator task finished succesfully, this should never happen");
+        handles.push(spawn_logged("CIA-OR", async move {
+            cia402_orchestrator_task(sm_cmd_tx, sm_state_rx, cmd_rx_cia402_orch).await
         }));
 
         // Start the publisher task, responsible for update aggregation and device communication
         trace!("Starting update publisher task for motor with node id {node_id}");
-        handles.push(tokio::task::spawn(async move {
+        handles.push(spawn_logged("UPDATE", async move {
             publish_updates(
                 pdo_tx.clone(),
                 state_update_rx,
                 cmd_rx_publisher,
                 new_setpoint_tx,
             )
-            .await;
-            error!("Update Publisher task finished succesfully, this should never happen");
+            .await
         }));
 
         // Start the startup task for this motor, this does parametrisation and configures pdo mapping
@@ -211,4 +206,26 @@ impl Cia402Driver {
             sdo,
         })
     }
+
+    pub async fn shutdown(self) {
+        let _ = self.cmd_tx.send(MotorCommand::Halt);
+        let _ = self.cmd_tx.send(MotorCommand::Disable);
+
+        info!("Shutting down node {}", self.node_id);
+        for handle in self._handles {
+            handle.abort();
+        }
+    }
+}
+
+/// Helper that spawns a task and logs error if it ever exits
+fn spawn_logged<F>(name: &'static str, fut: F) -> JoinHandle<()>
+where
+    F: std::future::Future<Output = Result<(), DriveError>> + Send + 'static,
+{
+    tokio::spawn(async move {
+        if let Err(e) = fut.await {
+            error!("{name} task failed: {e:?}");
+        }
+    })
 }

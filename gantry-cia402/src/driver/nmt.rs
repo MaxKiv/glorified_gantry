@@ -1,4 +1,3 @@
-
 use oze_canopen::{
     interface::CanOpenInterface,
     proto::nmt::{NmtCommand, NmtCommandSpecifier},
@@ -6,10 +5,7 @@ use oze_canopen::{
 use tokio::sync::{broadcast, mpsc};
 use tracing::*;
 
-use crate::{
-    driver::event::MotorEvent,
-    error::DriveError,
-};
+use crate::{driver::event::MotorEvent, error::DriveError};
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum NmtState {
@@ -35,7 +31,7 @@ pub async fn nmt_task(
     canopen: CanOpenInterface,
     mut nmt_rx: mpsc::Receiver<NmtState>,
     mut event_rx: broadcast::Receiver<MotorEvent>,
-) {
+) -> Result<(), DriveError> {
     let mut current_state = NmtState::PreOperational;
     loop {
         tokio::select! {

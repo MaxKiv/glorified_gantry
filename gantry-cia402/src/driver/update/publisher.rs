@@ -18,6 +18,7 @@ use crate::{
         receiver::setpoint_manager::SetpointManager,
         state::Cia402Flags,
     },
+    error::DriveError,
 };
 
 /// Responsible for all CANopen communication to the drive
@@ -29,7 +30,7 @@ pub async fn publish_updates(
     mut state_update_rx: mpsc::Receiver<Cia402Flags>,
     mut cmd_rx: broadcast::Receiver<MotorCommand>,
     new_setpoint_tx: mpsc::Sender<Setpoint>,
-) {
+) -> Result<(), DriveError> {
     loop {
         tokio::select! {
             // Check for cia402 state update
@@ -106,7 +107,7 @@ pub async fn publish_updates(
 
             else => {
                 error!("publish_updates: all channels closed, exiting task");
-                break;
+                return Err(DriveError::InterTaskCommunicationError(String::from("publish_updates: all channels closed, exiting task")));
             }
         }
     }

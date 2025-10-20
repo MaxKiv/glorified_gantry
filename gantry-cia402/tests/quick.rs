@@ -2,14 +2,8 @@ mod common;
 
 use std::time::Duration;
 
-use gantry_cia402::{
-    driver::receiver::StatusWord,
-    od::{MAX_CURRENT, STATUS_WORD, TORQUE_SLOPE},
-};
-use oze_canopen::{
-    error::CoError,
-    proto::nmt::{NmtCommand, NmtCommandSpecifier},
-};
+use gantry_cia402::od::{MAX_CURRENT, STATUS_WORD, TORQUE_SLOPE};
+use oze_canopen::proto::nmt::{NmtCommand, NmtCommandSpecifier};
 use tracing::*;
 
 use crate::common::TestError;
