@@ -1,22 +1,10 @@
-use crate::driver::state::Cia402State;
+use crate::driver::{cyclic::CyclicSynchronousMode, state::Cia402State};
 
 // Commands that can be sent to the motor
 #[derive(Debug, Clone)]
 pub enum MotorCommand {
     /// Set continuous velocity
     Home,
-
-    /// Move to an absolute position (in device units, e.g. encoder ticks)
-    MoveAbsolute { target: i32, profile_velocity: u32 },
-
-    /// Move relative to current position
-    MoveRelative { delta: i32, profile_velocity: u32 },
-
-    /// Set continuous velocity
-    SetVelocity { target_velocity: i32 },
-
-    /// Set continuous velocity
-    SetTorque { target_torque: i16 },
 
     /// Halt immediately (stop but remain enabled)
     Halt,
@@ -35,4 +23,49 @@ pub enum MotorCommand {
 
     /// Transition into target Cia402 State
     Cia402TransitionTo { target_state: Cia402State },
+
+    /// Move to an absolute position (in device units, e.g. encoder ticks)
+    /// Note: Only valid when NOT in a Cyclic Synchronous Mode
+    MoveAbsolute { target: i32, profile_velocity: u32 },
+
+    /// Move relative to current position
+    /// Note: Only valid when NOT in a Cyclic Synchronous Mode
+    MoveRelative { delta: i32, profile_velocity: u32 },
+
+    /// Set continuous velocity
+    /// Note: Only valid when NOT in a Cyclic Synchronous Mode
+    SetVelocity { target_velocity: i32 },
+
+    /// Set continuous velocity
+    /// Note: Only valid when NOT in a Cyclic Synchronous Mode
+    SetTorque { target_torque: i16 },
+
+    /// Switch into Cyclic Synchronous Mode
+    /// Upon switching the driver will reconfigure its T/RPDO mapping to a minimal OnSync set
+    /// It will start expecting a continous SYNC and start sending the latest
+    /// Cyclic Synchronous Mode target using RPDO on every SYNC cycle
+    /// Note: The SYNC cycle generation is left to the user!
+    EnterCyclicSynchronousMode { mode: CyclicSynchronousMode },
+
+    /// Exit Cyclic Synchronous Mode
+    /// The Driver will reconfigure its T/RPDO mapping to a more verbose OnChange set
+    /// and stop responding to SYNC messages
+    /// Mode target using RPDO every SYNC cycle
+    ExitCyclicSynchronousMode,
+
+    /// Cyclic synchronous position mode update
+    CyclicSynchronousPosition {
+        abs_target: i32,
+        // target_velocity: Option<i32>,
+        // target_torque: Option<i16>,
+    },
+
+    /// Cyclic synchronous velocity mode update
+    CyclicSynchronousVelocity {
+        target: i32,
+        // target_torque: Option<i16>,
+    },
+
+    /// Cyclic synchronous torque mode update
+    CyclicSynchronousTorque { target: i16 },
 }

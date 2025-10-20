@@ -1,16 +1,53 @@
 pub mod custom;
+pub mod cyclic_synchronous;
 pub mod default;
+pub mod empty;
+pub mod minimal;
 
+use crate::comms::pdo::mapping::custom::RPDO_CONTROL_OPMODE;
+use crate::comms::pdo::mapping::minimal::RPDO_CONTROL_TARGET_POS_TORQUE;
 use crate::driver::startup::pdo_mapping::TransmissionType;
 use crate::od::entry::ODEntry;
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug)]
+pub struct PDOSet {
+    pub rpdos: &'static [PdoMapping; 4],
+    pub tpdos: &'static [PdoMapping; 4],
+}
+
+impl PDOSet {
+    /// Checks if the RPDO_CONTROL_OPMODE PdoMapping is contained within the given default pdo set
+    /// Shitty method of guarding a future maintainer against my rushed design
+    /// TODO: Move this into type system, improve PDO parsing in general
+    pub fn contains_default_rpdo(&self) -> bool {
+        const REQUIRED_RPDO: PdoMapping = RPDO_CONTROL_OPMODE;
+
+        self.rpdos
+            .iter()
+            .find(|map| **map == REQUIRED_RPDO)
+            .is_some()
+    }
+
+    /// Checks if the RPDO_CONTROL_TARGET_POS_TORQUE PdoMapping is contained within the given minimal pdo set
+    /// Shitty method of guarding a future maintainer against my rushed design
+    /// TODO: Move this into type system, improve PDO parsing in general
+    pub fn contains_minimal_rpdo(&self) -> bool {
+        const REQUIRED_RPDO: PdoMapping = RPDO_CONTROL_TARGET_POS_TORQUE;
+
+        self.rpdos
+            .iter()
+            .find(|map| **map == REQUIRED_RPDO)
+            .is_some()
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct BitRange {
     pub start: u8,
     pub len: u8,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum PdoType {
     RPDO(u8),
     TPDO(u8),
@@ -25,7 +62,7 @@ impl PdoType {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 /// Represents a single T/RPDO mapping
 pub struct PdoMapping {
     // PDO type and number
@@ -36,7 +73,7 @@ pub struct PdoMapping {
     pub transmission_type: TransmissionType,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 /// Values to map onto T/RPDO
 pub struct PdoMappingSource {
     // The entry to map

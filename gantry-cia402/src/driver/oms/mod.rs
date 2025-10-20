@@ -1,3 +1,6 @@
+pub mod cyclic_pos;
+pub mod cyclic_torque;
+pub mod cyclic_vel;
 pub mod home;
 pub mod position;
 pub mod setpoint;
@@ -9,7 +12,14 @@ use position::*;
 use torque::*;
 use velocity::*;
 
-use crate::driver::{oms::setpoint::Setpoint, receiver::StatusWord};
+use crate::driver::{
+    cyclic::CyclicSynchronousMode,
+    oms::{
+        cyclic_pos::CyclicPosFlagsSW, cyclic_torque::CyclicTorqueFlagsSW,
+        cyclic_vel::CyclicVelFlagsSW, setpoint::Setpoint,
+    },
+    receiver::StatusWord,
+};
 
 pub const STARTUP_SETPOINT: Setpoint = Setpoint::ProfilePosition(STARTUP_POSITIONMODE_SETPOINT);
 
@@ -28,6 +38,31 @@ pub enum OperationMode {
     CyclicSynchronousPosition = 8,
     CyclicSynchronousVelocity = 9,
     CyclicSynchronousTorque = 10,
+}
+
+impl From<CyclicSynchronousMode> for OperationMode {
+    fn from(mode: CyclicSynchronousMode) -> Self {
+        use OperationMode::*;
+        match mode {
+            CyclicSynchronousMode::Position => CyclicSynchronousPosition,
+            CyclicSynchronousMode::Velocity => CyclicSynchronousVelocity,
+            CyclicSynchronousMode::Torque => CyclicSynchronousTorque,
+        }
+    }
+}
+
+impl From<Setpoint> for OperationMode {
+    fn from(value: Setpoint) -> Self {
+        match value {
+            Setpoint::ProfilePosition(_) => OperationMode::ProfilePosition,
+            Setpoint::ProfileVelocity(_) => OperationMode::ProfileVelocity,
+            Setpoint::ProfileTorque(_) => OperationMode::ProfileTorque,
+            Setpoint::Home(_) => OperationMode::Homing,
+            Setpoint::CyclicPosition(_) => OperationMode::CyclicSynchronousPosition,
+            Setpoint::CyclicVelocity(_) => OperationMode::CyclicSynchronousVelocity,
+            Setpoint::CyclicTorque(_) => OperationMode::CyclicSynchronousTorque,
+        }
+    }
 }
 
 impl TryFrom<i8> for OperationMode {
@@ -52,12 +87,26 @@ impl TryFrom<i8> for OperationMode {
     }
 }
 
+impl OperationMode {
+    pub fn is_cyclic_synchronous(&self) -> bool {
+        matches!(
+            self,
+            Self::CyclicSynchronousPosition
+                | Self::CyclicSynchronousVelocity
+                | Self::CyclicSynchronousTorque
+        )
+    }
+}
+
 #[derive(Clone, Debug)]
 pub enum OMSFlagsSW {
     Homing(HomeFlagsSW),
     ProfilePosition(PositionFlagsSW),
     ProfileVelocity(VelocityFlagsSW),
     ProfileTorque(TorqueFlagsSW),
+    CyclicSynchronousPosition(CyclicPosFlagsSW),
+    CyclicSynchronousVelocity(CyclicVelFlagsSW),
+    CyclicSynchronousTorque(CyclicTorqueFlagsSW),
     None,
 }
 
@@ -75,6 +124,15 @@ impl OMSFlagsSW {
                 OMSFlagsSW::ProfileTorque(TorqueFlagsSW::from_status(statusword))
             }
             OperationMode::Homing => OMSFlagsSW::Homing(HomeFlagsSW::from_status(statusword)),
+            OperationMode::CyclicSynchronousPosition => {
+                OMSFlagsSW::CyclicSynchronousPosition(CyclicPosFlagsSW::from_status(statusword))
+            }
+            OperationMode::CyclicSynchronousVelocity => {
+                OMSFlagsSW::CyclicSynchronousVelocity(CyclicVelFlagsSW::from_status(statusword))
+            }
+            OperationMode::CyclicSynchronousTorque => {
+                OMSFlagsSW::CyclicSynchronousTorque(CyclicTorqueFlagsSW::from_status(statusword))
+            }
             _ => {
                 tracing::trace!("No specific statusword parsing for current opmode {opmode:?}");
                 OMSFlagsSW::None

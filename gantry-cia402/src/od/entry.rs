@@ -4,7 +4,7 @@ use crate::od::{OD_LOOKUP, ODIdx, mappable::MappableType};
 
 use super::{access::AccessType, value::ODValue};
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct ODEntry {
     // Index of the OD entry
     pub index: u16,
@@ -62,10 +62,6 @@ impl ODEntry {
             ODValue::U64(_) => ODValue::U64(u64::from_le_bytes(
                 payload[..8.min(payload.len())].try_into().ok()?,
             )),
-            ODValue::F32(_) => ODValue::F32(f32::from_le_bytes(payload[..4].try_into().ok()?)),
-            ODValue::F64(_) => ODValue::F64(f64::from_le_bytes(
-                payload[..8.min(payload.len())].try_into().ok()?,
-            )),
             _ => {
                 error!("Unable to parse {:?} into SDO", data);
                 return None;
@@ -92,11 +88,10 @@ impl ODEntry {
             ODValue::U32(_) => 4,
             ODValue::I64(_) => 8,
             ODValue::U64(_) => 8,
-            ODValue::F32(_) => 4,
-            ODValue::F64(_) => 8,
             ODValue::VisibleString(s) => s.len(),
             ODValue::OctetString(items) => items.len(),
             ODValue::Array(bytes) => *bytes,
+            _ => 8,
         }
     }
 }

@@ -5,26 +5,33 @@ use tracing::*;
 #[cfg(test)]
 mod tests {
 
-    const TEST_POSITION: i32 = -50;
-    // const TEST_POSITION: i32 = 100;
+    const TEST_POSITIONS: Vec<i32> = vec![
+        0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24,
+        25, 26, 27, 28, 29, 30, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37,
+        38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50,
+    ];
+
     const TEST_SPEED: u32 = 100;
+    const TEST_TORQUE: i16 = 69;
+    const TORQUE_TIMEOUT: Duration = Duration::from_millis(10_000);
+
+    use std::time::Duration;
 
     use gantry_cia402::{
-        comms::pdo::mapping::{custom::CUSTOM_PDOS, minimal::MINIMAL_CYCLIC_SYNCHRONOUS_PDO_SET},
         driver::{
             Cia402Driver, builder::Cia402DriverBuilder, command::MotorCommand, event::MotorEvent,
             receiver::subscriber::wait_for_event, state::Cia402State,
         },
         error::DriveError,
     };
+    use tokio::signal;
 
-    use crate::common::{NODE_ID, PARAMS, RPDOS, TIMEOUT, TPDOS, start_sync_master};
+    use crate::common::{CYCLIC_PDOS, NODE_ID, PARAMS, RPDOS, TIMEOUT, TPDOS, start_sync_master};
 
     use super::*;
 
     #[tokio::test]
-    /// Test basic cia402 state transitions
-    async fn test_position_mode() -> Result<(), DriveError> {
+    async fn test_cyclic_synchronous_position() -> anyhow::Result<()> {
         gantry_demo::setup_tracing();
 
         let node_id = NODE_ID;
@@ -43,18 +50,35 @@ mod tests {
             .build()
             .await?;
 
-        info!("Sending Command Disable");
+        // Create a task for the test logic
+        let test_task = tokio::spawn(cyclic_synchronous_pos_test(drive));
+
+        // Wait for either Ctrl-C or test completion
+        tokio::select! {
+            res = test_task => {
+                res??;
+            }
+            _ = signal::ctrl_c() => {
+                info!("Ctrl-C received — aborting test");
+            }
+        }
+
+        Ok(())
+    }
+
+    async fn cyclic_synchronous_pos_test(drive: Cia402Driver) -> Result<(), DriveError> {
+        info!("Transitioning to ReadyToSwitchOn");
         drive
             .cmd_tx
             .send(MotorCommand::Cia402TransitionTo {
-                target_state: Cia402State::SwitchOnDisabled,
+                target_state: Cia402State::ReadyToSwitchOn,
             })
             .map_err(DriveError::CommandError)?;
 
         info!("Wait for Cia402State::ReadyToSwitchOn");
         wait_for_event(
             drive.event_rx.resubscribe(),
-            MotorEvent::Cia402StateUpdate(Cia402State::SwitchOnDisabled),
+            MotorEvent::Cia402StateUpdate(Cia402State::ReadyToSwitchOn),
             TIMEOUT,
         )
         .await?;
@@ -92,69 +116,81 @@ mod tests {
         .await?;
 
         for num in 1..=10 {
-            info!("Doing absolute position movement forward # {num}");
+            info!("#{num} Setting {TEST_TORQUE} torque target");
             drive
                 .cmd_tx
-                .send(MotorCommand::MoveAbsolute {
-                    target: TEST_POSITION,
-                    profile_velocity: TEST_SPEED,
+                .send(MotorCommand::CyclicSynchronousPosition {
+                    abs_target: (),
+                    target_velocity: (),
+                    target_torque: (),
                 })
                 .map_err(DriveError::CommandError)?;
 
-            info!("Wait for PositionModeFeedback - setpoint_acknowlegded");
+            info!("#{num} Wait for Torque Setpoint Reached event");
             wait_for_event(
                 drive.event_rx.resubscribe(),
-                MotorEvent::PositionModeFeedback {
-                    target_reached: false,
+                MotorEvent::TorqueModeFeedback {
+                    axis_braked: false,
+                    setpoint_reached: true,
                     limit_exceeded: false,
-                    setpoint_acknowlegded: true,
-                    following_error: false,
                 },
-                TIMEOUT,
-            )
-            .await?;
-            wait_for_event(
-                drive.event_rx.resubscribe(),
-                MotorEvent::PositionModeFeedback {
-                    target_reached: true,
-                    limit_exceeded: false,
-                    setpoint_acknowlegded: false,
-                    following_error: false,
-                },
-                TIMEOUT,
+                TORQUE_TIMEOUT,
             )
             .await?;
 
-            info!("Doing position relative position movement backward # {num}");
+            info!("#{num} Setting 0 torque");
             drive
                 .cmd_tx
-                .send(MotorCommand::MoveAbsolute {
-                    target: -TEST_POSITION,
-                    profile_velocity: TEST_SPEED,
+                .send(MotorCommand::SetTorque { target_torque: 0 })
+                .map_err(DriveError::CommandError)?;
+
+            info!("#{num} Wait for Torque Setpoint Reached event");
+            wait_for_event(
+                drive.event_rx.resubscribe(),
+                MotorEvent::TorqueModeFeedback {
+                    axis_braked: false,
+                    setpoint_reached: true,
+                    limit_exceeded: false,
+                },
+                TORQUE_TIMEOUT,
+            )
+            .await?;
+
+            info!("#{num} Setting -{TEST_TORQUE} torque target");
+            drive
+                .cmd_tx
+                .send(MotorCommand::SetTorque {
+                    target_torque: -TEST_TORQUE,
                 })
                 .map_err(DriveError::CommandError)?;
 
-            info!("Wait for PositionModeFeedback - target_reached");
+            info!("#{num} Wait for Torque Setpoint Reached event");
             wait_for_event(
                 drive.event_rx.resubscribe(),
-                MotorEvent::PositionModeFeedback {
-                    target_reached: false,
+                MotorEvent::TorqueModeFeedback {
+                    axis_braked: false,
+                    setpoint_reached: true,
                     limit_exceeded: false,
-                    setpoint_acknowlegded: true,
-                    following_error: false,
                 },
-                TIMEOUT,
+                TORQUE_TIMEOUT,
             )
             .await?;
+
+            info!("#{num} Setting 0 torque");
+            drive
+                .cmd_tx
+                .send(MotorCommand::SetTorque { target_torque: 0 })
+                .map_err(DriveError::CommandError)?;
+
+            info!("#{num} Wait for Torque Setpoint Reached event");
             wait_for_event(
                 drive.event_rx.resubscribe(),
-                MotorEvent::PositionModeFeedback {
-                    target_reached: true,
+                MotorEvent::TorqueModeFeedback {
+                    axis_braked: false,
+                    setpoint_reached: true,
                     limit_exceeded: false,
-                    setpoint_acknowlegded: false,
-                    following_error: false,
                 },
-                TIMEOUT,
+                TORQUE_TIMEOUT,
             )
             .await?;
         }

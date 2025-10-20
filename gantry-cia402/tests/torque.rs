@@ -34,11 +34,14 @@ mod tests {
         info!("Starting can interface");
         let (canopen, _) = oze_canopen::canopen::start(String::from("can0"), Some(1000000));
 
+        let sync_rx = start_sync_master(canopen.clone());
+
         info!("Initializing Cia402Driver for motor driver at node id {node_id}");
         let drive = Cia402DriverBuilder::new(node_id)
             .with_canopen(canopen.clone())
-            .with_pdo_mappings(RPDOS, TPDOS)
+            .with_pdo_mappings(&CUSTOM_PDOS, &MINIMAL_CYCLIC_SYNCHRONOUS_PDO_SET)
             .with_parameters(PARAMS)
+            .with_sync_receiver(sync_rx)
             .build()
             .await?;
 

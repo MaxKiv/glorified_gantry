@@ -1,7 +1,8 @@
 use oze_canopen::interface::CanOpenInterface;
+use tokio::{sync::broadcast, time::Instant};
 
 use crate::{
-    comms::{pdo::mapping::PdoMapping, sdo::SdoAction},
+    comms::{pdo::mapping::PDOSet, sdo::SdoAction},
     driver::Cia402Driver,
     error::DriveError,
 };
@@ -17,84 +18,146 @@ pub struct NoMapping;
 /// With valid T/RPDO mapping configured yet
 pub struct HasMapping;
 
+/// No SYNC receiver configured yet
+pub struct NoSyncReceiver;
+/// With valid SYNC receiver
+pub struct HasSyncReceiver;
+
 /// Typestate Builder for the Cia402Driver
-pub struct Cia402DriverBuilder<C, M> {
+pub struct Cia402DriverBuilder<C, M, S> {
     node_id: u8,
+    name: Option<String>,
     canopen: Option<CanOpenInterface>,
     parameters: Option<&'static [SdoAction<'static>]>,
-    rpdo_mapping: Option<&'static [PdoMapping]>,
-    tpdo_mapping: Option<&'static [PdoMapping]>,
+    default_pdo_set: Option<&'static PDOSet>,
+    minimal_pdo_set: Option<&'static PDOSet>,
+    sync_rx: Option<broadcast::Receiver<Instant>>,
     _canopen: std::marker::PhantomData<C>,
     _mapping: std::marker::PhantomData<M>,
+    _sync: std::marker::PhantomData<S>,
 }
 
-impl Cia402DriverBuilder<NoCanOpen, NoMapping> {
+impl Cia402DriverBuilder<NoCanOpen, NoMapping, NoSyncReceiver> {
     /// Start building a new Cia402Driver
     pub fn new(node_id: u8) -> Self {
         Self {
             node_id,
+            name: None,
             canopen: None,
             parameters: None,
-            rpdo_mapping: None,
-            tpdo_mapping: None,
+            default_pdo_set: None,
+            minimal_pdo_set: None,
+            sync_rx: None,
             _canopen: std::marker::PhantomData,
             _mapping: std::marker::PhantomData,
+            _sync: std::marker::PhantomData,
         }
     }
 }
 
 // Required Cia402Driver configuration
-impl<M> Cia402DriverBuilder<NoCanOpen, M> {
+impl<M, S> Cia402DriverBuilder<NoCanOpen, M, S> {
     /// Configure the Cia402Driver with a CANOpen interface
-    pub fn with_canopen(self, iface: CanOpenInterface) -> Cia402DriverBuilder<HasCanOpen, M> {
+    pub fn with_canopen(self, iface: CanOpenInterface) -> Cia402DriverBuilder<HasCanOpen, M, S> {
         Cia402DriverBuilder {
             node_id: self.node_id,
+            name: self.name,
             canopen: Some(iface),
             parameters: self.parameters,
-            rpdo_mapping: self.rpdo_mapping,
-            tpdo_mapping: self.tpdo_mapping,
+            minimal_pdo_set: self.minimal_pdo_set,
+            default_pdo_set: self.default_pdo_set,
+            sync_rx: self.sync_rx,
             _canopen: std::marker::PhantomData,
             _mapping: std::marker::PhantomData,
+            _sync: std::marker::PhantomData,
         }
     }
 }
 
 // Required Cia402Driver configuration
-impl<C> Cia402DriverBuilder<C, NoMapping> {
+impl<C, S> Cia402DriverBuilder<C, NoMapping, S> {
     /// Configure the Cia402Driver with a T/RPDO mapping
     pub fn with_pdo_mappings(
         self,
-        rpdo: &'static [PdoMapping],
-        tpdo: &'static [PdoMapping],
-    ) -> Cia402DriverBuilder<C, HasMapping> {
-        Cia402DriverBuilder {
-            node_id: self.node_id,
-            canopen: self.canopen,
-            parameters: self.parameters,
-            rpdo_mapping: Some(rpdo),
-            tpdo_mapping: Some(tpdo),
-            _canopen: std::marker::PhantomData,
-            _mapping: std::marker::PhantomData,
+        default_pdo_set: &'static PDOSet,
+        minimal_pdo_set: &'static PDOSet,
+    ) -> Cia402DriverBuilder<C, HasMapping, S> {
+        if default_pdo_set.contains_default_rpdo() && minimal_pdo_set.contains_minimal_rpdo() {
+            Cia402DriverBuilder {
+                node_id: self.node_id,
+                name: self.name,
+                canopen: self.canopen,
+                parameters: self.parameters,
+                default_pdo_set: Some(default_pdo_set),
+                minimal_pdo_set: Some(minimal_pdo_set),
+                sync_rx: self.sync_rx,
+                _canopen: std::marker::PhantomData,
+                _mapping: std::marker::PhantomData,
+                _sync: std::marker::PhantomData,
+            }
+        } else {
+            panic!(
+                "Building Cia402Driver with incorrect default ({:?}) and minimal ({:?}) PDO set",
+                default_pdo_set, minimal_pdo_set
+            )
         }
     }
 }
 
-impl<C, M> Cia402DriverBuilder<C, M> {
+// Required Cia402Driver configuration
+impl<C, M> Cia402DriverBuilder<C, M, NoSyncReceiver> {
+    /// Configure the Cia402Driver with a T/RPDO mapping
+    pub fn with_sync_receiver(
+        self,
+        sync_rx: broadcast::Receiver<Instant>,
+    ) -> Cia402DriverBuilder<C, M, HasSyncReceiver> {
+        Cia402DriverBuilder {
+            node_id: self.node_id,
+            name: self.name,
+            canopen: self.canopen,
+            parameters: self.parameters,
+            minimal_pdo_set: self.minimal_pdo_set,
+            default_pdo_set: self.default_pdo_set,
+            sync_rx: Some(sync_rx),
+            _canopen: std::marker::PhantomData,
+            _mapping: std::marker::PhantomData,
+            _sync: std::marker::PhantomData,
+        }
+    }
+}
+
+impl<C, M, S> Cia402DriverBuilder<C, M, S> {
     pub fn with_parameters(mut self, params: &'static [SdoAction<'static>]) -> Self {
         self.parameters = Some(params);
+        self
+    }
+
+    pub fn with_name(mut self, name: String) -> Self {
+        self.name = Some(name);
         self
     }
 }
 
 // Only allowed when all requried configuration is passed
-impl Cia402DriverBuilder<HasCanOpen, HasMapping> {
+impl Cia402DriverBuilder<HasCanOpen, HasMapping, HasSyncReceiver> {
     /// Build the Cia402Driver
     pub async fn build(self) -> Result<Cia402Driver, DriveError> {
         let canopen = self.canopen.unwrap();
-        let rpdo = self.rpdo_mapping.unwrap();
-        let tpdo = self.tpdo_mapping.unwrap();
+        let minimal_pdo_set = self.minimal_pdo_set.unwrap();
+        let default_pdo_set = self.default_pdo_set.unwrap();
+        let sync_rx = self.sync_rx.unwrap();
         let params = self.parameters.unwrap_or(&[]);
+        let name = self.name.unwrap_or(format!("Motor #{}", self.node_id));
 
-        Cia402Driver::spawn_tasks(self.node_id, canopen, params, rpdo, tpdo).await
+        Cia402Driver::spawn_tasks(
+            self.node_id,
+            name,
+            canopen,
+            params,
+            default_pdo_set,
+            minimal_pdo_set,
+            sync_rx,
+        )
+        .await
     }
 }

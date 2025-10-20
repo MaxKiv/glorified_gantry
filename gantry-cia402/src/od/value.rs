@@ -1,4 +1,4 @@
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ODValue {
     Bool(bool),
     I8(i8),
@@ -9,9 +9,8 @@ pub enum ODValue {
     U32(u32),
     I64(i64),
     U64(u64),
-    F32(f32),
-    F64(f64),
     VisibleString(String),
     OctetString(Vec<u8>),
     Array(usize), // Indicates the presence of sub-indices
+    Other,
 }

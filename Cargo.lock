@@ -296,6 +296,7 @@ dependencies = [
  "thiserror 2.0.17",
  "tokio",
  "tracing",
+ "trajectory",
 ]
 
 [[package]]
@@ -909,6 +910,15 @@ dependencies = [
  "thread_local",
  "tracing-core",
  "tracing-log",
+]
+
+[[package]]
+name = "trajectory"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f3a8197a1a4071f8397686ba13bed1b1145f34beff68f46f9484102069c73a4a"
+dependencies = [
+ "num-traits",
 ]
 
 [[package]]

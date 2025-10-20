@@ -1,4 +1,7 @@
-use crate::driver::oms::*;
+use crate::driver::oms::{
+    cyclic_pos::CyclicPositionSetpoint, cyclic_torque::CyclicTorqueSetpoint,
+    cyclic_vel::CyclicVelocitySetpoint, *,
+};
 
 #[derive(Clone, Debug)]
 pub enum Setpoint {
@@ -6,6 +9,9 @@ pub enum Setpoint {
     ProfileVelocity(VelocitySetpoint),
     ProfileTorque(TorqueSetpoint),
     Home(HomingSetpoint),
+    CyclicPosition(CyclicPositionSetpoint),
+    CyclicVelocity(CyclicVelocitySetpoint),
+    CyclicTorque(CyclicTorqueSetpoint),
 }
 
 impl Setpoint {
@@ -14,16 +20,19 @@ impl Setpoint {
             Setpoint::ProfilePosition(PositionSetpoint { flags, .. }) => {
                 flags.remove(PositionFlagsCW::NEW_SETPOINT);
             }
-            // Setpoint::ProfileVelocity(VelocitySetpoint { flags, .. }) => {
-            //     flags.remove(VelocityFlagsCW::NEW_SETPOINT);
-            // }
-            // Setpoint::ProfileTorque(TorqueSetpoint { flags, .. }) => {
-            //     flags.remove(TorqueFlagsCW::NEW_SETPOINT);
-            // }
             Setpoint::Home(HomingSetpoint { flags }) => {
                 flags.remove(HomeFlagsCW::NEW_SETPOINT);
             }
+            // Profile Velocity and Profile Torque modes don't shake hands, very rude!
             _ => {}
         }
+    }
+
+    pub fn is_cyclic_synchronous(&self) -> bool {
+        use Setpoint::*;
+        matches!(
+            self,
+            CyclicPosition(_) | CyclicVelocity(_) | CyclicTorque(_)
+        )
     }
 }

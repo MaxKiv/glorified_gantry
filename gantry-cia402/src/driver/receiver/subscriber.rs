@@ -192,6 +192,15 @@ async fn handle_parsed_tpdo1(
         OMSFlagsSW::ProfileVelocity(velocity_flags_sw) => Some(velocity_flags_sw.into_event()),
         OMSFlagsSW::ProfileTorque(torque_flags_sw) => Some(torque_flags_sw.into_event()),
         OMSFlagsSW::None => None,
+        OMSFlagsSW::CyclicSynchronousPosition(cyclic_pos_flags_sw) => {
+            Some(cyclic_pos_flags_sw.into_event())
+        }
+        OMSFlagsSW::CyclicSynchronousVelocity(cyclic_vel_flags_sw) => {
+            Some(cyclic_vel_flags_sw.into_event())
+        }
+        OMSFlagsSW::CyclicSynchronousTorque(cyclic_torque_flags_sw) => {
+            Some(cyclic_torque_flags_sw.into_event())
+        }
     };
     // Send anything interesting along
     if let Some(event) = event {

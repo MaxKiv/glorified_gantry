@@ -61,6 +61,25 @@ pub enum MotorEvent {
         limit_exceeded: bool,
     },
 
+    /// Cyclic Position mode feedback
+    CyclicPositionModeFeedback {
+        device_in_sync: bool,
+        is_following_target: bool,
+        has_following_error: bool,
+    },
+
+    /// Cyclic Velocity mode feedback
+    CyclicVelocityModeFeedback {
+        device_in_sync: bool,
+        is_following_target: bool,
+    },
+
+    /// Cyclic Torque mode feedback
+    CyclicTorqueModeFeedback {
+        device_in_sync: bool,
+        is_following_target: bool,
+    },
+
     /// Fault detected (e.g. fault bit set in statusword)
     Fault { code: u16, description: String },
 

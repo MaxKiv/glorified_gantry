@@ -1,6 +1,10 @@
+use std::sync::Arc;
+
+use oze_canopen::sdo_client::SdoClient;
 use tokio::sync::{
-    broadcast,
+    Mutex, broadcast,
     mpsc::{self},
+    watch,
 };
 use tracing::*;
 
@@ -8,14 +12,19 @@ use crate::{
     comms::pdo::cmd::PdoCommand,
     driver::{
         command::MotorCommand,
+        event::MotorEvent,
+        nmt::NmtState,
         oms::{
+            cyclic_pos::CyclicPositionSetpoint,
+            cyclic_torque::CyclicTorqueSetpoint,
+            cyclic_vel::CyclicVelocitySetpoint,
             home::{HomeFlagsCW, HomingSetpoint},
             position::{PositionFlagsCW, PositionSetpoint},
             setpoint::Setpoint,
             torque::TorqueSetpoint,
             velocity::VelocitySetpoint,
         },
-        receiver::setpoint_manager::SetpointManager,
+        receiver::setpoint_manager::{SetpointManager, SetpointManagerModeTypes},
         state::Cia402Flags,
     },
     error::DriveError,
@@ -30,6 +39,11 @@ pub async fn publish_updates(
     mut state_update_rx: mpsc::Receiver<Cia402Flags>,
     mut cmd_rx: broadcast::Receiver<MotorCommand>,
     new_setpoint_tx: mpsc::Sender<Setpoint>,
+    cs_mode_tx: watch::Sender<SetpointManagerModeTypes>,
+    nmt_tx: mpsc::Sender<NmtState>,
+    event_rx: broadcast::Receiver<MotorEvent>,
+    sdo: Arc<Mutex<SdoClient>>,
+    node_id: u8,
 ) -> Result<(), DriveError> {
     loop {
         tokio::select! {
@@ -95,6 +109,39 @@ pub async fn publish_updates(
                             // profile_torque
                         };
                         SetpointManager::write_new_setpoint(&new_setpoint_tx, Setpoint::ProfileTorque(setpoint)).await
+                    },
+                    MotorCommand::EnterCyclicSynchronousMode{ mode } => {
+                        SetpointManager::enable_cyclic_synchronous_mode(
+                                &cs_mode_tx,
+                                mode,
+                                &nmt_tx,
+                                event_rx.resubscribe(),
+                                sdo.clone(),
+                                node_id
+                            ).await
+                    },
+                    MotorCommand::ExitCyclicSynchronousMode => {
+                        SetpointManager::disable_cyclic_synchronous_mode(
+                                &cs_mode_tx,
+                                &nmt_tx,
+                                event_rx.resubscribe(),
+                                sdo.clone(),
+                                node_id
+                            ).await
+                    },
+                    MotorCommand::CyclicSynchronousPosition { abs_target } => {
+                        let setpoint = CyclicPositionSetpoint {
+                                abs_target,
+                        };
+                        SetpointManager::write_new_setpoint(&new_setpoint_tx, Setpoint::CyclicPosition(setpoint)).await
+                    },
+                    MotorCommand::CyclicSynchronousVelocity { target } => {
+                        let setpoint = CyclicVelocitySetpoint { target };
+                        SetpointManager::write_new_setpoint(&new_setpoint_tx, Setpoint::CyclicVelocity(setpoint)).await
+                    },
+                    MotorCommand::CyclicSynchronousTorque { target } => {
+                        let setpoint = CyclicTorqueSetpoint { target };
+                        SetpointManager::write_new_setpoint(&new_setpoint_tx, Setpoint::CyclicTorque(setpoint)).await
                     },
                     _ => {
                         trace!("update publisher ignoring command: {cmd:?}");

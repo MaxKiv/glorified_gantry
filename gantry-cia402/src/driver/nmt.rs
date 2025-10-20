@@ -1,8 +1,13 @@
+use std::time::Duration;
+
 use oze_canopen::{
     interface::CanOpenInterface,
     proto::nmt::{NmtCommand, NmtCommandSpecifier},
 };
-use tokio::sync::{broadcast, mpsc};
+use tokio::{
+    sync::{broadcast, mpsc},
+    time::timeout,
+};
 use tracing::*;
 
 use crate::{driver::event::MotorEvent, error::DriveError};
@@ -77,37 +82,52 @@ pub async fn nmt_task(
     }
 }
 
-/// Makes sure the device is set to NmtState::OP
-pub async fn transition_to_operational(
-    node_id: u8,
-    canopen: CanOpenInterface,
-    current_state: &NmtState,
+pub async fn set_to_nmt_state(
+    state: NmtState,
+    nmt_tx: &mpsc::Sender<NmtState>,
+    mut event_rx: broadcast::Receiver<MotorEvent>,
 ) -> Result<(), DriveError> {
-    if *current_state != NmtState::Operational {
-        trace!(
-            "Motor with node id {} is in NMT state: {:?} - Requesting NmtState::Operational",
-            node_id, current_state,
-        );
-        match canopen
-            .send_nmt(NmtCommand::new(
-                NmtCommandSpecifier::StartRemoteNode,
-                node_id,
-            ))
-            .await
-        {
-            Ok(_) => {
-                trace!("Send NMT Operational to motor with node id {}", node_id);
-            }
-            Err(err) => {
-                error!(
-                    "Error setting motor {} to NMT Operational: {err:?}",
-                    node_id
-                );
+    const NMT_SWITCH_TIMEOUT: Duration = Duration::from_secs(1);
+    const NMT_SWITCH_ATTEMPTS: usize = 10;
 
-                return Err(DriveError::CanOpen(err));
+    let mut attempt = 0;
+
+    loop {
+        // Notify the NMT task of the required NMT state, this handle the switching
+        nmt_tx
+            .send(state.clone())
+            .await
+            .map_err(|err| DriveError::NMTSendError(state.clone(), err))?;
+
+        // Wait for event indicating correct NMT state
+        match timeout(NMT_SWITCH_TIMEOUT, event_rx.recv()).await {
+            Ok(Ok(MotorEvent::NmtStateUpdate(new_state))) => {
+                trace!("new_state: {new_state:?}");
+                // Got an event within the timeout
+                if new_state == state {
+                    return Ok(());
+                }
+            }
+            Ok(Ok(_)) => {
+                // Non-NMT event
+            }
+            Ok(Err(err)) => {
+                // The channel closed before we got an event
+                error!("Startup NMT PRE-OP: {err}");
+                return Err(DriveError::NMTSwitchError(state));
+            }
+            Err(_) => {
+                // Timeout expired, try again
+                warn!("Startup NMT PRE-OP: Timed out waiting for event");
             }
         }
-    }
 
-    Ok(())
+        attempt += 1;
+        if attempt >= NMT_SWITCH_ATTEMPTS {
+            error!(
+                "Failed to switch device into NMT {state:?} after {NMT_SWITCH_ATTEMPTS} attempts, aborting"
+            );
+            return Err(DriveError::NMTSwitchError(state));
+        }
+    }
 }

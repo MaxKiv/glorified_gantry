@@ -1,5 +1,6 @@
 pub mod builder;
 pub mod command;
+pub mod cyclic;
 pub mod event;
 pub mod nmt;
 pub mod oms;
@@ -12,7 +13,10 @@ use std::sync::Arc;
 
 use crate::{
     comms::{
-        pdo::{Pdo, mapping::PdoMapping},
+        pdo::{
+            Pdo,
+            mapping::{PDOSet, PdoMapping},
+        },
         sdo::SdoAction,
     },
     driver::{
@@ -33,11 +37,13 @@ use oze_canopen::{interface::CanOpenInterface, sdo_client::SdoClient};
 use tokio::{
     sync::{Mutex, broadcast, mpsc},
     task::{self, JoinHandle},
+    time::Instant,
 };
 use tracing::*;
 
 /// CiA-402 driver built on top of a CANopen protocol manager
 pub struct Cia402Driver {
+    pub name: String,
     pub node_id: u8,
     pub cmd_tx: broadcast::Sender<MotorCommand>,
     pub nmt_tx: mpsc::Sender<NmtState>,
@@ -59,10 +65,12 @@ impl Cia402Driver {
     /// that information in the type system, but who has the time?
     async fn spawn_tasks(
         node_id: u8,
+        name: String,
         canopen: CanOpenInterface,
         parameters: &'static [SdoAction<'_>],
-        rpdo_mapping_set: &'static [PdoMapping],
-        tpdo_mapping_set: &'static [PdoMapping],
+        default_pdo_set: &'static PDOSet,
+        minimal_pdo_set: &'static PDOSet,
+        sync_rx: broadcast::Receiver<Instant>,
     ) -> Result<Self, DriveError> {
         // Track task handles that we are about to spawn to bind their lifetimes to this object
         let mut handles: Vec<JoinHandle<()>> = Vec::new();
@@ -83,6 +91,7 @@ impl Cia402Driver {
         let event_rx_startup = event_rx.resubscribe();
         let event_rx_cia402 = event_rx.resubscribe();
         let event_rx_setpoint_manager = event_rx.resubscribe();
+        let event_rx_updater = event_rx.resubscribe();
         let event_tx_feedback = event_tx.clone();
         let event_tx_cia402_sm = event_tx.clone();
 
@@ -105,7 +114,7 @@ impl Cia402Driver {
             handle_feedback(
                 node_id,
                 canopen_feedback,
-                tpdo_mapping_set,
+                default_pdo_set.tpdos,
                 event_tx_feedback,
             )
             .await
@@ -122,6 +131,12 @@ impl Cia402Driver {
         // Initialize the NMT Task channel
         let (nmt_tx, nmt_rx) = tokio::sync::mpsc::channel(10);
 
+        // Start the NMT task
+        trace!("Starting NMT State Machine task for motor with node id {node_id}");
+        handles.push(spawn_logged("NMT", async move {
+            nmt_task(node_id, canopen_nmt, nmt_rx, event_rx_nmt).await
+        }));
+
         // Get the SDO client for this node id, we use this to make SDO read/writes
         let sdo = canopen
             .clone()
@@ -130,20 +145,15 @@ impl Cia402Driver {
 
         // Get the PDO client for this node id, we use this to manage R/TPDOs
         trace!("Starting PDO task for device {node_id}");
-        let (pdo_handle, pdo_tx) = Pdo::init(canopen.clone(), node_id, rpdo_mapping_set)
-            .expect("unable to construct PDO client for node id {node_id}");
+        let (pdo_handle, pdo_tx) =
+            Pdo::init(canopen.clone(), node_id, default_pdo_set, minimal_pdo_set)
+                .expect("unable to construct PDO client for node id {node_id}");
         handles.push(pdo_handle);
 
         // Start the setpoint manager for this node, this encapsulates reactive setpoint logic by clearing CW bit 4 when device posts SW 12
-        let (setpoint_manager_handle, new_setpoint_tx) =
-            SetpointManager::init(event_rx_setpoint_manager, pdo_tx.clone());
+        let (setpoint_manager_handle, new_setpoint_tx, cs_mode_tx) =
+            SetpointManager::init(event_rx_setpoint_manager, pdo_tx.clone(), sync_rx);
         handles.push(setpoint_manager_handle);
-
-        // Start the NMT task
-        trace!("Starting NMT State Machine task for motor with node id {node_id}");
-        handles.push(spawn_logged("NMT", async move {
-            nmt_task(node_id, canopen_nmt, nmt_rx, event_rx_nmt).await
-        }));
 
         // Start the cia402 state machine task, this is responsible for
         // tracking the motors current cia402 state and single transition
@@ -166,12 +176,19 @@ impl Cia402Driver {
 
         // Start the publisher task, responsible for update aggregation and device communication
         trace!("Starting update publisher task for motor with node id {node_id}");
+        let nmt_tx_updater = nmt_tx.clone();
+        let sdo_updater = sdo.clone();
         handles.push(spawn_logged("UPDATE", async move {
             publish_updates(
                 pdo_tx.clone(),
                 state_update_rx,
                 cmd_rx_publisher,
                 new_setpoint_tx,
+                cs_mode_tx,
+                nmt_tx_updater,
+                event_rx_updater,
+                sdo_updater,
+                node_id,
             )
             .await
         }));
@@ -183,8 +200,7 @@ impl Cia402Driver {
             nmt_tx.clone(),
             sdo.clone(),
             parameters,
-            rpdo_mapping_set,
-            tpdo_mapping_set,
+            default_pdo_set,
             event_rx_startup,
         )
         .await
@@ -198,6 +214,7 @@ impl Cia402Driver {
         info!("Cia402Driver for node id {node_id} constructed and initialized");
         Ok(Cia402Driver {
             node_id,
+            name,
             cmd_tx,
             nmt_tx,
             event_rx: event_rx.resubscribe(),
@@ -219,7 +236,7 @@ impl Cia402Driver {
 }
 
 /// Helper that spawns a task and logs error if it ever exits
-fn spawn_logged<F>(name: &'static str, fut: F) -> JoinHandle<()>
+pub fn spawn_logged<F>(name: &'static str, fut: F) -> JoinHandle<()>
 where
     F: std::future::Future<Output = Result<(), DriveError>> + Send + 'static,
 {

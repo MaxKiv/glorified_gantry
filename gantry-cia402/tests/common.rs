@@ -2,13 +2,13 @@ use std::time::Duration;
 
 use gantry_cia402::{
     comms::{
-        pdo::mapping::{
-            PdoMapping,
-            custom::{CUSTOM_RPDOS, CUSTOM_TPDOS},
-        },
+        pdo::mapping::{PDOSet, PdoMapping, minimal::MINIMAL_CYCLIC_SYNCHRONOUS_PDO_SET},
         sdo::SdoAction,
     },
-    driver::{event::MotorEvent, nmt::NmtState, receiver::subscriber::handle_feedback, startup},
+    driver::{
+        event::MotorEvent, nmt::NmtState, receiver::subscriber::handle_feedback, spawn_logged,
+        startup,
+    },
     error::DriveError,
 };
 use oze_canopen::{error::CoError, interface::CanOpenInterface};
@@ -16,7 +16,7 @@ use thiserror::Error;
 use tokio::{
     sync::{
         broadcast::{self, error::RecvError},
-        mpsc::{self, error::SendError},
+        mpsc::error::SendError,
     },
     task::{self, JoinHandle},
     time::{self, Instant, error::Elapsed},
@@ -29,8 +29,8 @@ pub const CAN_BITRATE: u32 = 1_000_000;
 pub const NODE_ID: u8 = 3;
 pub const PARAMS: &[SdoAction] = startup::params::PARAMS;
 pub const TIMEOUT: Duration = Duration::from_secs(5);
-pub const TPDOS: &[PdoMapping; 4] = CUSTOM_TPDOS;
-pub const RPDOS: &[PdoMapping; 4] = CUSTOM_RPDOS;
+pub const CYCLIC_PDOS: PDOSet = MINIMAL_CYCLIC_SYNCHRONOUS_PDO_SET;
+pub const SYNC_PERIOD: Duration = Duration::from_millis(1000);
 
 #[derive(Debug, Error)]
 pub enum TestError {
@@ -50,7 +50,7 @@ pub enum TestError {
     Generic,
 }
 
-/// Start the device feedback task responsible for receiving and parsing device feedback and broadcasting these as events
+/// Start the device feedbac task responsible for receiving and parsing device feedback and broadcasting these as events
 pub fn start_feedback_task(
     canopen: CanOpenInterface,
     node_id: u8,
@@ -75,4 +75,33 @@ pub fn start_feedback_task(
         )),
         event_rx,
     )
+}
+
+pub async fn sync_loop(
+    sync_tx: broadcast::Sender<Instant>,
+    canopen: CanOpenInterface,
+) -> Result<(), DriveError> {
+    let mut interval = time::interval(SYNC_PERIOD);
+    loop {
+        interval.tick().await;
+
+        // 1️⃣ broadcast to all drivers
+        sync_tx
+            .send(Instant::now())
+            .map_err(|_| DriveError::ViolatedInvariant(String::from("unable to send SYNC")))?;
+
+        // 2️⃣ send SYNC frame on bus
+        canopen
+            .send_sync()
+            .await
+            .map_err(|_| DriveError::ViolatedInvariant(String::from("unable to send SYNC")))?;
+    }
+}
+
+pub fn start_sync_master(canopen: CanOpenInterface) -> broadcast::Receiver<Instant> {
+    let (sync_tx, sync_rx) = tokio::sync::broadcast::channel(10);
+
+    spawn_logged("SYNC", async move { sync_loop(sync_tx, canopen).await });
+
+    sync_rx
 }

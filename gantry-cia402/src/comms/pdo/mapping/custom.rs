@@ -1,5 +1,5 @@
 use crate::{
-    comms::pdo::mapping::{BitRange, PdoMapping, PdoMappingSource, PdoType},
+    comms::pdo::mapping::{BitRange, PDOSet, PdoMapping, PdoMappingSource, PdoType, empty::*},
     driver::startup::pdo_mapping::TransmissionType,
     od,
 };
@@ -13,6 +13,11 @@ pub const RPDO_IDX_TARGET_POS: usize = 1;
 pub const RPDO_IDX_TARGET_VEL: usize = 2;
 pub const RPDO_IDX_TARGET_TORQUE: usize = 3;
 
+pub const CUSTOM_PDOS: PDOSet = PDOSet {
+    rpdos: CUSTOM_RPDOS,
+    tpdos: CUSTOM_TPDOS,
+};
+
 pub const CUSTOM_RPDOS: &[PdoMapping; 4] = &[
     RPDO_CONTROL_OPMODE,
     RPDO_TARGET_POS,
@@ -23,9 +28,10 @@ pub const CUSTOM_RPDOS: &[PdoMapping; 4] = &[
 pub const CUSTOM_TPDOS: &[PdoMapping; 4] = &[
     TPDO_STATUS_OPMODE,
     TPDO_POS_VEL_ACTUAL,
-    TPDO_TORQUE_ACTUAL,
-    TPDO_EMPTY, // Required to avoid default TPDO4 generating warnings, TODO: remove this when
-                // adding invalidate all PDO step in configure_pdo_mappings
+    // TPDO_TORQUE_ACTUAL, // Causes a lot of bus spam if transmission_type = OnChange
+    TPDO_EMPTY_3,
+    TPDO_EMPTY_4, // Required to avoid default TPDO4 generating warnings, TODO: remove this when
+                  // adding invalidate all PDO step in configure_pdo_mappings
 ];
 
 pub fn get_dlc(mapping: &PdoMapping) -> usize {
@@ -37,6 +43,9 @@ pub fn get_dlc(mapping: &PdoMapping) -> usize {
     dlc as usize
 }
 
+/// RPDO mapping ControlWord and OperationMode
+/// Note: This should be in any PDOSet, an invariant [`Pdo`] heavily depends on
+/// TODO: Make T/RPDO mapping sets more flexible by generalising de/ser in [`Pdo`]
 pub const RPDO_CONTROL_OPMODE: PdoMapping = PdoMapping {
     pdo: PdoType::RPDO(1),
     sources: &[
@@ -121,11 +130,5 @@ pub const TPDO_TORQUE_ACTUAL: PdoMapping = PdoMapping {
         entry: &od::TORQUE_ACTUAL_VALUE,
         bit_range: BitRange { start: 0, len: 16 },
     }],
-    transmission_type: TransmissionType::OnChange,
-};
-
-pub const TPDO_EMPTY: PdoMapping = PdoMapping {
-    pdo: PdoType::TPDO(4),
-    sources: &[],
     transmission_type: TransmissionType::OnChange,
 };

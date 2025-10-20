@@ -7,13 +7,22 @@ use tokio::{
             self,
             error::{SendError, SendTimeoutError},
         },
+        watch,
     },
     time::error::Elapsed,
 };
 
-use crate::driver::{
-    command::MotorCommand, event::MotorEvent, nmt::NmtState, oms::setpoint::Setpoint,
-    receiver::StatusWord, state::Cia402State,
+use crate::{
+    comms::pdo::mapping::PdoMapping,
+    driver::{
+        command::MotorCommand,
+        cyclic::CyclicSynchronousMode,
+        event::MotorEvent,
+        nmt::NmtState,
+        oms::{OperationMode, setpoint::Setpoint},
+        receiver::{StatusWord, setpoint_manager::SetpointManagerModeTypes},
+        state::Cia402State,
+    },
 };
 
 #[derive(Debug, Error)]
@@ -42,6 +51,8 @@ pub enum DriveError {
     BroadcastClosed(MotorEvent, RecvError),
     #[error("Error switching to NMT state: {0:?}: {1:?}")]
     NMTSendError(NmtState, SendError<NmtState>),
+    #[error("Error switching to NMT state: {0:?}")]
+    NMTSwitchError(NmtState),
     #[error("Error sending new setpoint do setpoint manager: {0:?}: {1:?}")]
     NewSetpointSendError(Setpoint, SendError<Setpoint>),
     #[error("Unable to decode {0:?} into Cia402State")]
@@ -56,4 +67,10 @@ pub enum DriveError {
     Cia402TransitionTimeout(Cia402State, Cia402State),
     #[error("Error in inter-task communication: {0}")]
     InterTaskCommunicationError(String),
+    #[error("Error switching to mode {0:?}")]
+    ModeSwitchError(watch::error::SendError<SetpointManagerModeTypes>),
+    #[error("Attempting to write setpoint: {0:?} in wrong OperationMode: {1:?}")]
+    PdoWrongSetpoint(Setpoint, OperationMode),
+    #[error("Invalid mapping: {0:?}")]
+    PdoWrongMapping(PdoMapping),
 }

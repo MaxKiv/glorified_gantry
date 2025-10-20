@@ -13,18 +13,19 @@ use tokio::{
 use tracing::*;
 
 use crate::{
-    comms::{pdo::mapping::PdoMapping, sdo::SdoAction},
+    comms::{
+        pdo::mapping::{PDOSet, PdoMapping},
+        sdo::SdoAction,
+    },
     driver::{
         event::MotorEvent,
-        nmt::NmtState,
+        nmt::{NmtState, set_to_nmt_state},
         startup::{parametrise::parametrise_motor, pdo_mapping::configure_pdo_mappings},
     },
     error::DriveError,
 };
 
 pub const RETRY_DURATION: Duration = Duration::from_secs(1);
-pub const NMT_SWITCH_TIMEOUT: Duration = Duration::from_secs(1);
-pub const NMT_SWITCH_ATTEMPTS: usize = 10;
 
 /// Parametrize & Set up PDO mapping for cia402 compliant motor at given node_id
 pub async fn motor_startup_task(
@@ -32,54 +33,13 @@ pub async fn motor_startup_task(
     nmt_tx: mpsc::Sender<NmtState>,
     sdo: Arc<Mutex<SdoClient>>,
     parameters: &[SdoAction<'_>],
-    rpdo_mapping: &'static [PdoMapping],
-    tpdo_mapping: &'static [PdoMapping],
+    default_pdo_set: &'static PDOSet,
     event_rx: broadcast::Receiver<MotorEvent>,
 ) -> Result<(), DriveError> {
     trace!("Starting up motor at node id {node_id}");
 
     // Put the drive in NMT PreOperational, required for parametrisation & pdo mapping
-    let state = NmtState::PreOperational;
-    let mut attempt = 0;
-    let mut nmt_event_rx = event_rx.resubscribe();
-
-    loop {
-        // Put the device in PreOperational
-        nmt_tx
-            .send(state.clone())
-            .await
-            .map_err(|err| DriveError::NMTSendError(state.clone(), err))?;
-
-        // Wait for event indicating correct NMT state
-        match timeout(NMT_SWITCH_TIMEOUT, nmt_event_rx.recv()).await {
-            Ok(Ok(MotorEvent::NmtStateUpdate(new_state))) => {
-                trace!("new_state: {new_state:?}");
-                // Got an event within the timeout
-                if new_state == state {
-                    break;
-                }
-            }
-            Ok(Err(err)) => {
-                // The channel closed before we got an event
-                error!("Startup NMT PRE-OP: {err}");
-            }
-            Err(_) => {
-                // Timeout expired
-                warn!("Startup NMT PRE-OP: Timed out waiting for event");
-            }
-            Ok(Ok(event)) => {
-                // Non-NMT event
-                error!("Non NMT event : {event:?}");
-            }
-        }
-
-        attempt += 1;
-        if attempt >= NMT_SWITCH_ATTEMPTS {
-            panic!(
-                "Failed to switch device into NMT {state:?} after {NMT_SWITCH_ATTEMPTS} attempts, aborting"
-            );
-        }
-    }
+    set_to_nmt_state(NmtState::PreOperational, &nmt_tx, event_rx.resubscribe()).await?;
 
     // Parametrise this motor
     loop {
@@ -97,9 +57,10 @@ pub async fn motor_startup_task(
     }
 
     // Configure RPDO mapping
-    trace!("Configuring RPDO_mapping of motor at node id {node_id}");
+    trace!("Configuring default RPDO_mapping of motor at node id {node_id}");
     loop {
-        if let Err(err) = configure_pdo_mappings(node_id, sdo.clone(), rpdo_mapping).await {
+        if let Err(err) = configure_pdo_mappings(node_id, sdo.clone(), default_pdo_set.rpdos).await
+        {
             warn!(
                 "RPDO mapping configuration failed of motor at node id {node_id}: {err}, retrying in {}s",
                 RETRY_DURATION.as_secs()
@@ -112,9 +73,10 @@ pub async fn motor_startup_task(
     }
 
     // Configure TPDO mapping
-    trace!("Configuring TPDO_mapping of motor at node id {node_id}");
+    trace!("Configuring default TPDO_mapping of motor at node id {node_id}");
     loop {
-        if let Err(err) = configure_pdo_mappings(node_id, sdo.clone(), tpdo_mapping).await {
+        if let Err(err) = configure_pdo_mappings(node_id, sdo.clone(), default_pdo_set.tpdos).await
+        {
             warn!(
                 "TPDO mapping configuration failed of motor at node id {node_id}: {err}, retrying in {}s",
                 RETRY_DURATION.as_secs()
@@ -127,44 +89,8 @@ pub async fn motor_startup_task(
     }
 
     // Put the drive in NMT Operational
-    let state = NmtState::Operational;
-    let mut attempt = 0;
-    let mut nmt_event_rx = event_rx.resubscribe();
-    loop {
-        // Put the device in Opertional
-        nmt_tx
-            .send(state.clone())
-            .await
-            .map_err(|err| DriveError::NMTSendError(state.clone(), err))?;
+    set_to_nmt_state(NmtState::Operational, &nmt_tx, event_rx.resubscribe()).await?;
 
-        // Wait for event indicating correct NMT state
-        match timeout(NMT_SWITCH_TIMEOUT, nmt_event_rx.recv()).await {
-            Ok(Ok(MotorEvent::NmtStateUpdate(new_state))) => {
-                // Got an event within the timeout
-                if new_state == state {
-                    break;
-                }
-            }
-            Ok(Err(err)) => {
-                // The channel closed before we got an event
-                error!("Startup NMT PRE-OP: {err}");
-            }
-            Err(_) => {
-                // Timeout expired
-                warn!("Startup NMT PRE-OP: Timed out waiting for event");
-            }
-            _ => {
-                // Non-NMT event
-            }
-        }
-
-        attempt += 1;
-        if attempt >= NMT_SWITCH_ATTEMPTS {
-            panic!(
-                "Failed to switch device into NMT {state:?} after {NMT_SWITCH_ATTEMPTS} attempts, aborting"
-            );
-        }
-    }
     trace!("Device reporst NMT Opertional -> Startup Completed!");
 
     Ok(())
