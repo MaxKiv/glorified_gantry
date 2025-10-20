@@ -2,6 +2,10 @@
 
 - Consecutive movement is broken using `PositionModeFlagsCW::DECELERATE_AFTER_REACHING`
 
+- Profile Torque mode has trouble hitting torque target precisely, sometimes this takes
+  ages to converge. -> Listen for torqueFeedback { actual_torque: i32 } instead
+  and define a target reached margin myself.
+
 - Cia402State::OperationEnabled -> SwitchOnDisabled seems broken, should use quick stop transition?
 
 - Statusword feedback bit 10: target reached is parsed twice, move to a single location

@@ -108,7 +108,7 @@ mod tests {
         .await?;
 
         for num in 1..=10 {
-            info!("#{num} Setting {TEST_TORQUE} positive torque");
+            info!("#{num} Setting {TEST_TORQUE} torque target");
             drive
                 .cmd_tx
                 .send(MotorCommand::SetTorque {
@@ -146,7 +146,7 @@ mod tests {
             )
             .await?;
 
-            info!("#{num} Setting {TEST_TORQUE} positive torque");
+            info!("#{num} Setting -{TEST_TORQUE} torque target");
             drive
                 .cmd_tx
                 .send(MotorCommand::SetTorque {
