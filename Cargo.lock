@@ -273,17 +273,12 @@ name = "gantry-axis"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "async-trait",
- "bitflags",
  "gantry-cia402",
  "gantry-demo",
- "heapless",
- "once_cell",
- "owo-colors 4.2.3",
- "oze-canopen 0.1.0",
  "thiserror 2.0.17",
  "tokio",
  "tracing",
+ "uom",
 ]
 
 [[package]]
@@ -917,6 +912,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "typenum"
+version = "1.19.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "562d481066bde0658276a35467c4af00bdc6ee726305698a55b86e61d7ad82bb"
+
+[[package]]
 name = "unicode-ident"
 version = "1.0.19"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -927,6 +928,16 @@ name = "unty"
 version = "0.0.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6d49784317cd0d1ee7ec5c716dd598ec5b4483ea832a2dced265471cc0f690ae"
+
+[[package]]
+name = "uom"
+version = "0.37.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cd5cfe7d84f6774726717f358a37f5bca8fca273bed4de40604ad129d1107b49"
+dependencies = [
+ "num-traits",
+ "typenum",
+]
 
 [[package]]
 name = "valuable"
