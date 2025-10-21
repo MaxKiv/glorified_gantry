@@ -1,8 +1,7 @@
 use uom::si::f64::*;
-use uom::si::{length::millimeter, torque::newton_meter, velocity::meter_per_second};
 
 #[derive(Debug, Clone)]
-pub enum Setpoint {
+pub enum AxisSetpoint {
     RelativePosition(PositionSetpoint),
     AbsolutePosition(PositionSetpoint),
     Velocity(VelocitySetpoint),
@@ -11,16 +10,16 @@ pub enum Setpoint {
 
 #[derive(Debug, Clone)]
 pub struct PositionSetpoint {
-    target: millimeter,
-    velocity: meter_per_second,
+    pub target: Length,
+    pub velocity: Velocity,
 }
 
 #[derive(Debug, Clone)]
 pub struct VelocitySetpoint {
-    target: meter_per_second,
+    pub target: Velocity,
 }
 
 #[derive(Debug, Clone)]
 pub struct TorqueSetpoint {
-    target: newton_meter,
+    pub target: Torque,
 }

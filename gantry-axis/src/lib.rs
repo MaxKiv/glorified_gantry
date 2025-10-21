@@ -4,6 +4,7 @@ use tracing::*;
 pub mod axis;
 pub mod builder;
 pub mod command;
+pub mod default;
 pub mod event;
 pub mod gantry;
 pub mod setpoint;

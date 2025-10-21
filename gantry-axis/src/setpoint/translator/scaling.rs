@@ -1,0 +1,58 @@
+use tracing::*;
+use uom::si::{
+    f64::{Length, Torque, Velocity},
+    length::millimeter,
+    torque::newton_meter,
+    velocity::meter_per_second,
+};
+
+const COUNTS_PER_REV: f64 = 3600.0; // Default configuration in Cia402Driver
+const LEAD_MM_PER_REV: f64 = 5.0; // TODO: validate this assumption
+const RATED_TORQUE_NM: f64 = 3.1; // From nanotec motor catalog model PD4C6018
+const DEVICE_TORQUE_UNITS_PER_FULL_RATED_TORQUE: f64 = 1000.0; // Nanotec uses 0.1% of rated torque as "torque unit"
+
+#[derive(Debug, Clone)]
+/// Scaling factors to convert SI units into units used by the motors
+pub struct DeviceScaling {
+    pub pos_to_ticks: f64,  // ticks per millimeter
+    pub vel_to_ticks: f64,  // ticks/s per m/s
+    pub torque_to_raw: f64, // device units per Nm
+}
+
+impl Default for DeviceScaling {
+    fn default() -> Self {
+        let pos_to_ticks = COUNTS_PER_REV / LEAD_MM_PER_REV; // ticks per mm
+        let vel_to_ticks = pos_to_ticks * 1000.0; // ticks/s per (m/s)
+        let torque_to_raw = DEVICE_TORQUE_UNITS_PER_FULL_RATED_TORQUE / RATED_TORQUE_NM; // raw units per Nm
+
+        Self {
+            pos_to_ticks,
+            vel_to_ticks,
+            torque_to_raw,
+        }
+    }
+}
+
+impl DeviceScaling {
+    pub fn position(&self, pos: Length) -> i32 {
+        let mm = pos.get::<millimeter>();
+        (mm * self.pos_to_ticks).round() as i32
+    }
+    pub fn abs_velocity(&self, vel: Velocity) -> u32 {
+        let mut mps = vel.get::<meter_per_second>();
+        if mps < 0.0 {
+            error!("Attempting to set a absolute velocity below zero: {vel:?}");
+            mps = mps.min(0f64);
+        }
+
+        (mps * self.vel_to_ticks).round() as u32
+    }
+    pub fn velocity(&self, vel: Velocity) -> i32 {
+        let mps = vel.get::<meter_per_second>();
+        (mps * self.vel_to_ticks).round() as i32
+    }
+    pub fn torque(&self, torque: Torque) -> i16 {
+        let nm = torque.get::<newton_meter>();
+        (nm * self.torque_to_raw).round() as i16
+    }
+}

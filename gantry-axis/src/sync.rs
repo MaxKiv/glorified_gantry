@@ -16,6 +16,12 @@ pub struct SyncMasterHandle {
     sync_period_tx: watch::Sender<Duration>,
 }
 
+impl SyncMasterHandle {
+    pub fn get_sync_receiver(&self) -> broadcast::Receiver<Instant> {
+        self.sync_rx.resubscribe()
+    }
+}
+
 pub struct SyncMaster {
     canopen: CanOpenInterface,
     period: Duration,

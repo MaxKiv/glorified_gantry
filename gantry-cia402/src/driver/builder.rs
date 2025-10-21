@@ -8,7 +8,7 @@ use crate::{
         },
         sdo::SdoAction,
     },
-    driver::Cia402Driver,
+    driver::{Cia402Driver, startup::params::PARAMS},
     error::DriveError,
 };
 
@@ -144,6 +144,11 @@ impl<C, M> Cia402DriverBuilder<C, M, NoSyncReceiver> {
 impl<C, M, S> Cia402DriverBuilder<C, M, S> {
     pub fn with_parameters(mut self, params: &'static [SdoAction<'static>]) -> Self {
         self.parameters = Some(params);
+        self
+    }
+
+    pub fn with_default_parameters(mut self) -> Self {
+        self.parameters = Some(PARAMS);
         self
     }
 

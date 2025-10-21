@@ -13,10 +13,7 @@ use std::sync::Arc;
 
 use crate::{
     comms::{
-        pdo::{
-            Pdo,
-            mapping::{PDOSet, PdoMapping},
-        },
+        pdo::{Pdo, mapping::PDOSet},
         sdo::SdoAction,
     },
     driver::{
