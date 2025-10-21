@@ -85,15 +85,15 @@ pub async fn sync_loop(
     loop {
         interval.tick().await;
 
-        // 1️⃣ broadcast to all drivers
-        sync_tx
-            .send(Instant::now())
-            .map_err(|_| DriveError::ViolatedInvariant(String::from("unable to send SYNC")))?;
-
-        // 2️⃣ send SYNC frame on bus
+        // 1 send SYNC frame on bus
         canopen
             .send_sync()
             .await
+            .map_err(|_| DriveError::ViolatedInvariant(String::from("unable to send SYNC")))?;
+
+        // 2 broadcast to all drivers
+        sync_tx
+            .send(Instant::now())
             .map_err(|_| DriveError::ViolatedInvariant(String::from("unable to send SYNC")))?;
     }
 }

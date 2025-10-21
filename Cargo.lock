@@ -275,6 +275,7 @@ dependencies = [
  "anyhow",
  "gantry-cia402",
  "gantry-demo",
+ "oze-canopen 0.1.0",
  "thiserror 2.0.17",
  "tokio",
  "tracing",
