@@ -16,7 +16,7 @@ mod tests {
         error::DriveError,
     };
 
-    use crate::common::{NODE_ID, PARAMS, RPDOS, TIMEOUT, TPDOS};
+    use crate::common::{NODE_ID, PARAMS, RPDOS, TIMEOUT, TPDOS, start_sync_master};
 
     use super::*;
 
@@ -35,7 +35,7 @@ mod tests {
         info!("Initializing Cia402Driver for motor driver at node id {node_id}");
         let drive = Cia402DriverBuilder::new(node_id)
             .with_canopen(canopen.clone())
-            .with_pdo_mappings(&CUSTOM_PDOS, &MINIMAL_CYCLIC_SYNCHRONOUS_PDO_SET)
+            .with_default_pdo_mappings()
             .with_parameters(PARAMS)
             .with_sync_receiver(sync_rx)
             .build()

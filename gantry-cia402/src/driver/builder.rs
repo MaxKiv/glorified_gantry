@@ -2,10 +2,18 @@ use oze_canopen::interface::CanOpenInterface;
 use tokio::{sync::broadcast, time::Instant};
 
 use crate::{
-    comms::{pdo::mapping::PDOSet, sdo::SdoAction},
+    comms::{
+        pdo::mapping::{
+            PDOSet, PdoMapping, custom::CUSTOM_PDOS, minimal::MINIMAL_CYCLIC_SYNCHRONOUS_PDO_SET,
+        },
+        sdo::SdoAction,
+    },
     driver::Cia402Driver,
     error::DriveError,
 };
+
+pub const DEFAULT_PDO_SET: &PDOSet = &CUSTOM_PDOS;
+pub const MINIMAL_PDO_SET: &PDOSet = &MINIMAL_CYCLIC_SYNCHRONOUS_PDO_SET;
 
 // Typestate structs
 /// No CANOpen configured yet
@@ -77,7 +85,14 @@ impl<M, S> Cia402DriverBuilder<NoCanOpen, M, S> {
 // Required Cia402Driver configuration
 impl<C, S> Cia402DriverBuilder<C, NoMapping, S> {
     /// Configure the Cia402Driver with a T/RPDO mapping
-    pub fn with_pdo_mappings(
+    pub fn with_default_pdo_mappings(self) -> Cia402DriverBuilder<C, HasMapping, S> {
+        let default_pdo_set = DEFAULT_PDO_SET;
+        let minimal_pdo_set = MINIMAL_PDO_SET;
+
+        self.with_pdo_mappings(default_pdo_set, minimal_pdo_set)
+    }
+
+    fn with_pdo_mappings(
         self,
         default_pdo_set: &'static PDOSet,
         minimal_pdo_set: &'static PDOSet,
