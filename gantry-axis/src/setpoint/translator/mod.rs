@@ -2,6 +2,7 @@ pub mod scaling;
 
 use gantry_cia402::driver::{command::MotorCommand, event::MotorEvent};
 use tracing::info;
+use uom::si::f64::Length;
 
 use crate::axis::setpoint::*;
 use crate::{event::GantryEvent, setpoint::translator::scaling::DeviceScaling};
@@ -20,8 +21,8 @@ impl SetpointTranslator {
         let cmd = match setpoint.clone() {
             AxisSetpoint::RelativePosition(position_setpoint) => {
                 // Scale setpoint
-                let delta = self.scaling.position(position_setpoint.target);
-                let profile_velocity = self.scaling.abs_velocity(position_setpoint.velocity);
+                let delta = self.scaling.to_device_pos(position_setpoint.target);
+                let profile_velocity = self.scaling.to_device_abs_vel(position_setpoint.velocity);
 
                 MotorCommand::MoveRelative {
                     delta,
@@ -30,8 +31,8 @@ impl SetpointTranslator {
             }
             AxisSetpoint::AbsolutePosition(position_setpoint) => {
                 // Scale setpoint
-                let target = self.scaling.position(position_setpoint.target);
-                let profile_velocity = self.scaling.abs_velocity(position_setpoint.velocity);
+                let target = self.scaling.to_device_pos(position_setpoint.target);
+                let profile_velocity = self.scaling.to_device_abs_vel(position_setpoint.velocity);
 
                 MotorCommand::MoveAbsolute {
                     target,
@@ -40,13 +41,13 @@ impl SetpointTranslator {
             }
             AxisSetpoint::Velocity(velocity_setpoint) => {
                 // Scale setpoint
-                let target_velocity = self.scaling.velocity(velocity_setpoint.target);
+                let target_velocity = self.scaling.to_device_vel(velocity_setpoint.target);
 
                 MotorCommand::SetVelocity { target_velocity }
             }
             AxisSetpoint::Torque(torque_setpoint) => {
                 // Scale setpoint
-                let target_torque = self.scaling.torque(torque_setpoint.target);
+                let target_torque = self.scaling.to_device_torque(torque_setpoint.target);
 
                 MotorCommand::SetTorque { target_torque }
             }
@@ -57,7 +58,7 @@ impl SetpointTranslator {
         cmd
     }
 
-    pub fn from_motor_event(event: MotorEvent) -> GantryEvent {
-        todo!()
+    pub fn translate_motor_position(&self, motor_pos: i32) -> Length {
+        self.scaling.from_device_pos(motor_pos)
     }
 }

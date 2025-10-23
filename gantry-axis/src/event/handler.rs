@@ -10,7 +10,7 @@ use crate::{
 };
 
 pub struct FeedbackHandle {
-    handles: Vec<Option<JoinHandle<()>>>,
+    _handles: Vec<Option<JoinHandle<()>>>,
     pub gantry_rx: broadcast::Receiver<GantryEvent>,
 }
 
@@ -59,7 +59,10 @@ impl FeedbackHandler {
             })
         }));
 
-        FeedbackHandle { handles, gantry_rx }
+        FeedbackHandle {
+            _handles: handles,
+            gantry_rx,
+        }
     }
 
     pub async fn handle_axis_feedback(
@@ -97,7 +100,7 @@ impl FeedbackHandler {
         gantry_tx: &broadcast::Sender<GantryEvent>,
         translator: &SetpointTranslator,
     ) {
-        let gantry_event = GantryEvent::from_motor(axis.clone(), event);
+        let gantry_event = GantryEvent::from_motor(axis.clone(), event, translator);
 
         if let Err(e) = gantry_tx.send(gantry_event.clone()) {
             error!("Unable to send Gantry Event: {gantry_event:?}: {e}");

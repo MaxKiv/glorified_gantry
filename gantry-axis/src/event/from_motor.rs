@@ -1,9 +1,12 @@
 use gantry_cia402::driver::event::MotorEvent;
 
-use crate::{axis::Axis, axis_state::AxisState, diagnostic::DiagnosticLevel, event::GantryEvent};
+use crate::{
+    axis::Axis, axis_state::AxisState, diagnostic::DiagnosticLevel, event::GantryEvent,
+    setpoint::translator::SetpointTranslator,
+};
 
 impl GantryEvent {
-    pub fn from_motor(axis: Axis, event: MotorEvent) -> Self {
+    pub fn from_motor(axis: Axis, event: MotorEvent, translator: &SetpointTranslator) -> Self {
         match event {
             MotorEvent::PositionFeedback { actual_position } => GantryEvent::Position {
                 axis,
