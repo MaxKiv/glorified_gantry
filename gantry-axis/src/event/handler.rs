@@ -1,8 +1,5 @@
 use gantry_cia402::driver::event::MotorEvent;
-use tokio::{
-    sync::broadcast,
-    task::JoinHandle,
-};
+use tokio::{sync::broadcast, task::JoinHandle};
 use tracing::*;
 
 use crate::{
@@ -42,31 +39,25 @@ impl FeedbackHandler {
 
         // Spawn a axis feedback handler for each configured gantry axis
         // Spawn X Axis handler, if configured
-        handles.push(if let Some(x) = x {
-            Some(spawn_logged("FEEDBACK_X", async {
+        handles.push(x.map(|x| {
+            spawn_logged("FEEDBACK_X", async {
                 FeedbackHandler::handle_axis_feedback(x, gantry_tx_x, translator_x).await
-            }))
-        } else {
-            None
-        });
+            })
+        }));
 
         // Spawn Y Axis handler, if configured
-        handles.push(if let Some(y) = y {
-            Some(spawn_logged("FEEDBACK_Y", async {
+        handles.push(y.map(|y| {
+            spawn_logged("FEEDBACK_Y", async {
                 FeedbackHandler::handle_axis_feedback(y, gantry_tx_y, translator_y).await
-            }))
-        } else {
-            None
-        });
+            })
+        }));
 
         // Spawn Z Axis handler, if configured
-        handles.push(if let Some(z) = z {
-            Some(spawn_logged("FEEDBACK_Z", async {
+        handles.push(z.map(|z| {
+            spawn_logged("FEEDBACK_Z", async {
                 FeedbackHandler::handle_axis_feedback(z, gantry_tx_z, translator_z).await
-            }))
-        } else {
-            None
-        });
+            })
+        }));
 
         FeedbackHandle { handles, gantry_rx }
     }
