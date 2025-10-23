@@ -1,9 +1,9 @@
 pub mod setpoint;
 
-use gantry_cia402::driver::{Cia402Driver, builder::Cia402DriverBuilder};
+use gantry_cia402::driver::{Cia402Driver, builder::Cia402DriverBuilder, command::MotorCommand};
 use oze_canopen::interface::CanOpenInterface;
 use tokio::{sync::broadcast, time::Instant};
-use tracing::info;
+use tracing::*;
 
 #[derive(Debug)]
 pub enum Axis {
@@ -68,5 +68,31 @@ impl AxisMotors {
             master,
             slave,
         })
+    }
+
+    /// Send given motorcommand to the master and slave motors of this axis
+    pub fn send_command_to_motors(&self, command: &MotorCommand) {
+        let master_cmd = command.clone();
+        let slave_cmd = command.clone();
+
+        info!("Axis {:?} sending command: {command:?}", self.axis);
+
+        // Send to master driver
+        if let Err(e) = self.master.cmd_tx.send(master_cmd) {
+            error!(
+                "Axis {:?} unable to send command to Master: {command:?} - {e}",
+                self.axis
+            );
+        }
+
+        // Send to slave driver if that exists
+        if let Some(slave) = &self.slave {
+            if let Err(e) = slave.cmd_tx.send(slave_cmd) {
+                error!(
+                    "Axis {:?} unable to send command to Slave: {command:?} - {e}",
+                    self.axis
+                );
+            }
+        }
     }
 }

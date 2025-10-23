@@ -10,9 +10,6 @@ use crate::{
 pub struct Gantry {
     sync: SyncMasterHandle,
     cmd_handler: CommandHandlerHandle,
-    x_axis: AxisMotors,
-    y_axis: AxisMotors,
-    z_axis: AxisMotors,
 }
 
 impl Gantry {
@@ -34,14 +31,8 @@ impl Gantry {
             AxisMotors::new(canopen.clone(), DEFAULT_Z_CONFIG, sync.get_sync_receiver()).await?;
 
         info!("Starting Command Handler");
-        let cmd_handler = CommandHandler::init();
+        let cmd_handler = CommandHandler::init(x_axis, y_axis, z_axis);
 
-        Ok(Self {
-            sync,
-            cmd_handler,
-            x_axis,
-            y_axis,
-            z_axis,
-        })
+        Ok(Self { sync, cmd_handler })
     }
 }
