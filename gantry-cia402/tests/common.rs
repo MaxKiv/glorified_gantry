@@ -26,7 +26,7 @@ use tracing::*;
 // Default test parameters
 pub const CAN_INTERFACE: &str = "can0";
 pub const CAN_BITRATE: u32 = 1_000_000;
-pub const NODE_ID: u8 = 3;
+pub const NODE_ID: u8 = 1;
 pub const PARAMS: &[SdoAction] = startup::params::PARAMS;
 pub const TIMEOUT: Duration = Duration::from_secs(5);
 pub const CYCLIC_PDOS: PDOSet = MINIMAL_CYCLIC_SYNCHRONOUS_PDO_SET;

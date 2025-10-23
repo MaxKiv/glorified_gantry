@@ -10,21 +10,27 @@ mod tests {
     const TEST_SPEED: u32 = 100;
 
     use gantry_cia402::{
-        comms::pdo::mapping::{custom::CUSTOM_PDOS, minimal::MINIMAL_CYCLIC_SYNCHRONOUS_PDO_SET},
         driver::{
-            Cia402Driver, builder::Cia402DriverBuilder, command::MotorCommand, event::MotorEvent,
-            receiver::subscriber::wait_for_event, state::Cia402State,
+            Cia402Driver,
+            builder::Cia402DriverBuilder,
+            command::MotorCommand,
+            event::MotorEvent,
+            receiver::subscriber::{
+                wait_for_event, wait_for_setpoint_acknowledge, wait_for_target_reached,
+            },
+            state::Cia402State,
         },
         error::DriveError,
     };
+    use tokio::signal;
 
-    use crate::common::{NODE_ID, PARAMS, RPDOS, TIMEOUT, TPDOS, start_sync_master};
+    use crate::common::{NODE_ID, PARAMS, TIMEOUT, start_sync_master};
 
     use super::*;
 
     #[tokio::test]
     /// Test basic cia402 state transitions
-    async fn test_position_mode() -> Result<(), DriveError> {
+    async fn test_position_mode() -> anyhow::Result<()> {
         gantry_demo::setup_tracing();
 
         let node_id = NODE_ID;
@@ -43,6 +49,23 @@ mod tests {
             .build()
             .await?;
 
+        // Create a task for the test logic
+        let test_task = tokio::spawn(pos_test(drive));
+
+        // Wait for either Ctrl-C or test completion
+        tokio::select! {
+            res = test_task => {
+                res??;
+            }
+            _ = signal::ctrl_c() => {
+                info!("Ctrl-C received — aborting test");
+            }
+        }
+
+        Ok(())
+    }
+
+    async fn pos_test(drive: Cia402Driver) -> Result<(), DriveError> {
         info!("Sending Command Disable");
         drive
             .cmd_tx
@@ -101,29 +124,11 @@ mod tests {
                 })
                 .map_err(DriveError::CommandError)?;
 
-            info!("Wait for PositionModeFeedback - setpoint_acknowlegded");
-            wait_for_event(
-                drive.event_rx.resubscribe(),
-                MotorEvent::PositionModeFeedback {
-                    target_reached: false,
-                    limit_exceeded: false,
-                    setpoint_acknowlegded: true,
-                    following_error: false,
-                },
-                TIMEOUT,
-            )
-            .await?;
-            wait_for_event(
-                drive.event_rx.resubscribe(),
-                MotorEvent::PositionModeFeedback {
-                    target_reached: true,
-                    limit_exceeded: false,
-                    setpoint_acknowlegded: false,
-                    following_error: false,
-                },
-                TIMEOUT,
-            )
-            .await?;
+            info!("Wait for setpoint acknowledged event");
+            wait_for_setpoint_acknowledge(drive.event_rx.resubscribe(), TIMEOUT).await?;
+
+            info!("Wait for target reached event");
+            wait_for_target_reached(drive.event_rx.resubscribe(), TIMEOUT).await?;
 
             info!("Doing position relative position movement backward # {num}");
             drive
@@ -134,29 +139,11 @@ mod tests {
                 })
                 .map_err(DriveError::CommandError)?;
 
-            info!("Wait for PositionModeFeedback - target_reached");
-            wait_for_event(
-                drive.event_rx.resubscribe(),
-                MotorEvent::PositionModeFeedback {
-                    target_reached: false,
-                    limit_exceeded: false,
-                    setpoint_acknowlegded: true,
-                    following_error: false,
-                },
-                TIMEOUT,
-            )
-            .await?;
-            wait_for_event(
-                drive.event_rx.resubscribe(),
-                MotorEvent::PositionModeFeedback {
-                    target_reached: true,
-                    limit_exceeded: false,
-                    setpoint_acknowlegded: false,
-                    following_error: false,
-                },
-                TIMEOUT,
-            )
-            .await?;
+            info!("Wait for setpoint acknowledged event");
+            wait_for_setpoint_acknowledge(drive.event_rx.resubscribe(), TIMEOUT).await?;
+
+            info!("Wait for target reached event");
+            wait_for_target_reached(drive.event_rx.resubscribe(), TIMEOUT).await?;
         }
 
         Ok(())

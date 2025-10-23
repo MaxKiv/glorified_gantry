@@ -284,11 +284,11 @@ pub async fn wait_for_event(
             Ok(Err(err @ broadcast::error::RecvError::Lagged(_))) => {
                 // Messages were missed, continue to next one
                 error!("Lagged in wait_for_event, indicates serious issue");
-                return Err(DriveError::BroadcastLagged(watch_for, err));
+                return Err(DriveError::BroadcastLagged(Some(watch_for), err));
             }
             Ok(Err(err @ broadcast::error::RecvError::Closed)) => {
                 error!("Event channel closed in wait_for_event");
-                return Err(DriveError::BroadcastClosed(watch_for, err));
+                return Err(DriveError::BroadcastClosed(Some(watch_for), err));
             }
             Err(err) => {
                 warn!("Timeout when waiting for event: {watch_for:?}");
@@ -296,4 +296,85 @@ pub async fn wait_for_event(
             }
         }
     }
+}
+
+pub async fn wait_until_event_matches<F>(
+    mut event_rx: broadcast::Receiver<MotorEvent>,
+    predicate: F,
+    timeout: Duration,
+) -> Result<(), DriveError>
+where
+    F: Fn(&MotorEvent) -> bool,
+{
+    let deadline = Instant::now() + timeout;
+
+    loop {
+        let remaining = deadline.saturating_duration_since(Instant::now());
+        if remaining.is_zero() {
+            warn!("Timeout while waiting for event");
+            return Err(DriveError::EventMatchesTimeout);
+        }
+
+        let result = time::timeout(remaining, event_rx.recv()).await;
+
+        match result {
+            Ok(Ok(event)) => {
+                if predicate(&event) {
+                    return Ok(());
+                }
+            }
+            Ok(Err(err @ broadcast::error::RecvError::Lagged(_))) => {
+                error!("Lagged in wait_for_event, indicates serious issue");
+                return Err(DriveError::BroadcastLagged(None, err));
+            }
+            Ok(Err(err @ broadcast::error::RecvError::Closed)) => {
+                error!("Event channel closed in wait_for_event");
+                return Err(DriveError::BroadcastClosed(None, err));
+            }
+            Err(_) => {
+                warn!("Timeout when waiting for event");
+                return Err(DriveError::EventMatchesTimeout);
+            }
+        }
+    }
+}
+
+pub async fn wait_for_setpoint_acknowledge(
+    event_rx: broadcast::Receiver<MotorEvent>,
+    timeout: Duration,
+) -> Result<(), DriveError> {
+    wait_until_event_matches(
+        event_rx,
+        |event| {
+            matches!(
+                event,
+                MotorEvent::PositionModeFeedback {
+                    setpoint_acknowlegded: true,
+                    ..
+                }
+            )
+        },
+        timeout,
+    )
+    .await
+}
+
+pub async fn wait_for_target_reached(
+    event_rx: broadcast::Receiver<MotorEvent>,
+    timeout: Duration,
+) -> Result<(), DriveError> {
+    wait_until_event_matches(
+        event_rx,
+        |event| {
+            matches!(
+                event,
+                MotorEvent::PositionModeFeedback {
+                    target_reached: true,
+                    ..
+                }
+            )
+        },
+        timeout,
+    )
+    .await
 }

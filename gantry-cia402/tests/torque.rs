@@ -20,7 +20,7 @@ mod tests {
     };
     use tokio::signal;
 
-    use crate::common::{NODE_ID, PARAMS, RPDOS, TIMEOUT, TPDOS};
+    use crate::common::{NODE_ID, PARAMS, TIMEOUT, start_sync_master};
 
     use super::*;
 

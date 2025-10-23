@@ -45,10 +45,12 @@ pub enum DriveError {
     ConversionError(String),
     #[error("Timeout waiting for event: {0:?}: {1:?}")]
     EventTimeout(MotorEvent, Option<Elapsed>),
+    #[error("Timeout waiting for event to match predicate")]
+    EventMatchesTimeout,
     #[error("Broadcast lag waiting for event: {0:?}: {1:?}")]
-    BroadcastLagged(MotorEvent, RecvError),
+    BroadcastLagged(Option<MotorEvent>, RecvError),
     #[error("Broadcast closed waiting for event: {0:?}: {1:?}")]
-    BroadcastClosed(MotorEvent, RecvError),
+    BroadcastClosed(Option<MotorEvent>, RecvError),
     #[error("Error switching to NMT state: {0:?}: {1:?}")]
     NMTSendError(NmtState, SendError<NmtState>),
     #[error("Error switching to NMT state: {0:?}")]
