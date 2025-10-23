@@ -1,6 +1,5 @@
 [workspace]
 members = [
-    "gantry-nanotec",
     "gantry-cia402",
     "gantry-axis",
     "gantry-ros2",
