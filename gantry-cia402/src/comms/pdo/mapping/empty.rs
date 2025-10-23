@@ -1,7 +1,6 @@
 use crate::{
-    comms::pdo::mapping::{BitRange, PdoMapping, PdoMappingSource, PdoType},
+    comms::pdo::mapping::{PdoMapping, PdoType},
     driver::startup::pdo_mapping::TransmissionType,
-    od,
 };
 
 pub const TPDO_EMPTY_1: PdoMapping = PdoMapping {

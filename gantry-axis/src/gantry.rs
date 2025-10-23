@@ -98,11 +98,10 @@ impl Gantry {
         let recv = AxisEventReceiver::new(
             axis,
             motor.master.event_rx.resubscribe(),
-            if let Some(slave) = &motor.slave {
-                Some(slave.event_rx.resubscribe())
-            } else {
-                None
-            },
+            motor
+                .slave
+                .as_ref()
+                .map(|slave| slave.event_rx.resubscribe()),
         );
 
         Ok((motor, recv))

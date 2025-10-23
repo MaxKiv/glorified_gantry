@@ -91,13 +91,13 @@ impl AxisMotors {
         }
 
         // Send to slave driver if that exists
-        if let Some(slave) = &self.slave {
-            if let Err(e) = slave.cmd_tx.send(slave_cmd) {
-                error!(
-                    "Axis {:?} unable to send command to Slave: {command:?} - {e}",
-                    self.axis
-                );
-            }
+        if let Some(slave) = &self.slave
+            && let Err(e) = slave.cmd_tx.send(slave_cmd)
+        {
+            error!(
+                "Axis {:?} unable to send command to Slave: {command:?} - {e}",
+                self.axis
+            );
         }
     }
 }

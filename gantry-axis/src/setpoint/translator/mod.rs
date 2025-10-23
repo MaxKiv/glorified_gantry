@@ -1,6 +1,6 @@
 pub mod scaling;
 
-use gantry_cia402::driver::{command::MotorCommand, event::MotorEvent, oms::velocity};
+use gantry_cia402::driver::{command::MotorCommand, event::MotorEvent};
 use tracing::info;
 
 use crate::axis::setpoint::*;

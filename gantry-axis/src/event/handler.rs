@@ -1,15 +1,14 @@
 use gantry_cia402::driver::event::MotorEvent;
 use tokio::{
-    sync::{broadcast, mpsc},
+    sync::broadcast,
     task::JoinHandle,
 };
 use tracing::*;
 
 use crate::{
-    axis::{Axis, AxisMotors, receiver::AxisEventReceiver},
-    command::GantryCommand,
+    axis::{Axis, receiver::AxisEventReceiver},
     event::GantryEvent,
-    setpoint::translator::{SetpointTranslator, scaling::DeviceScaling},
+    setpoint::translator::SetpointTranslator,
     spawn_logged,
 };
 

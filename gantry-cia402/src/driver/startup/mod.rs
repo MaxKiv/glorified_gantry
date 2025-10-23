@@ -8,13 +8,13 @@ use std::{sync::Arc, time::Duration};
 use oze_canopen::sdo_client::SdoClient;
 use tokio::{
     sync::{Mutex, broadcast, mpsc},
-    time::{sleep, timeout},
+    time::sleep,
 };
 use tracing::*;
 
 use crate::{
     comms::{
-        pdo::mapping::{PDOSet, PdoMapping},
+        pdo::mapping::PDOSet,
         sdo::SdoAction,
     },
     driver::{

@@ -11,6 +11,7 @@ mod tests {
 
     use std::time::Duration;
 
+    use gantry_axis::sync::SyncMaster;
     use gantry_cia402::{
         driver::{
             Cia402Driver, builder::Cia402DriverBuilder, command::MotorCommand, event::MotorEvent,
@@ -20,7 +21,7 @@ mod tests {
     };
     use tokio::signal;
 
-    use crate::common::{NODE_ID, PARAMS, TIMEOUT, start_sync_master};
+    use crate::common::{NODE_ID, PARAMS, TIMEOUT};
 
     use super::*;
 
@@ -34,7 +35,8 @@ mod tests {
         info!("Starting can interface");
         let (canopen, _) = oze_canopen::canopen::start(String::from("can0"), Some(1000000));
 
-        let sync_rx = start_sync_master(canopen.clone());
+        let sync_master = SyncMaster::init(canopen.clone());
+        let sync_rx = sync_master.get_sync_receiver();
 
         info!("Initializing Cia402Driver for motor driver at node id {node_id}");
         let drive = Cia402DriverBuilder::new(node_id)

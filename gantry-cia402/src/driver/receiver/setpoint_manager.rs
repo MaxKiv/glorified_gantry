@@ -11,13 +11,13 @@ use tracing::*;
 use crate::{
     comms::pdo::{
         cmd::PdoCommand,
-        mapping::{custom::CUSTOM_PDOS, minimal::MINIMAL_CYCLIC_SYNCHRONOUS_PDO_SET},
+        mapping::custom::CUSTOM_PDOS,
     },
     driver::{
         cyclic::CyclicSynchronousMode,
         event::MotorEvent,
         nmt::{NmtState, set_to_nmt_state},
-        oms::{OperationMode, setpoint::Setpoint},
+        oms::setpoint::Setpoint,
         startup::pdo_mapping::configure_pdo_mappings,
     },
     error::DriveError,

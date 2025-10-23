@@ -10,11 +10,12 @@ use tracing::*;
 mod tests {
 
     use gantry_cia402::{
+        comms::pdo::mapping::custom::CUSTOM_PDOS,
         driver::{nmt::nmt_task, receiver::subscriber::wait_for_event},
         log::{log_canopen_pretty, log_events},
     };
 
-    use crate::common::{NODE_ID, TIMEOUT, TPDOS, start_feedback_task};
+    use crate::common::{NODE_ID, TIMEOUT, start_feedback_task};
 
     use super::*;
 
@@ -31,7 +32,7 @@ mod tests {
         task::spawn(log_canopen_pretty(canopen.clone()));
 
         info!("Starting CANOpen event logger");
-        let (_, event_rx) = start_feedback_task(canopen.clone(), node_id, TPDOS);
+        let (_, event_rx) = start_feedback_task(canopen.clone(), node_id, CUSTOM_PDOS.tpdos);
         task::spawn(log_events(event_rx.resubscribe(), node_id));
 
         tokio::time::sleep(Duration::from_millis(250)).await;

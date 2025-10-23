@@ -16,7 +16,6 @@ use crate::{
     comms::pdo::mapping::PdoMapping,
     driver::{
         command::MotorCommand,
-        cyclic::CyclicSynchronousMode,
         event::MotorEvent,
         nmt::NmtState,
         oms::{OperationMode, setpoint::Setpoint},

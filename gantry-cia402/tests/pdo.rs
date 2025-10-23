@@ -10,7 +10,7 @@ use tracing::*;
 mod tests {
 
     use gantry_cia402::{
-        comms::pdo::mapping::custom::CUSTOM_TPDOS,
+        comms::pdo::mapping::custom::{CUSTOM_PDOS, CUSTOM_TPDOS},
         driver::{
             nmt::nmt_task,
             receiver::subscriber::wait_for_event,
@@ -85,12 +85,12 @@ mod tests {
             .map_err(|err| format!("Error during motor parametrisation: {err}").to_string())?;
 
         info!("Configuring RPDO_mapping of motor at node id {node_id}");
-        configure_pdo_mappings(node_id, sdo.clone(), RPDOS)
+        configure_pdo_mappings(node_id, sdo.clone(), CUSTOM_PDOS.rpdos)
             .await
             .map_err(|err| format!("Error during RPDO mapping configuration: {err}").to_string())?;
 
         info!("Configuring TPDO_mapping of motor at node id {node_id}");
-        configure_pdo_mappings(node_id, sdo.clone(), TPDOS)
+        configure_pdo_mappings(node_id, sdo.clone(), CUSTOM_PDOS.tpdos)
             .await
             .map_err(|err| format!("Error during TPDO mapping configuration: {err}").to_string())?;
 

@@ -20,6 +20,11 @@ impl SyncMasterHandle {
     pub fn get_sync_receiver(&self) -> broadcast::Receiver<Instant> {
         self.sync_rx.resubscribe()
     }
+
+    pub fn set_sync_period(&self, period: Duration) -> anyhow::Result<()> {
+        self.sync_period_tx.send(period)?;
+        Ok(())
+    }
 }
 
 pub struct SyncMaster {

@@ -4,7 +4,7 @@ use tokio::{sync::broadcast, time::Instant};
 use crate::{
     comms::{
         pdo::mapping::{
-            PDOSet, PdoMapping, custom::CUSTOM_PDOS, minimal::MINIMAL_CYCLIC_SYNCHRONOUS_PDO_SET,
+            PDOSet, custom::CUSTOM_PDOS, minimal::MINIMAL_CYCLIC_SYNCHRONOUS_PDO_SET,
         },
         sdo::SdoAction,
     },

@@ -275,7 +275,7 @@ dependencies = [
  "anyhow",
  "gantry-cia402",
  "gantry-demo",
- "oze-canopen 0.1.0",
+ "oze-canopen",
  "thiserror 2.0.17",
  "tokio",
  "tracing",
@@ -289,11 +289,12 @@ dependencies = [
  "anyhow",
  "async-trait",
  "bitflags",
+ "gantry-axis",
  "gantry-demo",
  "heapless",
  "once_cell",
  "owo-colors 4.2.3",
- "oze-canopen 0.1.0",
+ "oze-canopen",
  "thiserror 2.0.17",
  "tokio",
  "tracing",
@@ -308,7 +309,7 @@ dependencies = [
  "chrono",
  "gantry-cia402",
  "owo-colors 4.2.3",
- "oze-canopen 0.1.0",
+ "oze-canopen",
  "tokio",
  "tracing",
  "tracing-subscriber",
@@ -317,17 +318,6 @@ dependencies = [
 [[package]]
 name = "gantry-gui"
 version = "0.1.0"
-
-[[package]]
-name = "gantry-nanotec"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "oze-canopen 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "thiserror 2.0.17",
- "tokio",
- "tracing",
-]
 
 [[package]]
 name = "gantry-ros2"
@@ -550,22 +540,6 @@ dependencies = [
  "thiserror-impl 1.0.69",
  "tokio",
  "tokio-macros",
-]
-
-[[package]]
-name = "oze-canopen"
-version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6cb3bf67567900efea1092f1d7e69594307dd7ab2db7c31a348060958e1379db"
-dependencies = [
- "bincode",
- "binrw",
- "bitflags",
- "futures-util",
- "serde",
- "socketcan",
- "thiserror 1.0.69",
- "tokio",
 ]
 
 [[package]]
@@ -841,7 +815,6 @@ dependencies = [
  "signal-hook-registry",
  "socket2 0.6.1",
  "tokio-macros",
- "tracing",
  "windows-sys 0.61.2",
 ]
 

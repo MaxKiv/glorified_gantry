@@ -33,7 +33,7 @@ use anyhow::Result;
 use oze_canopen::{interface::CanOpenInterface, sdo_client::SdoClient};
 use tokio::{
     sync::{Mutex, broadcast, mpsc},
-    task::{self, JoinHandle},
+    task::JoinHandle,
     time::Instant,
 };
 use tracing::*;
