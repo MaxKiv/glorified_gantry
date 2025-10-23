@@ -1,3 +1,4 @@
+pub mod receiver;
 pub mod setpoint;
 
 use gantry_cia402::driver::{Cia402Driver, builder::Cia402DriverBuilder, command::MotorCommand};
@@ -5,23 +6,27 @@ use oze_canopen::interface::CanOpenInterface;
 use tokio::{sync::broadcast, time::Instant};
 use tracing::*;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Axis {
     X,
     Y,
     Z,
 }
 
+/// Configuration struct for a single gantry axis
 pub struct AxisConfig {
+    /// What axis is this config for
     pub axis: Axis,
+    /// Whats the masters CANopen node id
     pub master: u8,
+    /// The slave's node id, if there is one
     pub slave: Option<u8>,
 }
 
 pub struct AxisMotors {
-    axis: Axis,
-    master: Cia402Driver,
-    slave: Option<Cia402Driver>,
+    pub axis: Axis,
+    pub master: Cia402Driver,
+    pub slave: Option<Cia402Driver>,
 }
 
 impl AxisMotors {

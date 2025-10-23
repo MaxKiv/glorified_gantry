@@ -6,7 +6,7 @@ use uom::si::{
     velocity::meter_per_second,
 };
 
-const COUNTS_PER_REV: f64 = 3600.0; // Default configuration in Cia402Driver
+const COUNTS_PER_REV: f64 = 36.0; // Default configuration in Cia402Driver
 const LEAD_MM_PER_REV: f64 = 5.0; // TODO: validate this assumption
 const RATED_TORQUE_NM: f64 = 3.1; // From nanotec motor catalog model PD4C6018
 const DEVICE_TORQUE_UNITS_PER_FULL_RATED_TORQUE: f64 = 1000.0; // Nanotec uses 0.1% of rated torque as "torque unit"
@@ -14,9 +14,9 @@ const DEVICE_TORQUE_UNITS_PER_FULL_RATED_TORQUE: f64 = 1000.0; // Nanotec uses 0
 #[derive(Debug, Clone)]
 /// Scaling factors to convert SI units into units used by the motors
 pub struct DeviceScaling {
-    pub pos_to_ticks: f64,  // ticks per millimeter
-    pub vel_to_ticks: f64,  // ticks/s per m/s
-    pub torque_to_raw: f64, // device units per Nm
+    pub pos_to_ticks: f64,  // counts per millimeter
+    pub vel_to_ticks: f64,  // counts/s per m/s
+    pub torque_to_raw: f64, // device units (0.1% steps of rated torque) per Nm
 }
 
 impl Default for DeviceScaling {
@@ -36,7 +36,11 @@ impl Default for DeviceScaling {
 impl DeviceScaling {
     pub fn position(&self, pos: Length) -> i32 {
         let mm = pos.get::<millimeter>();
-        (mm * self.pos_to_ticks).round() as i32
+        let out = (mm * self.pos_to_ticks).round() as i32;
+
+        trace!("scaling {mm}mm to {out} device counts");
+
+        out
     }
     pub fn abs_velocity(&self, vel: Velocity) -> u32 {
         let mut mps = vel.get::<meter_per_second>();

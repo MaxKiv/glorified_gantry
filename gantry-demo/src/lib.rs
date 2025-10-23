@@ -1,3 +1,8 @@
+use gantry_cia402::driver::spawn_logged;
+use gantry_cia402::error::DriveError;
+use oze_canopen::interface::CanOpenInterface;
+use tokio::sync::broadcast;
+use tokio::time::Instant;
 use tracing::*;
 use tracing_subscriber::Layer;
 use tracing_subscriber::filter::filter_fn;
@@ -11,13 +16,14 @@ use tracing::field::{Field, Visit};
 use tracing_subscriber::fmt::*;
 use tracing_subscriber::{fmt::format::Writer, registry::LookupSpan};
 
+/// Sets up the tracing logging library
 pub fn setup_tracing() {
-    // your custom formatter for canopen
-
+    // Custom canopen formatter used to pretty print canopen traffic
     let frame_fmt_layer = tracing_subscriber::fmt::layer()
         .event_format(FrameFormatter)
         .with_filter(filter_fn(|meta| meta.target() == "canopen"));
 
+    // Default formatter for the rest
     let default_layer =
         tracing_subscriber::fmt::layer().with_filter(filter_fn(|meta| meta.target() != "canopen"));
 

@@ -2,9 +2,11 @@ use tokio::task::JoinHandle;
 use tracing::*;
 
 pub mod axis;
+pub mod axis_state;
 pub mod builder;
 pub mod command;
 pub mod default;
+pub mod diagnostic;
 pub mod event;
 pub mod gantry;
 pub mod setpoint;

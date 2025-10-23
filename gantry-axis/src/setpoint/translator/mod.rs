@@ -1,10 +1,12 @@
 pub mod scaling;
 
 use gantry_cia402::driver::{command::MotorCommand, event::MotorEvent, oms::velocity};
+use tracing::info;
 
 use crate::axis::setpoint::*;
 use crate::{event::GantryEvent, setpoint::translator::scaling::DeviceScaling};
 
+#[derive(Debug, Clone)]
 pub struct SetpointTranslator {
     scaling: DeviceScaling,
 }
@@ -15,7 +17,7 @@ impl SetpointTranslator {
     }
 
     pub fn to_motor_cmd(&self, setpoint: AxisSetpoint) -> MotorCommand {
-        match setpoint {
+        let cmd = match setpoint.clone() {
             AxisSetpoint::RelativePosition(position_setpoint) => {
                 // Scale setpoint
                 let delta = self.scaling.position(position_setpoint.target);
@@ -48,10 +50,14 @@ impl SetpointTranslator {
 
                 MotorCommand::SetTorque { target_torque }
             }
-        }
+        };
+
+        info!("Gantry translated {0:?} into {1:?}", setpoint, cmd);
+
+        cmd
     }
 
     pub fn from_motor_event(event: MotorEvent) -> GantryEvent {
-        //
+        todo!()
     }
 }

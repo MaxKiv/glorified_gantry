@@ -20,7 +20,7 @@ mod tests {
         error::DriveError,
     };
 
-    use crate::common::{NODE_ID, PARAMS, TIMEOUT, start_sync_master};
+    use crate::common::{NODE_ID, PARAMS, TIMEOUT};
 
     use super::*;
 

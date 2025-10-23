@@ -76,32 +76,3 @@ pub fn start_feedback_task(
         event_rx,
     )
 }
-
-pub async fn sync_loop(
-    sync_tx: broadcast::Sender<Instant>,
-    canopen: CanOpenInterface,
-) -> Result<(), DriveError> {
-    let mut interval = time::interval(SYNC_PERIOD);
-    loop {
-        interval.tick().await;
-
-        // 1 send SYNC frame on bus
-        canopen
-            .send_sync()
-            .await
-            .map_err(|_| DriveError::ViolatedInvariant(String::from("unable to send SYNC")))?;
-
-        // 2 broadcast to all drivers
-        sync_tx
-            .send(Instant::now())
-            .map_err(|_| DriveError::ViolatedInvariant(String::from("unable to send SYNC")))?;
-    }
-}
-
-pub fn start_sync_master(canopen: CanOpenInterface) -> broadcast::Receiver<Instant> {
-    let (sync_tx, sync_rx) = tokio::sync::broadcast::channel(10);
-
-    spawn_logged("SYNC", async move { sync_loop(sync_tx, canopen).await });
-
-    sync_rx
-}
