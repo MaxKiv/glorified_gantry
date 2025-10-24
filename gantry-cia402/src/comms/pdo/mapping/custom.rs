@@ -28,8 +28,7 @@ pub const CUSTOM_RPDOS: &[PdoMapping; 4] = &[
 pub const CUSTOM_TPDOS: &[PdoMapping; 4] = &[
     TPDO_STATUS_OPMODE,
     TPDO_POS_VEL_ACTUAL,
-    // TPDO_TORQUE_ACTUAL, // Causes a lot of bus spam if transmission_type = OnChange
-    TPDO_EMPTY_3,
+    TPDO_TORQUE_ACTUAL, // Causes a lot of bus spam if transmission_type = OnChange, reduced by inhibit time
     TPDO_EMPTY_4, // Required to avoid default TPDO4 generating warnings, TODO: remove this when
                   // adding invalidate all PDO step in configure_pdo_mappings
 ];

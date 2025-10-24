@@ -235,12 +235,12 @@ async fn handle_parsed_tpdo3(
     event_tx: &broadcast::Sender<MotorEvent>,
 ) {
     // Send actual torque update
-    // send_update(
-    //     MotorEvent::TorqueFeedback {
-    //         actual_torque: tpdo3_message.actual_torque,
-    //     },
-    //     event_tx,
-    // );
+    send_update(
+        MotorEvent::TorqueFeedback {
+            actual_torque: tpdo3_message.actual_torque,
+        },
+        event_tx,
+    );
 }
 
 fn send_update(event: MotorEvent, event_tx: &broadcast::Sender<MotorEvent>) {

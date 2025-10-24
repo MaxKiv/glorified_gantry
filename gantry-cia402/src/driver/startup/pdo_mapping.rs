@@ -119,11 +119,11 @@ async fn set_pdo_mapping(
         .await
         .map_err(DriveError::CanOpen)?;
 
+    // Configure a periodic event to continously synchronise the driver with the latest device
+    // state
     if let PdoType::TPDO(_) = pdo_mapping.pdo
         && pdo_mapping.transmission_type == TransmissionType::OnChange
     {
-        // Configure a periodic event to continously synchronise the driver with the latest device
-        // state
         const SYNCHRONISATION_PERIOD_MS: u16 = 100;
         const SYNCHRONISATION_SUB_IDX: u8 = 0x05;
 
@@ -141,6 +141,33 @@ async fn set_pdo_mapping(
                 communication_index,
                 SYNCHRONISATION_SUB_IDX,
                 &SYNCHRONISATION_PERIOD_MS.to_le_bytes(),
+            )
+            .await
+            .map_err(DriveError::CanOpen)?;
+    }
+
+    // Configure the inhibit time during which the device is unable to send TPDO updates
+    // This prevents the devices from spamming the bus with constant updates (looking at u mr. torque)
+    if let PdoType::TPDO(_) = pdo_mapping.pdo
+        && pdo_mapping.transmission_type == TransmissionType::OnChange
+    {
+        const INHIBIT_TIME: u16 = 500; // = 50ms, this is in 100us blocks
+        const INHIBIT_TIME_SUB_IDX: u8 = 0x03;
+
+        trace!(
+            "1.D Transmission type is {:?} -> Configuring Inhibit time for OD: {:#0x}:{} of duration: {:x?}",
+            pdo_mapping.transmission_type,
+            communication_index,
+            INHIBIT_TIME_SUB_IDX,
+            INHIBIT_TIME.to_le_bytes(),
+        );
+
+        sdo.lock()
+            .await
+            .download(
+                communication_index,
+                INHIBIT_TIME_SUB_IDX,
+                &INHIBIT_TIME.to_le_bytes(),
             )
             .await
             .map_err(DriveError::CanOpen)?;
