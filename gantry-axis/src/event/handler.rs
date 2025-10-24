@@ -102,6 +102,8 @@ impl FeedbackHandler {
     ) {
         let gantry_event = GantryEvent::from_motor(axis.clone(), event, translator);
 
+        info!("Sending gantry event: {gantry_event:?}");
+
         if let Err(e) = gantry_tx.send(gantry_event.clone()) {
             error!("Unable to send Gantry Event: {gantry_event:?}: {e}");
         }

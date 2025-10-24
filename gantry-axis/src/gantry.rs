@@ -8,7 +8,10 @@ use crate::{
         GantryCommand,
         handler::{CommandHandle, CommandHandler},
     },
-    event::handler::{FeedbackHandle, FeedbackHandler},
+    event::{
+        GantryEvent,
+        handler::{FeedbackHandle, FeedbackHandler},
+    },
     setpoint::translator::{SetpointTranslator, scaling::DeviceScaling},
     sync::{SyncMaster, SyncMasterHandle},
 };
@@ -105,5 +108,9 @@ impl Gantry {
         );
 
         Ok((motor, recv))
+    }
+
+    pub fn get_event_rx(&self) -> broadcast::Receiver<GantryEvent> {
+        self.feedback_handler.gantry_rx.resubscribe()
     }
 }

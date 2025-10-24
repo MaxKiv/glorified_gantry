@@ -1,4 +1,5 @@
 use gantry_cia402::driver::event::MotorEvent;
+use uom::si::{length::millimeter, torque::newton_meter, velocity::meter_per_second};
 
 use crate::{
     axis::Axis, axis_state::AxisState, diagnostic::DiagnosticLevel, event::GantryEvent,
@@ -10,15 +11,21 @@ impl GantryEvent {
         match event {
             MotorEvent::PositionFeedback { actual_position } => GantryEvent::Position {
                 axis,
-                value: actual_position as f64,
+                value: translator
+                    .translate_motor_position(actual_position)
+                    .get::<millimeter>(),
             },
             MotorEvent::VelocityFeedback { actual_velocity } => GantryEvent::Velocity {
                 axis,
-                value: actual_velocity as f64,
+                value: translator
+                    .translate_motor_velocity(actual_velocity)
+                    .get::<meter_per_second>(),
             },
             MotorEvent::TorqueFeedback { actual_torque } => GantryEvent::Torque {
                 axis,
-                value: actual_torque as f64,
+                value: translator
+                    .translate_motor_torque(actual_torque)
+                    .get::<newton_meter>(),
             },
 
             MotorEvent::OperationModeUpdate(mode) => GantryEvent::ModeChanged { axis, mode },

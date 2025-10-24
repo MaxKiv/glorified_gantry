@@ -6,7 +6,9 @@ use uom::si::{
     velocity::meter_per_second,
 };
 
-const COUNTS_PER_REV: f64 = 36.0; // Default configuration in Cia402Driver
+// const COUNTS_PER_REV: f64 = 36.000; // Default configuration in Cia402Driver
+
+const COUNTS_PER_REV: f64 = 49.315068; // Magic
 const LEAD_MM_PER_REV: f64 = 5.0; // TODO: validate this assumption
 const RATED_TORQUE_NM: f64 = 3.1; // From nanotec motor catalog model PD4C6018
 const DEVICE_TORQUE_UNITS_PER_FULL_RATED_TORQUE: f64 = 1000.0; // Nanotec uses 0.1% of rated torque as "torque unit"

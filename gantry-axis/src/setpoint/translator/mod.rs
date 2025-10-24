@@ -2,7 +2,8 @@ pub mod scaling;
 
 use gantry_cia402::driver::{command::MotorCommand, event::MotorEvent};
 use tracing::info;
-use uom::si::f64::Length;
+use uom::si::f64::Velocity;
+use uom::si::f64::{Length, Torque};
 
 use crate::axis::setpoint::*;
 use crate::{event::GantryEvent, setpoint::translator::scaling::DeviceScaling};
@@ -58,7 +59,19 @@ impl SetpointTranslator {
         cmd
     }
 
-    pub fn translate_motor_position(&self, motor_pos: i32) -> Length {
-        self.scaling.from_device_pos(motor_pos)
+    pub fn translate_motor_position(&self, pos: i32) -> Length {
+        self.scaling.from_device_pos(pos)
+    }
+
+    pub fn translate_motor_velocity(&self, vel: i32) -> Velocity {
+        self.scaling.from_device_vel(vel)
+    }
+
+    pub fn translate_motor_absolute_velocity(&self, abs_vel: u32) -> Velocity {
+        self.scaling.from_device_abs_vel(abs_vel)
+    }
+
+    pub fn translate_motor_torque(&self, torque: i16) -> Torque {
+        self.scaling.from_device_torque(torque)
     }
 }

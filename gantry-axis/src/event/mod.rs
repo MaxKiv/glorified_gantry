@@ -4,8 +4,9 @@ use crate::{axis::Axis, axis_state::AxisState, diagnostic::DiagnosticLevel};
 
 pub mod from_motor;
 pub mod handler;
+pub mod util;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum GantryEvent {
     /// Position update in physical units (m, rad, etc.)
     Position { axis: Axis, value: f64 },

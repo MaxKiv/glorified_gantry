@@ -2,10 +2,7 @@ use gantry_cia402::driver::command::MotorCommand;
 use tokio::{sync::mpsc, task::JoinHandle};
 use tracing::*;
 
-use crate::{
-    axis::AxisMotors, command::GantryCommand, setpoint::translator::SetpointTranslator,
-    spawn_logged,
-};
+use crate::{axis::AxisMotors, command::GantryCommand, setpoint::translator::SetpointTranslator};
 
 pub struct CommandHandle {
     handle: JoinHandle<()>,
@@ -23,7 +20,7 @@ impl CommandHandler {
     ) -> CommandHandle {
         let (cmd_tx, cmd_rx) = mpsc::channel(10);
 
-        let handle = spawn_logged("CMD", async move {
+        let handle = crate::spawn_logged("CMD", async move {
             CommandHandler::handle_commands(cmd_rx, translator, x_motors, y_motors, z_motors).await
         });
 
@@ -62,7 +59,9 @@ impl CommandHandler {
                             .map(|cmd| z_axis.as_ref().map(|z| z.send_command_to_motors(cmd)));
                     }
                     GantryCommand::Home => {
-                        info!("Gantry is Homing");
+                        info!(
+                            "Homing gantry: Sending Enable (cia402 transition to Operation Enabled"
+                        );
 
                         let cmd = MotorCommand::Enable;
                         // Send Enable command to each axis's motors
@@ -75,6 +74,8 @@ impl CommandHandler {
                         if let Some(z) = z_axis.as_ref() {
                             z.send_command_to_motors(&cmd)
                         }
+
+                        info!("Homing gantry: Sending Home");
 
                         let cmd = MotorCommand::Home;
                         // Send Home command to each axis's motors

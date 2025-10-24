@@ -1,5 +1,17 @@
 # FIX
 
+- Cia402Driver: cia402 CW flags are bugged. Sending MotorCmd::Enable + Setpoint
+  to motors already in OperationEnabled has correct orchestrator semantics (drive is already
+  enabled -> skip) BUT forgets to update the cia402 cw flags causing the setpoint
+  RPDO to request cia402 SwitchOnDisabled :(
+
+`2025-10-24T12:28:28.798914Z SNIFF NODE 1  RPDO1 [10, 0, 6]
+=> ControlWord(OMS_1) - Homing`
+
+=> Reproduce: reset drives + perform cmd::enable + random setpoint once, see correct operation. Run the same thing again without resetting drives, see bug.
+=> Attempted to fix this bug by adding an update from cia402 SM -> pdo, but this
+doesnt work fully
+
 - Finish Implementation of Cyclic Synchronous Modes -> just feedback handler is left
 
 - Consecutive movement is broken using `PositionModeFlagsCW::DECELERATE_AFTER_REACHING`

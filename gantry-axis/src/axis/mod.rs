@@ -6,7 +6,7 @@ use oze_canopen::interface::CanOpenInterface;
 use tokio::{sync::broadcast, time::Instant};
 use tracing::*;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Axis {
     X,
     Y,

@@ -61,6 +61,105 @@ async fn quick_test_logic() -> Result<(), TestError> {
     let val = u32::from_le_bytes(dat[..4].try_into().map_err(|_| TestError::Generic)?);
     info!("Torque slope: {}={:#x}", val, val);
 
+    let dat = s
+        .lock()
+        .await
+        .upload(0x60E9, 1)
+        .await
+        .map_err(TestError::CANOpenError)?;
+    let val = u16::from_le_bytes([dat[0], dat[1]]);
+    info!("Device feed constant: {}={:#x}", val, val);
+
+    let dat = s
+        .lock()
+        .await
+        .upload(0x60E9, 2)
+        .await
+        .map_err(TestError::CANOpenError)?;
+    let val = u16::from_le_bytes([dat[0], dat[1]]);
+    info!("Device feed constant: {}={:#x}", val, val);
+
+    let dat = s
+        .lock()
+        .await
+        .upload(0x060EE, 1)
+        .await
+        .map_err(TestError::CANOpenError)?;
+    let val = u16::from_le_bytes([dat[0], dat[1]]);
+    info!("Device driving shaft revolutions: {}={:#x}", val, val);
+
+    let dat = s
+        .lock()
+        .await
+        .upload(0x060EE, 2)
+        .await
+        .map_err(TestError::CANOpenError)?;
+    let val = u16::from_le_bytes([dat[0], dat[1]]);
+    info!("Device driving shaft revolutions: {}={:#x}", val, val);
+
+    let dat = s
+        .lock()
+        .await
+        .upload(0x6092, 1)
+        .await
+        .map_err(TestError::CANOpenError)?;
+    let val = u16::from_le_bytes([dat[0], dat[1]]);
+    info!("Device feed constant 6092h: {}={:#x}", val, val);
+
+    let dat = s
+        .lock()
+        .await
+        .upload(0x6092, 2)
+        .await
+        .map_err(TestError::CANOpenError)?;
+    let val = u16::from_le_bytes([dat[0], dat[1]]);
+    info!("Device feed constant 6092h: {}={:#x}", val, val);
+
+    let dat = s
+        .lock()
+        .await
+        .upload(0x60E8, 1)
+        .await
+        .map_err(TestError::CANOpenError)?;
+    let val = u16::from_le_bytes([dat[0], dat[1]]);
+    info!("Device motor shaft revolutions {}={:#x}", val, val);
+
+    let dat = s
+        .lock()
+        .await
+        .upload(0x60E8, 2)
+        .await
+        .map_err(TestError::CANOpenError)?;
+    let val = u16::from_le_bytes([dat[0], dat[1]]);
+    info!("Device motor shaft revolutions {}={:#x}", val, val);
+
+    let dat = s
+        .lock()
+        .await
+        .upload(0x60E8, 3)
+        .await
+        .map_err(TestError::CANOpenError)?;
+    let val = u16::from_le_bytes([dat[0], dat[1]]);
+    info!("Device motor shaft revolutions {}={:#x}", val, val);
+
+    let dat = s
+        .lock()
+        .await
+        .upload(0x60ED, 1)
+        .await
+        .map_err(TestError::CANOpenError)?;
+    let val = u16::from_le_bytes([dat[0], dat[1]]);
+    info!("Device Driving Shaft Revolutions {}={:#x}", val, val);
+
+    let dat = s
+        .lock()
+        .await
+        .upload(0x60ED, 2)
+        .await
+        .map_err(TestError::CANOpenError)?;
+    let val = u16::from_le_bytes([dat[0], dat[1]]);
+    info!("Device Driving Shaft Revolutions {}={:#x}", val, val);
+
     // stop tasks
     handles.close_and_join().await;
 

@@ -17,8 +17,9 @@ mod tests {
     };
     use tokio::{signal, time::sleep};
     use uom::si::{
-        f64::{Length, Velocity},
+        f64::{Length, Torque, Velocity},
         length::millimeter,
+        torque::newton_meter,
         velocity::meter_per_second,
     };
 
@@ -65,21 +66,18 @@ mod tests {
         )
         .await?;
 
-        let pos_target_x = Length::new::<millimeter>(60.0);
-        let pos_target_z = Length::new::<millimeter>(10.0);
-        let vel = Velocity::new::<meter_per_second>(0.01);
+        let torque_x = Torque::new::<newton_meter>(0.1);
+        let torque_z = Torque::new::<newton_meter>(0.1);
 
         for num in 1..10 {
             let setpoint = GantryCommand::Setpoint {
-                x: Some(AxisSetpoint::AbsolutePosition(PositionSetpoint {
-                    target: pos_target_x,
-                    velocity: vel,
-                })),
+                x: Some(AxisSetpoint::Torque(
+                    gantry_axis::axis::setpoint::TorqueSetpoint { target: torque_x },
+                )),
                 y: None,
-                z: Some(AxisSetpoint::AbsolutePosition(PositionSetpoint {
-                    target: pos_target_z,
-                    velocity: vel,
-                })),
+                z: Some(AxisSetpoint::Torque(
+                    gantry_axis::axis::setpoint::TorqueSetpoint { target: torque_z },
+                )),
             };
 
             gantry.send_command(setpoint).await?;
@@ -87,16 +85,16 @@ mod tests {
             tokio::try_join!(
                 wait_for_target_reached(
                     gantry.get_event_rx(),
-                    gantry_axis::event::util::TargetQuantity::Position(
-                        pos_target_z.get::<millimeter>()
+                    gantry_axis::event::util::TargetQuantity::Torque(
+                        torque_z.get::<newton_meter>(),
                     ),
                     Axis::Z,
                     TIMEOUT,
                 ),
                 wait_for_target_reached(
                     gantry.get_event_rx(),
-                    gantry_axis::event::util::TargetQuantity::Position(
-                        pos_target_x.get::<millimeter>()
+                    gantry_axis::event::util::TargetQuantity::Torque(
+                        torque_x.get::<newton_meter>(),
                     ),
                     Axis::X,
                     TIMEOUT,
@@ -104,15 +102,13 @@ mod tests {
             )?;
 
             let setpoint = GantryCommand::Setpoint {
-                x: Some(AxisSetpoint::AbsolutePosition(PositionSetpoint {
-                    target: -pos_target_x,
-                    velocity: vel,
-                })),
+                x: Some(AxisSetpoint::Torque(
+                    gantry_axis::axis::setpoint::TorqueSetpoint { target: -torque_x },
+                )),
                 y: None,
-                z: Some(AxisSetpoint::AbsolutePosition(PositionSetpoint {
-                    target: -pos_target_z,
-                    velocity: vel,
-                })),
+                z: Some(AxisSetpoint::Torque(
+                    gantry_axis::axis::setpoint::TorqueSetpoint { target: -torque_z },
+                )),
             };
 
             gantry.send_command(setpoint).await?;
@@ -121,7 +117,7 @@ mod tests {
                 wait_for_target_reached(
                     gantry.get_event_rx(),
                     gantry_axis::event::util::TargetQuantity::Position(
-                        -pos_target_z.get::<millimeter>()
+                        -torque_z.get::<newton_meter>(),
                     ),
                     Axis::Z,
                     TIMEOUT,
@@ -129,7 +125,7 @@ mod tests {
                 wait_for_target_reached(
                     gantry.get_event_rx(),
                     gantry_axis::event::util::TargetQuantity::Position(
-                        -pos_target_x.get::<millimeter>()
+                        torque_x.get::<newton_meter>(),
                     ),
                     Axis::X,
                     TIMEOUT,
