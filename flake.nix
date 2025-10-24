@@ -10,6 +10,11 @@
       url = "github:nix-community/fenix";
       inputs.nixpkgs.follows = "nixpkgs";
     };
+
+    ros2 = {
+      url = "github:MaxKiv/nix-ros-overlay";
+      inputs.nixpkgs.follows = "your-nixos-flake/nixpkgs";
+    };
   };
 
   outputs = {
@@ -17,10 +22,29 @@
     nixpkgs,
     flake-utils,
     fenix,
+    ros2,
     ...
   } @ inputs:
     flake-utils.lib.eachDefaultSystem (system: let
-      pkgs = import nixpkgs {inherit system;};
+      overlays = [
+        ros2.overlays.default
+      ];
+
+      pkgs = import nixpkgs {
+        inherit system overlays;
+        config.allowUnfree = true;
+      };
+
+      rosJazzyPkgs = pkgs.rosPackages.jazzy;
+
+      rosPkgs = with rosJazzyPkgs; [
+        ros-core
+        ros2cli
+        ros2launch
+        rclcpp
+        std-msgs
+        can-msgs
+      ];
 
       # Get a cross compilation toolchain from the rust-toolchain.toml
       toolchain = with fenix.packages.${system};
@@ -52,12 +76,17 @@
         default = pkgs.mkShell {
           RUST_BACKTRACE = "full";
 
-          buildInputs = with pkgs; [
-            nil # Nix LSP
-            alejandra # Nix Formatter
-            toolchain # Our Rust toolchain
-            rust-analyzer # Rust LSP
-          ];
+          # Use the setup hook from the ROS overlay to get ROS_DISTRO etc.
+          nativeBuildInputs = [pkgs.rosPackages.jazzy.setupHook];
+
+          buildInputs =
+            (with pkgs; [
+              nil
+              alejandra
+              toolchain
+              rust-analyzer
+            ])
+            ++ rosPkgs;
         };
       };
 

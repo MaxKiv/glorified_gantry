@@ -1,14 +1,16 @@
-pub fn add(left: u64, right: u64) -> u64 {
-    left + right
-}
+use tokio::task::JoinHandle;
+use tracing::error;
 
-#[cfg(test)]
-mod tests {
-    use super::*;
+pub mod bridge;
 
-    #[test]
-    fn it_works() {
-        let result = add(2, 2);
-        assert_eq!(result, 4);
-    }
+/// Helper that spawns a task and logs error if it ever exits
+pub fn spawn_logged<F>(name: &'static str, fut: F) -> JoinHandle<()>
+where
+    F: std::future::Future<Output = anyhow::Result<()>> + Send + 'static,
+{
+    tokio::spawn(async move {
+        if let Err(e) = fut.await {
+            error!("{name} task failed: {e:?}");
+        }
+    })
 }
