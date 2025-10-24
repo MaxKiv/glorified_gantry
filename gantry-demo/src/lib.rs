@@ -1,3 +1,6 @@
+pub mod config;
+
+use tokio::task::JoinHandle;
 use tracing::*;
 use tracing_subscriber::Layer;
 use tracing_subscriber::filter::filter_fn;
@@ -8,11 +11,15 @@ use std::fmt::Debug;
 use chrono::{SecondsFormat, Utc};
 use owo_colors::OwoColorize;
 use tracing::field::{Field, Visit};
+use tracing_subscriber::EnvFilter;
 use tracing_subscriber::fmt::*;
 use tracing_subscriber::{fmt::format::Writer, registry::LookupSpan};
 
 /// Sets up the tracing logging library
 pub fn setup_tracing() {
+    // Default: info, can be overridden via RUST_LOG
+    let env_filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));
+
     // Custom canopen formatter used to pretty print canopen traffic
     let frame_fmt_layer = tracing_subscriber::fmt::layer()
         .event_format(FrameFormatter)
@@ -23,11 +30,24 @@ pub fn setup_tracing() {
         tracing_subscriber::fmt::layer().with_filter(filter_fn(|meta| meta.target() != "canopen"));
 
     let subscriber = Registry::default()
-        .with(default_layer)
-        .with(frame_fmt_layer);
+        .with(frame_fmt_layer)
+        .with(env_filter)
+        .with(default_layer);
 
     tracing::subscriber::set_global_default(subscriber)
         .expect("setting default tracing subscriber failed");
+}
+
+/// Helper that spawns a task and logs error if it ever exits
+pub fn spawn_logged<F>(name: &'static str, fut: F) -> JoinHandle<()>
+where
+    F: std::future::Future<Output = anyhow::Result<()>> + Send + 'static,
+{
+    tokio::spawn(async move {
+        if let Err(e) = fut.await {
+            error!("{name} task failed: {e:?}");
+        }
+    })
 }
 
 // a tiny visitor to extract a few fields from the Event
