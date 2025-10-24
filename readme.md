@@ -32,3 +32,19 @@ sudo ip link set can0 up type can bitrate 1000000
 sudo ip link set can0 txqueuelen 1000
 sudo ip link set up can0
 ```
+
+warning: Git tree '/home/max/git/saxion/ros2_canopen' is dirty
+Resolved URL: git+file:///home/max/git/saxion/ros2_canopen
+Description: ROS 2 development environment using nix
+Path: /nix/store/plgybjyylh40k9vfxgl1yaw8sh3ysyim-source
+Revision: f6be67da6a71b097d34bf721bddb18d63abf0c63-dirty
+Last modified: 2025-07-22 14:57:41
+Fingerprint: fc1d811be2fb8d23980e4c9526ba2d0926b5797a887175532f97115faab174a6
+
+warning: Git tree '/home/max/git/saxion/glorified_gantry' is dirty
+Resolved URL: git+file:///home/max/git/saxion/glorified_gantry
+Description: Nanotec nanolib example CLI build environment
+Path: /nix/store/y3sa6638xnw9xla6cdiaqxjip6isyd1k-source
+Revision: 48e611108427bc6a152583eb1cc130c620f5109a-dirty
+Last modified: 2025-10-24 08:44:00
+Fingerprint: 857cc4538a95045113d7b01cb5597968a754efb67a8f4464bf4e698246568f86

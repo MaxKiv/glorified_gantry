@@ -1,5 +1,5 @@
 {
-  description = "Nanotec nanolib example CLI build environment";
+  description = "Toolchain setup for Magnet Manipulation";
 
   inputs = {
     your-nixos-flake.url = "github:maxkiv/nix";
@@ -12,9 +12,12 @@
     };
 
     ros2 = {
-      url = "github:MaxKiv/nix-ros-overlay";
+      url = "github:MaxKiv/nix-ros-overlay?ref=master";
+      # type = "path";
+      # path = "/home/max/git/nix-ros-overlay";
       inputs.nixpkgs.follows = "your-nixos-flake/nixpkgs";
     };
+    poetry2nix.url = "github:nix-community/poetry2nix";
   };
 
   outputs = {
@@ -53,9 +56,19 @@
           sha256 = "sha256-SJwZ8g0zF2WrKDVmHrVG3pD2RGoQeo24MEXnNx5FyuI=";
           # sha256 = pkgs.lib.fakeSha256;
         };
+
+      poetry2nix = inputs.poetry2nix.lib.mkPoetry2Nix {inherit pkgs;};
+
+      # Use poetry2nix to create a Python environment from pyproject.toml
+      pythonEnv = poetry2nix.mkPoetryEnv {
+        projectDir = ./.;
+        preferWheels = true;
+      };
     in {
       devShells = {
         nanocli = pkgs.mkShell {
+          __structuredAttrs = true; # Add this line
+
           buildInputs = with pkgs; [
             gcc
             gnumake
@@ -76,40 +89,41 @@
         default = pkgs.mkShell {
           RUST_BACKTRACE = "full";
 
-          # Use the setup hook from the ROS overlay to get ROS_DISTRO etc.
-          nativeBuildInputs = [pkgs.rosPackages.jazzy.setupHook];
+          nativeBuildInputs = with pkgs; [
+            clang
+            llvmPackages.libclang
+          ];
 
           buildInputs =
             (with pkgs; [
               nil
               alejandra
               toolchain
-              rust-analyzer
+              # rust-analyzer
+
+              pythonEnv
+              poetry
             ])
             ++ rosPkgs;
+
+          shellHook = ''
+            echo "ROS_DISTRO = $ROS_DISTRO"
+            echo "AMENT_PREFIX_PATH = $AMENT_PREFIX_PATH"
+
+            export LIBCLANG_PATH=${pkgs.llvmPackages.libclang.lib}/lib
+            echo "Using libclang from $LIBCLANG_PATH"
+
+            # Add glibc headers to clang’s search path
+            export GLIBC_INCLUDE_PATH=${pkgs.stdenv.cc.libc_dev}/include
+
+            echo "Using sysroot: ${pkgs.stdenv.cc.libc_dev}"
+            echo "Using glibc headers from: $GLIBC_INCLUDE_PATH"
+          '';
         };
       };
-
-      packages.default = pkgs.stdenv.mkDerivation {
-        pname = "nanolib-cli";
-        version = "1.0";
-
-        src = ./vendor/nanolib_cpp_linux_1.4.0/NanolibExample;
-
-        nativeBuildInputs = [pkgs.makeWrapper];
-
-        buildPhase = ''
-          make
-        '';
-
-        installPhase = ''
-          mkdir -p $out/bin $out/lib
-          cp bin/example $out/bin/
-          cp ${./vendor/nanolib_cpp_linux_1.4.0/nanotec_nanolib/lib}/*.so $out/lib/
-          wrapProgram $out/bin/example \
-            --prefix LD_LIBRARY_PATH : ${pkgs.gcc.cc.lib}/lib \
-            --prefix LD_LIBRARY_PATH : $out/lib \
-        '';
-      };
     });
+  nixConfig = {
+    extra-substituters = ["https://ros.cachix.org"];
+    extra-trusted-public-keys = ["ros.cachix.org-1:dSyZxI8geDCJrwgvCOHDoAfOm5sV1wCPjBkKL+38Rvo="];
+  };
 }
