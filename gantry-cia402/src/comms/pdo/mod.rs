@@ -110,13 +110,21 @@ impl Pdo {
                     // Handle received commands
                     use PdoCommand::*;
                     match cmd {
-                        WriteCia402Transition(cia402_flags) => {
-                            if let Err(err) =
-                                self.write_cia402_state_transition(&cia402_flags).await
+                        UpdateCia402Flags(cia402flags) => {
+                            if let Err(err) = self.update_cia402_state_transition(&cia402flags) {
+                                error!(
+                                    "PDO unable to write cia402 state transition: 
+                                    {cia402flags:?} to device id {} - {err}",
+                                    self.node_id
+                                );
+                            }
+                        }
+                        WriteCia402Transition(cia402flags) => {
+                            if let Err(err) = self.write_cia402_state_transition(&cia402flags).await
                             {
                                 error!(
                                     "PDO unable to write cia402 state transition: 
-                                    {cia402_flags:?} to device id {} - {err}",
+                                    {cia402flags:?} to device id {} - {err}",
                                     self.node_id
                                 );
                             }
@@ -157,13 +165,14 @@ impl Pdo {
         }
     }
 
-    // Perform the given cia402 state transition by writing the corresponding controlword flags and
-    // sending the PDO that has controlword mapped out to the device
-    pub async fn write_cia402_state_transition(
+    /// Updates the cia402 Controlword flags to a new value
+    /// This is required when the device informs us of a state update
+    /// or when we want to effect a cia402 transition ourselves
+    pub fn update_cia402_state_transition(
         &mut self,
         flags: &Cia402Flags,
     ) -> Result<(), DriveError> {
-        trace!("cia402 state transition requested - flags {flags:?}");
+        trace!("Cia402 CW Flags are updated to: {flags:?}");
 
         // Set the cia402 controlword bits to represent the requested state
         let mut cw = self.get_current_controlword();
@@ -172,6 +181,21 @@ impl Pdo {
         cw = cw.with_cia402_flags(flags);
         self.set_controlword_rpdo(cw);
 
+        Ok(())
+    }
+
+    // Perform the given cia402 state transition by writing the corresponding controlword flags and
+    // sending the PDO that has controlword mapped out to the device
+    pub async fn write_cia402_state_transition(
+        &mut self,
+        flags: &Cia402Flags,
+    ) -> Result<(), DriveError> {
+        trace!("cia402 state transition requested - flags {flags:?}");
+
+        // Update the cia402 CW flags
+        self.update_cia402_state_transition(flags);
+
+        // Send RPDO containing updated controlword over the wire
         match self.send_rpdo(RPDO_CONTROL_OPMODE).await {
             Ok(_) => {
                 trace!("RPDO1 sent to effect cia402 transition");

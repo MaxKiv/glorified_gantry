@@ -12,7 +12,7 @@ use tracing::*;
 
 use crate::{driver::event::MotorEvent, error::DriveError};
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum NmtState {
     Bootup,
     Stopped,
@@ -20,9 +20,9 @@ pub enum NmtState {
     Operational,
 }
 
-impl Into<NmtCommandSpecifier> for NmtState {
-    fn into(self) -> NmtCommandSpecifier {
-        match self {
+impl From<NmtState> for NmtCommandSpecifier {
+    fn from(val: NmtState) -> Self {
+        match val {
             NmtState::Bootup => NmtCommandSpecifier::ResetCommunication,
             NmtState::Stopped => NmtCommandSpecifier::StopRemoteNode,
             NmtState::PreOperational => NmtCommandSpecifier::EnterPreOperational,

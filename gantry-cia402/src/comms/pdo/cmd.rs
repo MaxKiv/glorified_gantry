@@ -2,6 +2,7 @@ use crate::driver::{cyclic::CyclicSynchronousMode, oms::setpoint::Setpoint, stat
 
 pub enum PdoCommand {
     WriteCia402Transition(Cia402Flags),
+    UpdateCia402Flags(Cia402Flags),
     WriteSetpoint(Setpoint),
     SwitchToCyclicSynchronousMode(CyclicSynchronousMode),
     ExitCyclicSynchronousMode,

@@ -9,13 +9,18 @@ use crate::{
     error::DriveError,
 };
 
+pub enum Cia402Command {
+    Update(Cia402Flags),
+    Transition(Cia402Flags),
+}
+
 pub struct Cia402StateMachine {
     pub state: Cia402State,
 }
 
 pub async fn cia402_state_machine_task(
     mut event_rx: broadcast::Receiver<MotorEvent>,
-    state_update_tx: mpsc::Sender<Cia402Flags>,
+    update_tx: mpsc::Sender<Cia402Command>,
     sm_state_tx: broadcast::Sender<Cia402State>,
     mut sm_cmd_rx: mpsc::Receiver<Cia402State>,
     event_tx: broadcast::Sender<MotorEvent>,
@@ -65,13 +70,13 @@ pub async fn cia402_state_machine_task(
                     "Cia402 SM command received - cmd: {:?} - current state: {:?}",
                     cmd, sm.state
                 );
-                if let Some(updated_flags) = Cia402Flags::transition_flags(&sm.state, &cmd) {
+                if let Some(transition_flags) = Cia402Flags::transition_flags(&sm.state, &cmd) {
                     trace!(
-                        "Requested transition is valid - cia402Flags: {updated_flags:?}",
+                        "Requested transition is valid - cia402Flags: {transition_flags:?}",
                     );
 
-                    if let Err(err) = state_update_tx.send(updated_flags).await {
-                        error!("Error while processing command: {cmd:?} -> Unable to send state update request: {err}" );
+                    if let Err(err) = update_tx.send(Cia402Command::Transition(transition_flags)).await {
+                        error!("Unable to request cia402 state transition from PDO: {err}" );
                     }
                 } else {
                     warn!("CiA402 State machine disallows transition from {:?} to {cmd:?}", sm.state);
@@ -85,9 +90,15 @@ pub async fn cia402_state_machine_task(
                 if let MotorEvent::StatusWord(sw) = event {
                     match sw.try_into() {
                         Ok(new_state) => {
-                            trace!(
-                                "Cia402 decoded {sw:?} into new state: {new_state:?}",
+                            info!(
+                                "Cia402 decoded {sw:?} into new state: {new_state:?} - Informing subsystems",
                             );
+
+                            // Notify the PDO system of a new device state
+                            // let updated_flags: Cia402Flags = sw.into();
+                            // if let Err(err) = update_tx.send(Cia402Command::Update(updated_flags)).await {
+                            //     error!("Unable to send cia402 state update to PDO: {err}" );
+                            // }
 
                             // Notify the cia402 orchestrator
                             if let Err(err) = sm_state_tx.send(new_state){

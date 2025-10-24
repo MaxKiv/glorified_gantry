@@ -25,7 +25,7 @@ use crate::{
             velocity::VelocitySetpoint,
         },
         receiver::setpoint_manager::{SetpointManager, SetpointManagerModeTypes},
-        state::Cia402Flags,
+        state::{Cia402Flags, state_machine::Cia402Command},
     },
     error::DriveError,
 };
@@ -36,7 +36,7 @@ use crate::{
 /// It then sends these changes out on the CANopen bus using the accessor
 pub async fn publish_updates(
     pdo_tx: mpsc::Sender<PdoCommand>,
-    mut state_update_rx: mpsc::Receiver<Cia402Flags>,
+    mut state_update_rx: mpsc::Receiver<Cia402Command>,
     mut cmd_rx: broadcast::Receiver<MotorCommand>,
     new_setpoint_tx: mpsc::Sender<Setpoint>,
     cs_mode_tx: watch::Sender<SetpointManagerModeTypes>,
@@ -48,16 +48,35 @@ pub async fn publish_updates(
     loop {
         tokio::select! {
             // Check for cia402 state update
-            Some(new_state_flags) = state_update_rx.recv() => {
-                trace!(
-                    "Cia402 state update received, new cia402flags: {new_state_flags:?}",
-                );
+            Some(cia402_cmd) = state_update_rx.recv() => {
+                match cia402_cmd {
+                    // The cia402 SM detected a state update: Inform PDO system
+                    Cia402Command::Update(flags) => {
+                        trace!(
+                            "Cia402 state update detected, new cia402flags: {flags:?}",
+                        );
 
-               if let Err(err) = pdo_tx.send(PdoCommand::WriteCia402Transition(new_state_flags)).await {
-                    error!(
-                        "Unable to write cia402 state transition: {err}",
-                    );
-               }
+                        if let Err(err) = pdo_tx.send(PdoCommand::UpdateCia402Flags(flags)).await {
+                             error!(
+                                 "Unable to write cia402 state transition: {err}",
+                             );
+                        }
+                    }
+
+                    // The cia402 SM requested a state transition: pass on to PDO system
+                    Cia402Command::Transition(flags) => {
+                        trace!(
+                            "Cia402 state transition requested, new cia402flags: {flags:?}",
+                        );
+
+                        if let Err(err) = pdo_tx.send(PdoCommand::WriteCia402Transition(flags)).await {
+                             error!(
+                                 "Unable to write cia402 state transition: {err}",
+                             );
+                        }
+                    }
+                };
+
             }
 
             Ok(cmd) = cmd_rx.recv() => {

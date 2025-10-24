@@ -1,7 +1,5 @@
 pub mod common;
 
-use std::time::Duration;
-
 use tokio::task::{self};
 use tracing::*;
 
@@ -10,10 +8,6 @@ mod tests {
 
     use gantry_axis::sync::SyncMaster;
     use gantry_cia402::{
-        comms::pdo::mapping::{
-            custom::{CUSTOM_PDOS, CUSTOM_TPDOS},
-            minimal::MINIMAL_CYCLIC_SYNCHRONOUS_PDO_SET,
-        },
         driver::{
             Cia402Driver, builder::Cia402DriverBuilder, command::MotorCommand, event::MotorEvent,
             receiver::subscriber::wait_for_event, state::Cia402State,
