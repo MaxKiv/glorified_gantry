@@ -6,10 +6,10 @@ use uom::si::{
     velocity::meter_per_second,
 };
 
-// const COUNTS_PER_REV: f64 = 36.000; // Default configuration in Cia402Driver
-
-const COUNTS_PER_REV: f64 = 49.315068; // Magic
-const LEAD_MM_PER_REV: f64 = 5.0; // TODO: validate this assumption
+// const COUNTS_PER_REV: f64 = 3600.0; // Default configuration in Cia402Driver - this would make sense but appears to be totally off
+// const COUNTS_PER_REV: f64 = 49.315068; // Magic caliper action
+const COUNTS_PER_REV: f64 = 50.0; // Magic guess - I think the test setup has been configured with a feed rate so it takes mm pos as input units
+const LEAD_MM_PER_REV: f64 = 5.0; // Typical, seems right
 const RATED_TORQUE_NM: f64 = 3.1; // From nanotec motor catalog model PD4C6018
 const DEVICE_TORQUE_UNITS_PER_FULL_RATED_TORQUE: f64 = 1000.0; // Nanotec uses 0.1% of rated torque as "torque unit"
 
@@ -43,8 +43,7 @@ impl Default for DeviceScaling {
 impl DeviceScaling {
     pub fn to_device_pos(&self, pos: Length) -> DevicePosition {
         let mm = pos.get::<millimeter>();
-        let out = (mm * self.pos_to_ticks).round() as DevicePosition;
-        out
+        (mm * self.pos_to_ticks).round() as DevicePosition
     }
 
     pub fn to_device_abs_vel(&self, vel: Velocity) -> DeviceAbsVelocity {
