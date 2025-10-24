@@ -2,6 +2,8 @@ use tokio::task::JoinHandle;
 use tracing::error;
 
 pub mod bridge;
+pub mod events;
+pub mod setpoints;
 
 /// Helper that spawns a task and logs error if it ever exits
 pub fn spawn_logged<F>(name: &'static str, fut: F) -> JoinHandle<()>

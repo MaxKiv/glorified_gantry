@@ -449,6 +449,7 @@ name = "gantry-ros2"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "futures",
  "gantry-axis",
  "gantry-cia402",
  "gantry-demo",

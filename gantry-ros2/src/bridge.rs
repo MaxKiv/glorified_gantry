@@ -1,22 +1,32 @@
-use std::time::Duration;
-
+use anyhow::Context as _;
+use gantry_axis::command::GantryCommand;
 use gantry_axis::{diagnostic::DiagnosticLevel, event::GantryEvent};
+use r2r::geometry_msgs::msg::Vector3;
 use r2r::{self, diagnostic_msgs, sensor_msgs};
-use tokio::sync::broadcast;
+use std::time::Duration;
+use tokio::signal;
+use tokio::sync::{broadcast, mpsc};
 use tracing::*;
+
+use crate::events::bridge_gantry_events;
+use crate::setpoints::bridge_gantry_setpoints;
 
 const EXECUTOR_SPIN_PERIOD: Duration = Duration::from_millis(100);
 
-pub async fn run_gantry_ros_bridge(mut rx: broadcast::Receiver<GantryEvent>) -> anyhow::Result<()> {
+pub async fn run_gantry_ros_bridge(
+    mut rx: broadcast::Receiver<GantryEvent>,
+    tx: mpsc::Sender<GantryCommand>,
+) -> anyhow::Result<()> {
     info!("running gantry ros bridge");
 
-    let ctx = r2r::Context::create()?;
-    let mut node = r2r::Node::create(ctx, "gantry_bridge", "")?;
+    let ctx = r2r::Context::create().context("Failed to create ROS2 context")?;
+    let mut node =
+        r2r::Node::create(ctx, "gantry_bridge", "")?.context("Failed to create ROS2 Node");
 
     info!("Creating /joint_states publisher");
     let joint_pub = node.create_publisher::<sensor_msgs::msg::JointState>(
         "/joint_states",
-        r2r::QosProfile::default(),
+        r2r::QosProfile::sensor_data(),
     )?;
 
     info!("Creating /diagnostics publisher");
@@ -25,57 +35,54 @@ pub async fn run_gantry_ros_bridge(mut rx: broadcast::Receiver<GantryEvent>) -> 
         r2r::QosProfile::default(),
     )?;
 
+    // Create subscribers
+    info!("Creating /setpoint/position publisher");
+    let pos_sub = node
+        .subscribe::<Vector3>("/setpoint/position", QosProfile::default())
+        .context("Failed to create position publisher")?;
+
+    info!("Creating /setpoint/velocity publisher");
+    let vel_sub = node
+        .subscribe::<Vector3>("/setpoint/velocity", QosProfile::default())
+        .context("Failed to create velocity publisher")?;
+
+    info!("Creating /setpoint/torque publisher");
+    let torque_sub = node
+        .subscribe::<Vector3>("/setpoint/torque", QosProfile::default())
+        .context("Failed to create torque publisher")?;
+
     info!("Spawning ROS2 Executor");
     // Early spin in an attempt to make sure the executor is up before exiting this function
     // Its kinda jank, but so is the entirety of ROS 🤷
-    node.spin_once(std::time::Duration::from_millis(10));
-    let _executor = tokio::spawn(async move {
+    node.spin_once(std::time::Duration::from_millis(1));
+    let _executor = tokio::task::spawn_blocking(move || {
         loop {
-            node.spin_once(std::time::Duration::from_millis(10));
-            tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+            node.spin_once(EXECUTOR_SPIN_PERIOD);
         }
     });
 
-    info!("Entering main loop");
-    while let Ok(event) = rx.recv().await {
-        match event {
-            // Publish axis position feedback
-            GantryEvent::Position { axis, value } => {
-                let msg = sensor_msgs::msg::JointState {
-                    name: vec![format!("{:?}", axis)],
-                    position: vec![value],
-                    ..Default::default()
-                };
+    let events = tokio::task::spawn(bridge_gantry_events(rx, joint_pub, diag_pub));
+    let setpoints = tokio::task::spawn(bridge_gantry_setpoints(tx, pos_sub, vel_sub, torque_sub));
 
-                trace!("Publishing /joint_states: {msg:?}");
-                joint_pub.publish(&msg)?;
+    info!("ROS2 node '{}' initialized", node.name());
+    tokio::select! {
+        res = events => {
+            if let Err(e) = res {
+                error!("bridge_gantry_events task failed: {e:?}");
+            } else {
+                warn!("bridge_gantry_events task ended unexpectedly");
             }
-            // Publish axis diagnostics
-            GantryEvent::Diagnostic {
-                axis,
-                level,
-                message,
-            } => {
-                let msg = diagnostic_msgs::msg::DiagnosticArray {
-                    status: vec![diagnostic_msgs::msg::DiagnosticStatus {
-                        name: format!("{:?}", axis),
-                        message,
-                        level: match level {
-                            DiagnosticLevel::Ok => 0,
-                            DiagnosticLevel::Warn => 1,
-                            DiagnosticLevel::Error => 2,
-                        },
-                        ..Default::default()
-                    }],
-                    ..Default::default()
-                };
+        }
 
-                trace!("Publishing /diagnostics: {msg:?}");
-                diag_pub.publish(&msg)?;
+        res = setpoints => {
+            if let Err(e) = res {
+                error!("bridge_gantry_setpoints task failed: {e:?}");
+            } else {
+                warn!("bridge_gantry_setpoints task ended unexpectedly");
             }
-            _ => {}
+        }
+        _ = signal::ctrl_c() => {
+            info!("Ctrl-C received — stopping ROS2 Bridge");
         }
     }
-
-    Ok(())
 }

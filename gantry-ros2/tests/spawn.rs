@@ -11,7 +11,7 @@ mod tests {
         gantry::Gantry,
     };
     use gantry_demo::config::*;
-    use gantry_ros2::{bridge::run_gantry_ros_bridge, spawn_logged};
+    use gantry_ros2::{events::run_gantry_ros_bridge, spawn_logged};
     use tokio::{signal, sync::broadcast, task::JoinHandle, time::sleep};
     use uom::si::{
         f64::{Length, Velocity},
