@@ -11,6 +11,8 @@ pub mod gantry;
 pub mod setpoint;
 pub mod sync;
 
+pub type OperationMode = gantry_cia402::driver::oms::OperationMode;
+
 /// Helper that spawns a task and logs error if it ever exits
 pub fn spawn_logged<F>(name: &'static str, fut: F) -> JoinHandle<()>
 where
