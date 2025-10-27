@@ -1,6 +1,8 @@
+pub mod default;
+
 use crate::{comms::sdo::SdoAction, driver::startup::home::HomingMethods, od::*};
 
-pub const PARAMS: &[SdoAction] = &[
+pub const TEST_PARAMS: &[SdoAction] = &[
     // Always good to upload device type for info
     SdoAction::Upload {
         entry: &DEVICE_TYPE,

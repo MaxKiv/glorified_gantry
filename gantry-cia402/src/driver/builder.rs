@@ -3,12 +3,10 @@ use tokio::{sync::broadcast, time::Instant};
 
 use crate::{
     comms::{
-        pdo::mapping::{
-            PDOSet, custom::CUSTOM_PDOS, minimal::MINIMAL_CYCLIC_SYNCHRONOUS_PDO_SET,
-        },
+        pdo::mapping::{PDOSet, custom::CUSTOM_PDOS, minimal::MINIMAL_CYCLIC_SYNCHRONOUS_PDO_SET},
         sdo::SdoAction,
     },
-    driver::{Cia402Driver, startup::params::PARAMS},
+    driver::{Cia402Driver, startup::params::TEST_PARAMS},
     error::DriveError,
 };
 
@@ -148,7 +146,7 @@ impl<C, M, S> Cia402DriverBuilder<C, M, S> {
     }
 
     pub fn with_default_parameters(mut self) -> Self {
-        self.parameters = Some(PARAMS);
+        self.parameters = Some(TEST_PARAMS);
         self
     }
 

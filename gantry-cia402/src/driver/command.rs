@@ -3,7 +3,7 @@ use crate::driver::{cyclic::CyclicSynchronousMode, state::Cia402State};
 // Commands that can be sent to the motor
 #[derive(Debug, Clone)]
 pub enum MotorCommand {
-    /// Set continuous velocity
+    /// Home this motor
     Home,
 
     /// Halt immediately (stop but remain enabled)

@@ -5,6 +5,7 @@ members = [
     "gantry-ros2",
     "gantry-gui",
     "gantry-demo",
+    "gantry-sniffer",
 ]
 
 resolver = "2"

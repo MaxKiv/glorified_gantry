@@ -60,7 +60,7 @@ impl CommandHandler {
                     }
                     GantryCommand::Home => {
                         info!(
-                            "Homing gantry: Sending Enable (cia402 transition to Operation Enabled"
+                            "Homing gantry: Sending Enable (cia402 transition to Operation Enabled)"
                         );
 
                         let cmd = MotorCommand::Enable;

@@ -15,7 +15,8 @@ mod tests {
             nmt::nmt_task,
             receiver::subscriber::wait_for_event,
             startup::{
-                parametrise::parametrise_motor, params::PARAMS, pdo_mapping::configure_pdo_mappings,
+                parametrise::parametrise_motor, params::TEST_PARAMS,
+                pdo_mapping::configure_pdo_mappings,
             },
         },
         log::log_events,
@@ -80,7 +81,7 @@ mod tests {
             .unwrap_or_else(|| panic!("Unable to construct SDO client for node id {node_id}"));
 
         info!("Starting Parametrisation of motor at node id {node_id}");
-        parametrise_motor(node_id, PARAMS, sdo.clone())
+        parametrise_motor(node_id, TEST_PARAMS, sdo.clone())
             .await
             .map_err(|err| format!("Error during motor parametrisation: {err}").to_string())?;
 

@@ -1532,6 +1532,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "gantry-sniffer"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "gantry-axis",
+ "gantry-cia402",
+ "owo-colors 4.2.3",
+ "oze-canopen",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
 name = "generic-array"
 version = "0.14.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
