@@ -14,6 +14,7 @@ mod tests {
         command::GantryCommand,
         event::util::wait_for_target_reached,
         gantry::Gantry,
+        setpoint::translator::scaling::DeviceScaling,
     };
     use tokio::{signal, time::sleep};
     use uom::si::{
@@ -37,7 +38,14 @@ mod tests {
         info!("Starting can interface");
         let (canopen, _) = oze_canopen::canopen::start(String::from("can0"), Some(1_000_000));
 
-        let gantry = Gantry::start(canopen, TEST_X_CONFIG, TEST_Y_CONFIG, TEST_Z_CONFIG).await?;
+        let gantry = Gantry::start(
+            canopen,
+            TEST_X_CONFIG,
+            TEST_Y_CONFIG,
+            TEST_Z_CONFIG,
+            DeviceScaling::test_setup(),
+        )
+        .await?;
 
         // Create a task for the test logic
         let test_task = tokio::spawn(test_gantry_homing(gantry));

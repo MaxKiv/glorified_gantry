@@ -21,7 +21,9 @@ impl FeedbackHandler {
         x: Option<AxisEventReceiver>,
         y: Option<AxisEventReceiver>,
         z: Option<AxisEventReceiver>,
-        translator: SetpointTranslator,
+        x_translator: Option<SetpointTranslator>,
+        y_translator: Option<SetpointTranslator>,
+        z_translator: Option<SetpointTranslator>,
     ) -> FeedbackHandle {
         let mut handles = Vec::with_capacity(3);
 
@@ -33,29 +35,25 @@ impl FeedbackHandler {
         let gantry_tx_y = gantry_tx.clone();
         let gantry_tx_z = gantry_tx.clone();
 
-        let translator_x = translator.clone();
-        let translator_y = translator.clone();
-        let translator_z = translator.clone();
-
         // Spawn a axis feedback handler for each configured gantry axis
-        // Spawn X Axis handler, if configured
+        // Spawn X Axis handler, if axis isconfigured
         handles.push(x.map(|x| {
             spawn_logged("FEEDBACK_X", async {
-                FeedbackHandler::handle_axis_feedback(x, gantry_tx_x, translator_x).await
+                FeedbackHandler::handle_axis_feedback(x, gantry_tx_x, x_translator.unwrap()).await
             })
         }));
 
-        // Spawn Y Axis handler, if configured
+        // Spawn Y Axis handler, if axis is configured
         handles.push(y.map(|y| {
             spawn_logged("FEEDBACK_Y", async {
-                FeedbackHandler::handle_axis_feedback(y, gantry_tx_y, translator_y).await
+                FeedbackHandler::handle_axis_feedback(y, gantry_tx_y, y_translator.unwrap()).await
             })
         }));
 
         // Spawn Z Axis handler, if configured
         handles.push(z.map(|z| {
             spawn_logged("FEEDBACK_Z", async {
-                FeedbackHandler::handle_axis_feedback(z, gantry_tx_z, translator_z).await
+                FeedbackHandler::handle_axis_feedback(z, gantry_tx_z, z_translator.unwrap()).await
             })
         }));
 

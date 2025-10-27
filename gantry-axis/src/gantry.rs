@@ -1,3 +1,4 @@
+use gantry_cia402::comms::sdo::SdoAction;
 use oze_canopen::interface::CanOpenInterface;
 use tokio::{
     sync::{broadcast, mpsc},
@@ -36,38 +37,60 @@ impl Gantry {
         let sync = SyncMaster::init(canopen.clone());
 
         info!("Starting X Axis");
-        let (x_motors, x_recv) = if let Some(cfg) = x_cfg {
+        // Initialize X Axis motors and return their handles + device scaling
+        // All of this is a NOOP if this axis is disabled by setting its cfg to None
+        let (x_motors, x_recv, x_translator) = if let Some(cfg) = x_cfg {
             let (motors, recv) =
                 Gantry::start_axis(cfg, canopen.clone(), sync.get_sync_receiver()).await?;
-            (Some(motors), Some(recv))
+            (
+                Some(motors),
+                Some(recv),
+                Some(SetpointTranslator::new(cfg.scaling)),
+            )
         } else {
-            (None, None)
+            (None, None, None)
         };
 
         info!("Starting Y Ayis");
-        let (y_motors, y_recv) = if let Some(cfg) = y_cfg {
+        // Initialize X Axis motors and return their handles + device scaling
+        // All of this is a NOOP if this axis is disabled by setting its cfg to None
+        let (y_motors, y_recv, y_translator) = if let Some(cfg) = y_cfg {
             let (motors, recv) =
                 Gantry::start_axis(cfg, canopen.clone(), sync.get_sync_receiver()).await?;
-            (Some(motors), Some(recv))
+            (
+                Some(motors),
+                Some(recv),
+                Some(SetpointTranslator::new(cfg.scaling)),
+            )
         } else {
-            (None, None)
+            (None, None, None)
         };
 
         info!("Starting Z Azis");
-        let (z_motors, z_recv) = if let Some(cfg) = z_cfg {
+        // Initialize X Axis motors and return their handles + device scaling
+        // All of this is a NOOP if this axis is disabled by setting its cfg to None
+        let (z_motors, z_recv, z_translator) = if let Some(cfg) = z_cfg {
             let (motors, recv) =
                 Gantry::start_axis(cfg, canopen.clone(), sync.get_sync_receiver()).await?;
-            (Some(motors), Some(recv))
+            (
+                Some(motors),
+                Some(recv),
+                Some(SetpointTranslator::new(cfg.scaling)),
+            )
         } else {
-            (None, None)
+            (None, None, None)
         };
-
-        info!("Initialising Setpoint Translator");
-        let translator = SetpointTranslator::new(DeviceScaling::default());
 
         info!("Starting Feedback Handler");
 
-        let feedback_handler = FeedbackHandler::init(x_recv, y_recv, z_recv, translator.clone());
+        let feedback_handler = FeedbackHandler::init(
+            x_recv,
+            y_recv,
+            z_recv,
+            x_translator,
+            y_translator,
+            z_translator,
+        );
 
         info!("Starting Command Handler");
         let cmd_handler = CommandHandler::init(x_motors, y_motors, z_motors, translator.clone());

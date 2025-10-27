@@ -1,6 +1,6 @@
 use crate::{comms::sdo::SdoAction, driver::startup::home::HomingMethods, od::*};
 
-pub const TEST_PARAMS: &[SdoAction] = &[
+pub const DEFAULT_PARAMS: &[SdoAction] = &[
     // Always good to upload device type for info
     SdoAction::Upload {
         entry: &DEVICE_TYPE,
@@ -26,7 +26,7 @@ pub const TEST_PARAMS: &[SdoAction] = &[
     },
     SdoAction::Download {
         entry: &POSITION_RANGE_LIMIT_MIN,
-        data: &(0i32).to_le_bytes(), // 3600 counts = 1 rev
+        data: &(-36000i32).to_le_bytes(), // 3600 counts = 1 rev
     },
     SdoAction::Download {
         entry: &POSITION_RANGE_LIMIT_MAX,
@@ -81,7 +81,7 @@ pub const TEST_PARAMS: &[SdoAction] = &[
     // 6098h – Homing Method
     SdoAction::Download {
         entry: &HOMING_METHOD,
-        data: &HomingMethods::NegLimitThenIndex.as_i8().to_le_bytes(),
+        data: &HomingMethods::IndexOnly.as_i8().to_le_bytes(),
     },
     // 6099h:01h – Speed During Search For Switch
     SdoAction::Download {

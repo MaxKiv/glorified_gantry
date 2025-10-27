@@ -4,7 +4,6 @@ use tracing::*;
 
 #[cfg(test)]
 mod tests {
-    use std::time::Duration;
 
     use gantry_axis::{
         axis::{
@@ -14,16 +13,15 @@ mod tests {
         command::GantryCommand,
         event::util::wait_for_target_reached,
         gantry::Gantry,
-        setpoint::translator::scaling::DeviceScaling,
     };
-    use tokio::{signal, time::sleep};
+    use tokio::signal;
     use uom::si::{
         f64::{Length, Velocity},
         length::millimeter,
         velocity::meter_per_second,
     };
 
-    use gantry_demo::config::{TEST_X_CONFIG, TEST_Y_CONFIG, TEST_Z_CONFIG};
+    use gantry_demo::config::*;
 
     use crate::common::TIMEOUT;
 
@@ -37,14 +35,7 @@ mod tests {
         info!("Starting can interface");
         let (canopen, _) = oze_canopen::canopen::start(String::from("can0"), Some(1_000_000));
 
-        let gantry = Gantry::start(
-            canopen,
-            TEST_X_CONFIG,
-            TEST_Y_CONFIG,
-            TEST_Z_CONFIG,
-            DeviceScaling::test_setup(),
-        )
-        .await?;
+        let gantry = Gantry::start(canopen, TEST_X_CONFIG, TEST_Y_CONFIG, TEST_Z_CONFIG).await?;
 
         // Create a task for the test logic
         let test_task = tokio::spawn(test_gantry_homing(gantry));
@@ -63,86 +54,85 @@ mod tests {
     }
 
     async fn test_gantry_homing(gantry: Gantry) -> anyhow::Result<()> {
+        info!("TEST: Homing gantry");
+
         gantry.send_command(GantryCommand::Home).await?;
 
+        info!("TEST: wait on gantry homed");
         wait_for_target_reached(
             gantry.get_event_rx(),
             gantry_axis::event::util::TargetQuantity::Home(true),
-            Axis::X,
+            Axis::Z,
             TIMEOUT,
         )
         .await?;
+        info!("TEST: Gantry homed!");
 
         let pos_target_x = Length::new::<millimeter>(60.0);
-        let pos_target_z = Length::new::<millimeter>(10.0);
+        let pos_target_y = Length::new::<millimeter>(30.0);
+        let pos_target_z = Length::new::<millimeter>(1000.0);
         let vel = Velocity::new::<meter_per_second>(0.01);
 
-        for num in 1..10 {
+        for _num in 1..10 {
             let setpoint = GantryCommand::Setpoint {
                 x: Some(AxisSetpoint::AbsolutePosition(PositionSetpoint {
                     target: pos_target_x,
                     velocity: vel,
                 })),
-                y: None,
+                y: Some(AxisSetpoint::AbsolutePosition(PositionSetpoint {
+                    target: pos_target_y,
+                    velocity: vel,
+                })),
                 z: Some(AxisSetpoint::AbsolutePosition(PositionSetpoint {
                     target: pos_target_z,
                     velocity: vel,
                 })),
             };
+            info!("TEST: Sending setpoint: {:?}", setpoint.clone());
 
-            gantry.send_command(setpoint).await?;
+            gantry.send_command(setpoint.clone()).await?;
 
-            tokio::try_join!(
-                wait_for_target_reached(
-                    gantry.get_event_rx(),
-                    gantry_axis::event::util::TargetQuantity::Position(
-                        pos_target_z.get::<millimeter>()
-                    ),
-                    Axis::Z,
-                    TIMEOUT,
+            wait_for_target_reached(
+                gantry.get_event_rx(),
+                gantry_axis::event::util::TargetQuantity::Position(
+                    pos_target_z.get::<millimeter>(),
                 ),
-                wait_for_target_reached(
-                    gantry.get_event_rx(),
-                    gantry_axis::event::util::TargetQuantity::Position(
-                        pos_target_x.get::<millimeter>()
-                    ),
-                    Axis::X,
-                    TIMEOUT,
-                ),
-            )?;
+                Axis::Z,
+                TIMEOUT,
+            )
+            .await;
+
+            info!("TEST: setpoint: {:?} REACHED", setpoint.clone());
 
             let setpoint = GantryCommand::Setpoint {
                 x: Some(AxisSetpoint::AbsolutePosition(PositionSetpoint {
                     target: -pos_target_x,
                     velocity: vel,
                 })),
-                y: None,
+                y: Some(AxisSetpoint::AbsolutePosition(PositionSetpoint {
+                    target: -pos_target_y,
+                    velocity: vel,
+                })),
                 z: Some(AxisSetpoint::AbsolutePosition(PositionSetpoint {
                     target: -pos_target_z,
                     velocity: vel,
                 })),
             };
+            info!("TEST: Sending setpoint: {:?}", setpoint.clone());
 
-            gantry.send_command(setpoint).await?;
+            gantry.send_command(setpoint.clone()).await?;
 
-            tokio::try_join!(
-                wait_for_target_reached(
-                    gantry.get_event_rx(),
-                    gantry_axis::event::util::TargetQuantity::Position(
-                        -pos_target_z.get::<millimeter>()
-                    ),
-                    Axis::Z,
-                    TIMEOUT,
+            wait_for_target_reached(
+                gantry.get_event_rx(),
+                gantry_axis::event::util::TargetQuantity::Position(
+                    pos_target_z.get::<millimeter>(),
                 ),
-                wait_for_target_reached(
-                    gantry.get_event_rx(),
-                    gantry_axis::event::util::TargetQuantity::Position(
-                        -pos_target_x.get::<millimeter>()
-                    ),
-                    Axis::X,
-                    TIMEOUT,
-                ),
-            )?;
+                Axis::Z,
+                TIMEOUT,
+            )
+            .await;
+
+            info!("TEST: setpoint: {:?} REACHED", setpoint.clone());
         }
 
         Ok(())

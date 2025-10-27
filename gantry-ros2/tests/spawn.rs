@@ -9,6 +9,7 @@ mod tests {
         command::GantryCommand,
         event::GantryEvent,
         gantry::Gantry,
+        setpoint::translator::scaling::DeviceScaling,
     };
     use gantry_demo::config::*;
     use gantry_ros2::{bridge::run_gantry_ros_bridge, spawn_logged};
@@ -29,17 +30,28 @@ mod tests {
     #[tokio::test]
     /// Test basic cia402 state transitions
     async fn test_spawn_ros_bridge() -> anyhow::Result<()> {
+        // Set up logging library
         gantry_demo::setup_tracing();
 
         info!("Starting can interface");
         let (canopen, _) = oze_canopen::canopen::start(String::from("can0"), Some(1_000_000));
 
-        let gantry = Gantry::start(canopen, TEST_X_CONFIG, TEST_Y_CONFIG, TEST_Z_CONFIG).await?;
+        info!("Start Gantry, this initializes all axis motors using the given configs");
+        let gantry = Gantry::start(
+            canopen,
+            TEST_X_CONFIG,
+            TEST_Y_CONFIG,
+            TEST_Z_CONFIG,
+            DeviceScaling::test_setup(),
+        )
+        .await?;
 
+        info!("Spawn the ROS2 bridge");
         let (bridge_handle, shutdown_bridge) =
             spawn_ros_bridge(gantry.get_event_rx(), gantry.get_cmd_tx());
 
         // Create a task for the test logic
+        info!("Starting test");
         let test_task = tokio::spawn(test_ros_bridge(gantry));
 
         // Wait for either Ctrl-C or test completion

@@ -1,10 +1,15 @@
 pub mod receiver;
 pub mod setpoint;
 
-use gantry_cia402::driver::{Cia402Driver, builder::Cia402DriverBuilder, command::MotorCommand};
+use gantry_cia402::{
+    comms::sdo::SdoAction,
+    driver::{Cia402Driver, builder::Cia402DriverBuilder, command::MotorCommand},
+};
 use oze_canopen::interface::CanOpenInterface;
 use tokio::{sync::broadcast, time::Instant};
 use tracing::*;
+
+use crate::setpoint::translator::scaling::DeviceScaling;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Axis {
@@ -21,6 +26,10 @@ pub struct AxisConfig {
     pub master: u8,
     /// The slave's node id, if there is one
     pub slave: Option<u8>,
+    /// Required parameters for each motor of this axis
+    pub params: &'static [SdoAction<'static>],
+    /// Define how to map from SI units <-> Motor units
+    pub scaling: DeviceScaling,
 }
 
 pub struct AxisMotors {
@@ -38,6 +47,7 @@ impl AxisMotors {
         let master_node = axis_config.master;
         let slave_node = axis_config.slave;
         let axis = axis_config.axis;
+        let params = axis_config.params;
         info!(
             "Initializing {axis:?} motors - master id: {master_node} slave id: {:?}",
             slave_node
@@ -47,7 +57,7 @@ impl AxisMotors {
         let master = Cia402DriverBuilder::new(master_node)
             .with_canopen(canopen.clone())
             .with_default_pdo_mappings()
-            .with_default_parameters()
+            .with_parameters(params)
             .with_sync_receiver(sync_rx.resubscribe())
             .build()
             .await?;
@@ -58,7 +68,7 @@ impl AxisMotors {
                 Cia402DriverBuilder::new(slave_id)
                     .with_canopen(canopen.clone())
                     .with_default_pdo_mappings()
-                    .with_default_parameters()
+                    .with_parameters(params)
                     .with_sync_receiver(sync_rx.resubscribe())
                     .build()
                     .await?,

@@ -1,5 +1,3 @@
-pub mod config;
-
 use tokio::task::JoinHandle;
 use tracing::*;
 use tracing_subscriber::Layer;

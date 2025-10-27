@@ -14,3 +14,4 @@ anyhow = "1.0.100"
 gantry-cia402 = { path = "../gantry-cia402/" }
 owo-colors = "4.2.3"
 chrono = "0.4.42"
+uom = "0.37.0"

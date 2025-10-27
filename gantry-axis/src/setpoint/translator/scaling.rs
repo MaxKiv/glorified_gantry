@@ -6,13 +6,6 @@ use uom::si::{
     velocity::meter_per_second,
 };
 
-// const COUNTS_PER_REV: f64 = 3600.0; // Default configuration in Cia402Driver - this would make sense but appears to be totally off
-// const COUNTS_PER_REV: f64 = 49.315068; // Magic caliper action
-const COUNTS_PER_REV: f64 = 50.0; // Magic guess - I think the test setup has been configured with a feed rate so it takes mm pos as input units
-const LEAD_MM_PER_REV: f64 = 5.0; // Typical, seems right
-const RATED_TORQUE_NM: f64 = 3.1; // From nanotec motor catalog model PD4C6018
-const DEVICE_TORQUE_UNITS_PER_FULL_RATED_TORQUE: f64 = 1000.0; // Nanotec uses 0.1% of rated torque as "torque unit"
-
 type DevicePosition = i32;
 type DeviceVelocity = i32;
 type DeviceAbsVelocity = u32;
@@ -26,8 +19,13 @@ pub struct DeviceScaling {
     pub torque_to_raw: f64, // device units (0.1% steps of rated torque) per Nm
 }
 
-impl Default for DeviceScaling {
-    fn default() -> Self {
+impl DeviceScaling {
+    pub const fn test_setup() -> Self {
+        const COUNTS_PER_REV: f64 = 50.0; // Magic guess - I think the test setup has been configured with a feed rate so it takes mm pos as input units
+        const LEAD_MM_PER_REV: f64 = 5.0; // Typical, seems right
+        const RATED_TORQUE_NM: f64 = 3.1; // From nanotec motor catalog model PD4C6018
+        const DEVICE_TORQUE_UNITS_PER_FULL_RATED_TORQUE: f64 = 1000.0; // Nanotec uses 0.1% of rated torque as "torque unit"
+
         let pos_to_ticks = COUNTS_PER_REV / LEAD_MM_PER_REV; // ticks per mm
         let vel_to_ticks = pos_to_ticks * 1000.0; // ticks/s per (m/s)
         let torque_to_raw = DEVICE_TORQUE_UNITS_PER_FULL_RATED_TORQUE / RATED_TORQUE_NM; // raw units per Nm
@@ -38,9 +36,24 @@ impl Default for DeviceScaling {
             torque_to_raw,
         }
     }
-}
 
-impl DeviceScaling {
+    pub const fn default_setup() -> Self {
+        const COUNTS_PER_REV: f64 = 3600.0; // Default configuration in Cia402Driver
+        const LEAD_MM_PER_REV: f64 = 5.0; // Typical, seems right
+        const RATED_TORQUE_NM: f64 = 3.1; // From nanotec motor catalog model PD4C6018
+        const DEVICE_TORQUE_UNITS_PER_FULL_RATED_TORQUE: f64 = 1000.0; // Nanotec uses 0.1% of rated torque as "torque unit"
+
+        let pos_to_ticks = COUNTS_PER_REV / LEAD_MM_PER_REV; // ticks per mm
+        let vel_to_ticks = pos_to_ticks * 1000.0; // ticks/s per (m/s)
+        let torque_to_raw = DEVICE_TORQUE_UNITS_PER_FULL_RATED_TORQUE / RATED_TORQUE_NM; // raw units per Nm
+
+        Self {
+            pos_to_ticks,
+            vel_to_ticks,
+            torque_to_raw,
+        }
+    }
+
     pub fn to_device_pos(&self, pos: Length) -> DevicePosition {
         let mm = pos.get::<millimeter>();
         (mm * self.pos_to_ticks).round() as DevicePosition

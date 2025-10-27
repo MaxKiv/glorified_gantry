@@ -151,7 +151,7 @@ async fn set_pdo_mapping(
     if let PdoType::TPDO(_) = pdo_mapping.pdo
         && pdo_mapping.transmission_type == TransmissionType::OnChange
     {
-        const INHIBIT_TIME: u16 = 500; // = 50ms, this is in 100us blocks
+        const INHIBIT_TIME: u16 = 1000; // = 200ms, this is in 100us blocks
         const INHIBIT_TIME_SUB_IDX: u8 = 0x03;
 
         trace!(
