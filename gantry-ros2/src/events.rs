@@ -1,14 +1,12 @@
 use gantry_axis::{diagnostic::DiagnosticLevel, event::GantryEvent};
-use r2r::geometry_msgs::msg::Vector3;
 use r2r::{self, Publisher, diagnostic_msgs, sensor_msgs};
-use std::time::Duration;
 use tokio::sync::broadcast;
 use tracing::*;
 
 pub async fn bridge_gantry_events(
     mut rx: broadcast::Receiver<GantryEvent>,
     joint_pub: Publisher<sensor_msgs::msg::JointState>,
-    diag_pub: Publisher,
+    diag_pub: Publisher<diagnostic_msgs::msg::DiagnosticArray>,
 ) -> anyhow::Result<()> {
     while let Ok(event) = rx.recv().await {
         match event {
@@ -49,4 +47,6 @@ pub async fn bridge_gantry_events(
             _ => {}
         }
     }
+
+    Ok(())
 }

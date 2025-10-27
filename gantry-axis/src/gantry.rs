@@ -1,5 +1,8 @@
 use oze_canopen::interface::CanOpenInterface;
-use tokio::{sync::broadcast, time::Instant};
+use tokio::{
+    sync::{broadcast, mpsc},
+    time::Instant,
+};
 use tracing::*;
 
 use crate::{
@@ -112,5 +115,9 @@ impl Gantry {
 
     pub fn get_event_rx(&self) -> broadcast::Receiver<GantryEvent> {
         self.feedback_handler.gantry_rx.resubscribe()
+    }
+
+    pub fn get_cmd_tx(&self) -> mpsc::Sender<GantryCommand> {
+        self.cmd_handler.cmd_tx.clone()
     }
 }

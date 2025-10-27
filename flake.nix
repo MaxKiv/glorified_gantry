@@ -86,7 +86,7 @@
 
         # Development shells provided by this flake, to use:
         # nix develop .#default
-        default = pkgs.mkShell {
+        default = pkgs.mkShell rec {
           RUST_BACKTRACE = "full";
 
           nativeBuildInputs = with pkgs; [
@@ -101,10 +101,35 @@
               toolchain
               # rust-analyzer
 
+              openssl
+              pkg-config
+
+              # GUI libs
+              libxkbcommon
+              libGL
+              fontconfig
+
+              # wayland libraries
+              wayland
+              wayland-protocols
+
+              egl-wayland # provides libEGL with wayland platform support
+              libglvnd # libGLVND -- helps load vendor GL provider
+              mesa # mesa core
+
+              # x11 libraries
+              xorg.libXcursor
+              xorg.libXrandr
+              xorg.libXi
+              xorg.libX11
               pythonEnv
               poetry
             ])
             ++ rosPkgs;
+
+          LD_LIBRARY_PATH = "${pkgs.lib.makeLibraryPath buildInputs}";
+
+          WINIT_UNIX_BACKEND = "wayland";
 
           shellHook = ''
             echo "ROS_DISTRO = $ROS_DISTRO"
