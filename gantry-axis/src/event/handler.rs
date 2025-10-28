@@ -84,6 +84,7 @@ impl FeedbackHandler {
             } else {
                 // If no slave is configured for this axis: Handle just the master events
                 if let Ok(event) = receiver.master.recv().await {
+                    trace!(target: "events", "Gantry: motor event received: {:?}", event);
                     Self::handle_motor_event(&receiver.axis, event, &gantry_tx, &translator);
                 }
             }

@@ -23,7 +23,7 @@ mod tests {
 
     use gantry_demo::config::*;
 
-    use crate::common::TIMEOUT;
+    use crate::common::{HOME_TIMEOUT, TIMEOUT};
 
     use super::*;
 
@@ -35,7 +35,13 @@ mod tests {
         info!("Starting can interface");
         let (canopen, _) = oze_canopen::canopen::start(String::from("can0"), Some(1_000_000));
 
-        let gantry = Gantry::start(canopen, TEST_X_CONFIG, TEST_Y_CONFIG, TEST_Z_CONFIG).await?;
+        let gantry = Gantry::start(
+            canopen,
+            DEFAULT_X_CONFIG,
+            DEFAULT_Y_CONFIG,
+            DEFAULT_Z_CONFIG,
+        )
+        .await?;
 
         // Create a task for the test logic
         let test_task = tokio::spawn(test_gantry_homing(gantry));
@@ -63,15 +69,16 @@ mod tests {
             gantry.get_event_rx(),
             gantry_axis::event::util::TargetQuantity::Home(true),
             Axis::Z,
-            TIMEOUT,
+            HOME_TIMEOUT,
         )
         .await?;
         info!("TEST: Gantry homed!");
 
         let pos_target_x = Length::new::<millimeter>(60.0);
         let pos_target_y = Length::new::<millimeter>(30.0);
-        let pos_target_z = Length::new::<millimeter>(1000.0);
+        let pos_target_z = Length::new::<millimeter>(20.0);
         let vel = Velocity::new::<meter_per_second>(0.01);
+        let pos_zero = Length::new::<millimeter>(0.0);
 
         for _num in 1..10 {
             let setpoint = GantryCommand::Setpoint {
@@ -100,21 +107,21 @@ mod tests {
                 Axis::Z,
                 TIMEOUT,
             )
-            .await;
+            .await?;
 
             info!("TEST: setpoint: {:?} REACHED", setpoint.clone());
 
             let setpoint = GantryCommand::Setpoint {
                 x: Some(AxisSetpoint::AbsolutePosition(PositionSetpoint {
-                    target: -pos_target_x,
+                    target: pos_zero,
                     velocity: vel,
                 })),
                 y: Some(AxisSetpoint::AbsolutePosition(PositionSetpoint {
-                    target: -pos_target_y,
+                    target: pos_zero,
                     velocity: vel,
                 })),
                 z: Some(AxisSetpoint::AbsolutePosition(PositionSetpoint {
-                    target: -pos_target_z,
+                    target: pos_zero,
                     velocity: vel,
                 })),
             };
@@ -124,13 +131,11 @@ mod tests {
 
             wait_for_target_reached(
                 gantry.get_event_rx(),
-                gantry_axis::event::util::TargetQuantity::Position(
-                    pos_target_z.get::<millimeter>(),
-                ),
+                gantry_axis::event::util::TargetQuantity::Position(pos_zero.get::<millimeter>()),
                 Axis::Z,
                 TIMEOUT,
             )
-            .await;
+            .await?;
 
             info!("TEST: setpoint: {:?} REACHED", setpoint.clone());
         }

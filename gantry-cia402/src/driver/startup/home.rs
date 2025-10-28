@@ -10,8 +10,6 @@ pub enum HomingMethods {
     NegLimitThenIndexLeftSwing = 1,
     /// 2 — Move to positive limit switch, then to index pulse
     PosLimitThenIndexLeftSwing = 2,
-    ///
-    Test = 6,
     /// 17 — Move to positive limit switch only (no index)
     PosLimitOnly = 17,
     /// 18 — Move to negative limit switch only (no index)

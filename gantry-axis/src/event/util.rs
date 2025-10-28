@@ -7,7 +7,7 @@ use tracing::*;
 
 use crate::{axis::Axis, event::GantryEvent};
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum TargetQuantity {
     Home(bool),
     Position(f64),
@@ -26,6 +26,9 @@ pub async fn wait_for_target_reached(
     const WINDOW: f64 = 1.0;
 
     info!("Waiting until axis: {axis:?} target is reached: {target:?}");
+
+    let target_print = target.clone();
+    let axis_print = axis.clone();
 
     wait_until_event_matches(
         event_rx,
@@ -73,6 +76,7 @@ pub async fn wait_for_target_reached(
             _ => false,
         },
         timeout,
+        format!("Target: {:?} - Axis: {:?}", target_print, axis_print),
     )
     .await
 }
@@ -82,6 +86,7 @@ pub async fn wait_until_event_matches<F, E>(
     mut event_rx: broadcast::Receiver<E>,
     predicate: F,
     timeout: Duration,
+    context: String,
 ) -> anyhow::Result<()>
 where
     F: Fn(&E) -> bool,
@@ -92,8 +97,8 @@ where
     loop {
         let remaining = deadline.saturating_duration_since(Instant::now());
         if remaining.is_zero() {
-            warn!("Timeout while waiting for event");
-            bail!("Timeout when waiting for event");
+            warn!("Timeout while waiting for event: {context}");
+            bail!("Timeout when waiting for event: {context}");
         }
 
         let result = time::timeout(remaining, event_rx.recv()).await;
@@ -113,8 +118,8 @@ where
                 bail!("Event channel closed in wait_for_event - {err}");
             }
             Err(_) => {
-                warn!("Timeout when waiting for event");
-                bail!("Timeout when waiting for event");
+                warn!("Timeout while waiting for event: {context}");
+                bail!("Timeout when waiting for event: {context}");
             }
         }
     }

@@ -468,6 +468,89 @@ pub const SI_UNIT_SPEED: ODEntry = ODEntry::new(
     ODValue::U32(0x00B447000), // Combined value [revolutions per minute], look at page 379
 );
 
+/// Limit switch related
+///
+pub const LIMIT_SWITCH_OPTION_CODE: ODEntry = ODEntry::new(
+    0x3701,
+    0x00,
+    AccessType::ReadWrite,
+    MappableType::None,
+    ODValue::I16(-1), // No reaction (e. g., to execute a homing operation) except noting the limit switch position
+);
+
+/// Digital Input & Special Function bits
+pub const DIGITAL_INPUTS: ODEntry = ODEntry::new(
+    0x60FD,
+    0x00,
+    AccessType::ReadWrite,
+    MappableType::TPDO,
+    ODValue::U32(0),
+);
+
+/// Digital input special special function control object
+pub const DIGITAL_INPUTS_CONTROL_SPECIAL_FUNCTION: ODEntry = ODEntry::new(
+    0x3240,
+    0x01,
+    AccessType::ReadOnly,
+    MappableType::None,
+    ODValue::U32(0),
+);
+
+/// Whether digital input logic should be inverted [default = active low]
+pub const DIGITAL_INPUTS_CONTROL_INVERTED: ODEntry = ODEntry::new(
+    0x3240,
+    0x02,
+    AccessType::ReadOnly,
+    MappableType::None,
+    ODValue::U8(0),
+);
+
+/// Contains unmodified Digital Inputs values
+pub const DIGITAL_INPUTS_RAW_VALUE: ODEntry = ODEntry::new(
+    0x3240,
+    0x05,
+    AccessType::ReadWrite,
+    MappableType::RPDO,
+    ODValue::U32(0),
+);
+
+/// Enables routing physical inputs to "digital inputs"
+/// You can solve anything with a layer of indirection
+pub const DIGITAL_INPUTS_ROUTING_ENABLE: ODEntry = ODEntry::new(
+    0x3240,
+    0x08,
+    AccessType::ReadWrite,
+    MappableType::RPDO,
+    ODValue::U32(0),
+);
+
+/// Determines physical source for DI 1
+pub const DIGITAL_INPUTS_ROUTING_1: ODEntry = ODEntry::new(
+    0x3242,
+    0x01,
+    AccessType::ReadOnly,
+    MappableType::None,
+    ODValue::U8(0),
+);
+
+/// Determines physical source for DI 2
+pub const DIGITAL_INPUTS_ROUTING_2: ODEntry = ODEntry::new(
+    0x3242,
+    0x02,
+    AccessType::ReadOnly,
+    MappableType::None,
+    ODValue::U8(0),
+);
+
+/// Determines physical source for DI 3
+pub const DIGITAL_INPUTS_ROUTING_3: ODEntry = ODEntry::new(
+    0x3242,
+    0x03,
+    AccessType::ReadOnly,
+    MappableType::None,
+    ODValue::U8(0),
+);
+
 /// Minimum set of Object Dictionary entries required for Profile Position
 pub const POSITION_MODE_MINIMUM_PARAMS: &[ODEntry] = &[
     SET_TARGET_POSITION,

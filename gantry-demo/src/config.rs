@@ -26,7 +26,7 @@ pub const DEFAULT_Y_CONFIG: Option<AxisConfig> = None;
 
 pub const DEFAULT_Z_CONFIG: Option<AxisConfig> = Some(AxisConfig {
     axis: Axis::Z,
-    master: 3,
+    master: 4,
     slave: None,
     params: DEFAULT_PARAMS,
     scaling: DeviceScaling::default_setup(),

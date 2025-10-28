@@ -5,6 +5,14 @@ pub const DEFAULT_PARAMS: &[SdoAction] = &[
     SdoAction::Upload {
         entry: &DEVICE_TYPE,
     },
+    // --- Limit Switches ---
+    // NOTE: This causes the drive to error with: Value Out Of Range, wrong datasheet?
+    // Forget previous limit switch position
+    // SdoAction::Download {
+    //     entry: &LIMIT_SWITCH_OPTION_CODE,
+    //     data: &(-2i16).to_le_bytes(),
+    // },
+
     // --- Profile Position ---
     // Set target position = 0 (we start from home or zero)
     SdoAction::Download {
@@ -78,20 +86,17 @@ pub const DEFAULT_PARAMS: &[SdoAction] = &[
         entry: &HOME_OFFSET,
         data: &0i32.to_le_bytes(), // controller zero aligns with machine zero
     },
-    // 6098h – Homing Method
-    SdoAction::Download {
-        entry: &HOMING_METHOD,
-        data: &HomingMethods::IndexOnly.as_i8().to_le_bytes(),
-    },
     // 6099h:01h – Speed During Search For Switch
     SdoAction::Download {
         entry: &HOMING_SPEED_SWITCH_SEARCH,
-        data: &0x32u32.to_le_bytes(),
+        // data: &0x32u32.to_le_bytes(),
+        data: &100u32.to_le_bytes(),
     },
     // 6099h:02h – Speed During Search For Zero
     SdoAction::Download {
         entry: &HOMING_SPEED_ZERO_SEARCH,
-        data: &0x0Au32.to_le_bytes(),
+        // data: &0x0Au32.to_le_bytes(),
+        data: &50u32.to_le_bytes(),
     },
     // 6080h – Max Motor Speed [counts/s]
     SdoAction::Download {
@@ -128,5 +133,36 @@ pub const DEFAULT_PARAMS: &[SdoAction] = &[
     SdoAction::Download {
         entry: &TORQUE_SLOPE,
         data: &100u32.to_le_bytes(),
+    },
+    // --- Homing + DI + Limit Switch Behavior ---
+    // All of these are required for succesful homing
+    // 6098h – Homing Method
+    SdoAction::Download {
+        entry: &HOMING_METHOD,
+        data: &HomingMethods::PosLimitThenIndexLeftSwing
+            .as_i8()
+            .to_le_bytes(),
+    },
+    // Enable Default Limit Switch Operation: Only note limit switch position
+    // Required when homing the motor using limit switches
+    SdoAction::Download {
+        entry: &LIMIT_SWITCH_OPTION_CODE,
+        data: &(-1i16).to_le_bytes(),
+    },
+    SdoAction::Download {
+        entry: &DIGITAL_INPUTS_CONTROL_SPECIAL_FUNCTION,
+        data: &(0b01u32).to_le_bytes(), // Enable positive limit switch, Disable Neg limit + homing + interlock -> Datasheet Page 87
+    },
+    SdoAction::Download {
+        entry: &DIGITAL_INPUTS_CONTROL_INVERTED,
+        data: &(1u32).to_le_bytes(), // Invert Physical input 1, Required for the limit switch to play nicely during homing
+    },
+    SdoAction::Download {
+        entry: &DIGITAL_INPUTS_ROUTING_ENABLE,
+        data: &(1u32).to_le_bytes(), // Enable alternative routing for Digital Inputs
+    },
+    SdoAction::Download {
+        entry: &DIGITAL_INPUTS_ROUTING_2,
+        data: &(1u8).to_le_bytes(), // Route physical source 1 -> DI 2 (which is the pos limit switch)
     },
 ];

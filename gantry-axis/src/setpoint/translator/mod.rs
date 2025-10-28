@@ -14,8 +14,10 @@ pub struct SetpointTranslator {
 }
 
 impl SetpointTranslator {
-    pub fn new(scaling: DeviceScaling) -> Self {
-        Self { scaling }
+    pub fn new(scaling: &DeviceScaling) -> Self {
+        Self {
+            scaling: scaling.clone(),
+        }
     }
 
     pub fn to_motor_cmd(&self, setpoint: AxisSetpoint) -> MotorCommand {

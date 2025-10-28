@@ -40,13 +40,11 @@ impl Gantry {
         // Initialize X Axis motors and return their handles + device scaling
         // All of this is a NOOP if this axis is disabled by setting its cfg to None
         let (x_motors, x_recv, x_translator) = if let Some(cfg) = x_cfg {
+            let translator = SetpointTranslator::new(&cfg.scaling);
+
             let (motors, recv) =
                 Gantry::start_axis(cfg, canopen.clone(), sync.get_sync_receiver()).await?;
-            (
-                Some(motors),
-                Some(recv),
-                Some(SetpointTranslator::new(cfg.scaling)),
-            )
+            (Some(motors), Some(recv), Some(translator))
         } else {
             (None, None, None)
         };
@@ -55,13 +53,11 @@ impl Gantry {
         // Initialize X Axis motors and return their handles + device scaling
         // All of this is a NOOP if this axis is disabled by setting its cfg to None
         let (y_motors, y_recv, y_translator) = if let Some(cfg) = y_cfg {
+            let translator = SetpointTranslator::new(&cfg.scaling);
+
             let (motors, recv) =
                 Gantry::start_axis(cfg, canopen.clone(), sync.get_sync_receiver()).await?;
-            (
-                Some(motors),
-                Some(recv),
-                Some(SetpointTranslator::new(cfg.scaling)),
-            )
+            (Some(motors), Some(recv), Some(translator))
         } else {
             (None, None, None)
         };
@@ -70,13 +66,11 @@ impl Gantry {
         // Initialize X Axis motors and return their handles + device scaling
         // All of this is a NOOP if this axis is disabled by setting its cfg to None
         let (z_motors, z_recv, z_translator) = if let Some(cfg) = z_cfg {
+            let translator = SetpointTranslator::new(&cfg.scaling);
+
             let (motors, recv) =
                 Gantry::start_axis(cfg, canopen.clone(), sync.get_sync_receiver()).await?;
-            (
-                Some(motors),
-                Some(recv),
-                Some(SetpointTranslator::new(cfg.scaling)),
-            )
+            (Some(motors), Some(recv), Some(translator))
         } else {
             (None, None, None)
         };
@@ -87,13 +81,20 @@ impl Gantry {
             x_recv,
             y_recv,
             z_recv,
+            x_translator.clone(),
+            y_translator.clone(),
+            z_translator.clone(),
+        );
+
+        info!("Starting Command Handler");
+        let cmd_handler = CommandHandler::init(
+            x_motors,
+            y_motors,
+            z_motors,
             x_translator,
             y_translator,
             z_translator,
         );
-
-        info!("Starting Command Handler");
-        let cmd_handler = CommandHandler::init(x_motors, y_motors, z_motors, translator.clone());
 
         info!("Gantry Initialized!");
         Ok(Self {

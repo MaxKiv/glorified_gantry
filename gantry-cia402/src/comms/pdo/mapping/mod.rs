@@ -3,6 +3,7 @@ pub mod cyclic_synchronous;
 pub mod default;
 pub mod empty;
 pub mod minimal;
+pub mod test;
 
 use crate::comms::pdo::mapping::custom::RPDO_CONTROL_OPMODE;
 use crate::comms::pdo::mapping::minimal::RPDO_CONTROL_TARGET_POS_TORQUE;

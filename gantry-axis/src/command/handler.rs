@@ -16,12 +16,23 @@ impl CommandHandler {
         x_motors: Option<AxisMotors>,
         y_motors: Option<AxisMotors>,
         z_motors: Option<AxisMotors>,
-        translator: SetpointTranslator,
+        x_translator: Option<SetpointTranslator>,
+        y_translator: Option<SetpointTranslator>,
+        z_translator: Option<SetpointTranslator>,
     ) -> CommandHandle {
         let (cmd_tx, cmd_rx) = mpsc::channel(10);
 
         let handle = crate::spawn_logged("CMD", async move {
-            CommandHandler::handle_commands(cmd_rx, translator, x_motors, y_motors, z_motors).await
+            CommandHandler::handle_commands(
+                cmd_rx,
+                x_motors,
+                y_motors,
+                z_motors,
+                x_translator,
+                y_translator,
+                z_translator,
+            )
+            .await
         });
 
         CommandHandle { handle, cmd_tx }
@@ -29,23 +40,52 @@ impl CommandHandler {
 
     pub async fn handle_commands(
         mut cmd_rx: mpsc::Receiver<GantryCommand>,
-        translator: SetpointTranslator,
         x_axis: Option<AxisMotors>,
         y_axis: Option<AxisMotors>,
         z_axis: Option<AxisMotors>,
+        x_translator: Option<SetpointTranslator>,
+        y_translator: Option<SetpointTranslator>,
+        z_translator: Option<SetpointTranslator>,
     ) -> anyhow::Result<()> {
-        let mut cmd_x;
-        let mut cmd_y;
-        let mut cmd_z;
+        let mut cmd_x: Option<MotorCommand>;
+        let mut cmd_y: Option<MotorCommand>;
+        let mut cmd_z: Option<MotorCommand>;
 
         loop {
             if let Some(cmd) = cmd_rx.recv().await {
                 match cmd {
                     GantryCommand::Setpoint { x, y, z } => {
+                        info!("Gantry Setpoint received: {x:?}, {y:?}, {z:?}");
+
                         // Translate setpoints to motor units
-                        cmd_x = x.map(|setpoint| translator.to_motor_cmd(setpoint));
-                        cmd_y = y.map(|setpoint| translator.to_motor_cmd(setpoint));
-                        cmd_z = z.map(|setpoint| translator.to_motor_cmd(setpoint));
+                        cmd_x = if let Some(setpoint) = x
+                            && let Some(ref translator) = x_translator
+                        {
+                            Some(translator.to_motor_cmd(setpoint))
+                        } else {
+                            None
+                        };
+
+                        cmd_y = if let Some(setpoint) = y
+                            && let Some(ref translator) = y_translator
+                        {
+                            Some(translator.to_motor_cmd(setpoint))
+                        } else {
+                            None
+                        };
+
+                        cmd_z = if let Some(setpoint) = z
+                            && let Some(ref translator) = z_translator
+                        {
+                            Some(translator.to_motor_cmd(setpoint))
+                        } else {
+                            None
+                        };
+
+                        info!(
+                            "Gantry Setpoint translated: {:?}, {:?}, {:?}",
+                            cmd_x, cmd_y, cmd_z
+                        );
 
                         // Send translated setpoint out to Axis motors
                         cmd_x
