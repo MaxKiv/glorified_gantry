@@ -64,7 +64,7 @@ pub async fn handle_feedback(
                         );
                     }
                 } else {
-                    trace!("message not for node {this_node_id}: {message:?} - skipping")
+                    // trace!("message not for node {this_node_id}: {message:?} - skipping")
                 }
 
                 if Instant::now() - last_seen > COMMS_TIMEOUT

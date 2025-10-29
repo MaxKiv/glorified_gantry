@@ -110,6 +110,9 @@ doesnt work fully
 
 # TODO
 
+- !! Add logic to gantry-axis that quick stops all motors in an axis when one of
+  them reports a fault OR reboots.
+
 - ! Figure out how to map T/RPDO's, and how to generalise de/serialisation
 
 - Invalidate all PDOs in the device before mapping, currently TPDO4 isnt in CUSTOM_TPDOS, so

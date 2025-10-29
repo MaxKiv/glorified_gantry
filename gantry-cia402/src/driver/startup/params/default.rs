@@ -90,13 +90,13 @@ pub const DEFAULT_PARAMS: &[SdoAction] = &[
     SdoAction::Download {
         entry: &HOMING_SPEED_SWITCH_SEARCH,
         // data: &0x32u32.to_le_bytes(),
-        data: &100u32.to_le_bytes(),
+        data: &150u32.to_le_bytes(),
     },
     // 6099h:02h – Speed During Search For Zero
     SdoAction::Download {
         entry: &HOMING_SPEED_ZERO_SEARCH,
         // data: &0x0Au32.to_le_bytes(),
-        data: &50u32.to_le_bytes(),
+        data: &100u32.to_le_bytes(),
     },
     // 6080h – Max Motor Speed [counts/s]
     SdoAction::Download {
@@ -122,7 +122,7 @@ pub const DEFAULT_PARAMS: &[SdoAction] = &[
     // 6072h:00h – Max Torque [‰ of rated torque]
     SdoAction::Download {
         entry: &MAX_TORQUE,
-        data: &100u16.to_le_bytes(),
+        data: &1000u16.to_le_bytes(),
     },
     // 6073h:00h – Max Current [‰ of rated current]
     SdoAction::Download {
@@ -139,9 +139,7 @@ pub const DEFAULT_PARAMS: &[SdoAction] = &[
     // 6098h – Homing Method
     SdoAction::Download {
         entry: &HOMING_METHOD,
-        data: &HomingMethods::PosLimitThenIndexLeftSwing
-            .as_i8()
-            .to_le_bytes(),
+        data: &HomingMethods::PosLimitOnly.as_i8().to_le_bytes(),
     },
     // Enable Default Limit Switch Operation: Only note limit switch position
     // Required when homing the motor using limit switches

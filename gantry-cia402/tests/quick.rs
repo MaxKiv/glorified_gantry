@@ -261,19 +261,6 @@ async fn quick_test_logic() -> Result<(), TestError> {
         .map_err(TestError::CANOpenError)?;
     info!("Enabled DI routing");
 
-    // let data = (1u8).to_le_bytes();
-    // let dat = s
-    //     .lock()
-    //     .await
-    //     .download(
-    //         DIGITAL_INPUTS_ROUTING_1.index,
-    //         DIGITAL_INPUTS_ROUTING_1.sub_index,
-    //         &data,
-    //     )
-    //     .await
-    //     .map_err(TestError::CANOpenError)?;
-    // info!("Routed physical input 1 to DI 1");
-
     let data = (1u8).to_le_bytes();
     let dat = s
         .lock()
@@ -287,18 +274,14 @@ async fn quick_test_logic() -> Result<(), TestError> {
         .map_err(TestError::CANOpenError)?;
     info!("Routed physical input 1 to DI 2");
 
-    // let data = (1u8).to_le_bytes();
-    // let dat = s
-    //     .lock()
-    //     .await
-    //     .download(
-    //         DIGITAL_INPUTS_ROUTING_3.index,
-    //         DIGITAL_INPUTS_ROUTING_3.sub_index,
-    //         &data,
-    //     )
-    //     .await
-    //     .map_err(TestError::CANOpenError)?;
-    // info!("Routed physical input 1 to DI 3");
+    let dat = s
+        .lock()
+        .await
+        .upload(POLARITY.index, POLARITY.sub_index)
+        .await
+        .map_err(TestError::CANOpenError)?;
+    let val: u8 = dat[0];
+    info!("Polarity: {}={:#x}", val, val);
 
     for num in 1..=1000 {
         let dat = s

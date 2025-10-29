@@ -32,6 +32,8 @@ pub const DEFAULT_Z_CONFIG: Option<AxisConfig> = Some(AxisConfig {
     scaling: DeviceScaling::default_setup(),
 });
 
+// pub const DEFAULT_Z_CONFIG: Option<AxisConfig> = None;
+
 pub const TEST_X_CONFIG: Option<AxisConfig> = Some(AxisConfig {
     axis: Axis::X,
     master: 1,

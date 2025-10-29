@@ -13,9 +13,15 @@ mod tests {
 
     use gantry_axis::sync::SyncMaster;
     use gantry_cia402::{
+        comms::sdo::SdoAction,
         driver::{
-            Cia402Driver, builder::Cia402DriverBuilder, command::MotorCommand, event::MotorEvent,
-            receiver::subscriber::wait_for_event, state::Cia402State,
+            Cia402Driver,
+            builder::Cia402DriverBuilder,
+            command::MotorCommand,
+            event::MotorEvent,
+            receiver::subscriber::wait_for_event,
+            startup::{self, params::default::DEFAULT_PARAMS},
+            state::Cia402State,
         },
         error::DriveError,
     };
@@ -29,6 +35,9 @@ mod tests {
     /// Test basic cia402 state transitions
     async fn test_torque() -> anyhow::Result<()> {
         gantry_demo::setup_tracing();
+
+        pub const NODE_ID: u8 = 1;
+        pub const PARAMS: &[SdoAction] = DEFAULT_PARAMS;
 
         let node_id = NODE_ID;
 

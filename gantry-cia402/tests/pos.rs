@@ -5,7 +5,7 @@ use tracing::*;
 #[cfg(test)]
 mod tests {
 
-    const TEST_POSITION: i32 = -50;
+    const TEST_POSITION: i32 = 5000;
     // const TEST_POSITION: i32 = 100;
     const TEST_SPEED: u32 = 100;
 
@@ -34,7 +34,7 @@ mod tests {
     async fn test_position_mode() -> anyhow::Result<()> {
         gantry_demo::setup_tracing();
 
-        pub const NODE_ID: u8 = 4;
+        pub const NODE_ID: u8 = 3;
         let node_id = NODE_ID;
 
         info!("Starting can interface");

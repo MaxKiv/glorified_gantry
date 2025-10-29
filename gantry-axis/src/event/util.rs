@@ -23,7 +23,8 @@ pub async fn wait_for_target_reached(
     axis: Axis,
     timeout: Duration,
 ) -> anyhow::Result<()> {
-    const WINDOW: f64 = 1.0;
+    const POS_WINDOW: f64 = 1.0;
+    const TORQUE_WINDOW: f64 = 0.01;
 
     info!("Waiting until axis: {axis:?} target is reached: {target:?}");
 
@@ -42,7 +43,7 @@ pub async fn wait_for_target_reached(
             ) => {
                 if *event_axis == axis {
                     info!("Axis: {axis:?} - checking position event value: {value} against target: {target_val}");
-                    return (value - target_val).abs() <= WINDOW;
+                    return (value - target_val).abs() <= POS_WINDOW;
                 }
                 false
             }
@@ -53,7 +54,7 @@ pub async fn wait_for_target_reached(
                     value,
                 },
                 TargetQuantity::Velocity(target_val),
-            ) if *event_axis == axis && (value - target_val).abs() <= WINDOW => true,
+            ) if *event_axis == axis && (value - target_val).abs() <= POS_WINDOW => true,
 
             (
                 GantryEvent::Torque {
@@ -61,7 +62,14 @@ pub async fn wait_for_target_reached(
                     value,
                 },
                 TargetQuantity::Torque(target_val),
-            ) if *event_axis == axis && (value - target_val).abs() <= WINDOW => true,
+            ) => {
+                if *event_axis == axis { 
+                    info!("Axis: {axis:?} - checking torque event value: {value} against target: {target_val}");
+                    (value - target_val).abs() <= TORQUE_WINDOW
+                } else {
+                    false
+                }
+            }
 
             (
                 GantryEvent::Homing {
