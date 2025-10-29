@@ -34,11 +34,11 @@ pub const DEFAULT_PARAMS: &[SdoAction] = &[
     },
     SdoAction::Download {
         entry: &POSITION_RANGE_LIMIT_MIN,
-        data: &(-36000i32).to_le_bytes(), // 3600 counts = 1 rev
+        data: &(0i32).to_le_bytes(), // 3600 counts = 1 rev
     },
     SdoAction::Download {
         entry: &POSITION_RANGE_LIMIT_MAX,
-        data: &(36000i32).to_le_bytes(), // 3600 counts = 1 rev
+        data: &(0i32).to_le_bytes(), // 3600 counts = 1 rev
     },
     SdoAction::Download {
         entry: &POLARITY,

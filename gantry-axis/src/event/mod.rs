@@ -11,11 +11,35 @@ pub enum GantryEvent {
     /// Position update in physical units (m, rad, etc.)
     Position { axis: Axis, value: f64 },
 
+    /// Motor Position mode specific feedback
+    PositionModeFeedback {
+        axis: Axis,
+        target_reached: bool,
+        limit_exceeded: bool,
+        setpoint_acknowlegded: bool,
+        following_error: bool,
+    },
+
     /// Velocity update
     Velocity { axis: Axis, value: f64 },
 
+    /// Velocity mode feedback
+    VelocityModeFeedback {
+        axis: Axis,
+        speed_is_zero: bool,
+        deviation_error: bool,
+    },
+
     /// Torque feedback or effort
     Torque { axis: Axis, value: f64 },
+
+    /// Torque mode feedback
+    TorqueModeFeedback {
+        axis: Axis,
+        axis_braked: bool,
+        setpoint_reached: bool,
+        limit_exceeded: bool,
+    },
 
     /// Operation mode change
     ModeChanged { axis: Axis, mode: OperationMode },

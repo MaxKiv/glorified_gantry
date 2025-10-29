@@ -3,7 +3,6 @@ use tracing::*;
 
 pub mod axis;
 pub mod axis_state;
-pub mod builder;
 pub mod command;
 pub mod diagnostic;
 pub mod event;

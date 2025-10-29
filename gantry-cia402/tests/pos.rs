@@ -34,6 +34,7 @@ mod tests {
     async fn test_position_mode() -> anyhow::Result<()> {
         gantry_demo::setup_tracing();
 
+        pub const NODE_ID: u8 = 4;
         let node_id = NODE_ID;
 
         info!("Starting can interface");

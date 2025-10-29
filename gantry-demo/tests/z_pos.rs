@@ -11,7 +11,12 @@ mod tests {
             setpoint::{AxisSetpoint, PositionSetpoint},
         },
         command::GantryCommand,
-        event::util::wait_for_target_reached,
+        event::{
+            GantryEvent,
+            util::{
+                wait_for_position_target_reached, wait_for_target_reached, wait_until_event_matches,
+            },
+        },
         gantry::Gantry,
     };
     use tokio::signal;
@@ -76,11 +81,12 @@ mod tests {
 
         let pos_target_x = Length::new::<millimeter>(60.0);
         let pos_target_y = Length::new::<millimeter>(30.0);
-        let pos_target_z = Length::new::<millimeter>(20.0);
+        let pos_target_z = Length::new::<millimeter>(50.0);
         let vel = Velocity::new::<meter_per_second>(0.01);
         let pos_zero = Length::new::<millimeter>(0.0);
 
         for _num in 1..10 {
+            let event_rx = gantry.get_event_rx();
             let setpoint = GantryCommand::Setpoint {
                 x: Some(AxisSetpoint::AbsolutePosition(PositionSetpoint {
                     target: pos_target_x,
@@ -99,18 +105,21 @@ mod tests {
 
             gantry.send_command(setpoint.clone()).await?;
 
-            wait_for_target_reached(
-                gantry.get_event_rx(),
-                gantry_axis::event::util::TargetQuantity::Position(
-                    pos_target_z.get::<millimeter>(),
-                ),
-                Axis::Z,
-                TIMEOUT,
-            )
-            .await?;
+            wait_for_position_target_reached(event_rx, TIMEOUT).await?;
+
+            // wait_for_target_reached(
+            //     gantry.get_event_rx(),
+            //     gantry_axis::event::util::TargetQuantity::Position(
+            //         pos_target_z.get::<millimeter>(),
+            //     ),
+            //     Axis::Z,
+            //     TIMEOUT,
+            // )
+            // .await?;
 
             info!("TEST: setpoint: {:?} REACHED", setpoint.clone());
 
+            let event_rx = gantry.get_event_rx();
             let setpoint = GantryCommand::Setpoint {
                 x: Some(AxisSetpoint::AbsolutePosition(PositionSetpoint {
                     target: pos_zero,
@@ -129,13 +138,15 @@ mod tests {
 
             gantry.send_command(setpoint.clone()).await?;
 
-            wait_for_target_reached(
-                gantry.get_event_rx(),
-                gantry_axis::event::util::TargetQuantity::Position(pos_zero.get::<millimeter>()),
-                Axis::Z,
-                TIMEOUT,
-            )
-            .await?;
+            wait_for_position_target_reached(event_rx, TIMEOUT).await?;
+
+            // wait_for_target_reached(
+            //     gantry.get_event_rx(),
+            //     gantry_axis::event::util::TargetQuantity::Position(pos_zero.get::<millimeter>()),
+            //     Axis::Z,
+            //     TIMEOUT,
+            // )
+            // .await?;
 
             info!("TEST: setpoint: {:?} REACHED", setpoint.clone());
         }

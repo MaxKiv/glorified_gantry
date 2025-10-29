@@ -21,6 +21,7 @@ use crate::{
 };
 
 pub struct Gantry {
+    canopen: CanOpenInterface,
     sync: SyncMasterHandle,
     cmd_handler: CommandHandle,
     feedback_handler: FeedbackHandle,
@@ -98,6 +99,7 @@ impl Gantry {
 
         info!("Gantry Initialized!");
         Ok(Self {
+            canopen,
             sync,
             cmd_handler,
             feedback_handler,

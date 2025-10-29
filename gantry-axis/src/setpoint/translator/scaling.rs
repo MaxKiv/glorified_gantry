@@ -38,7 +38,8 @@ impl DeviceScaling {
     }
 
     pub const fn default_setup() -> Self {
-        const COUNTS_PER_REV: f64 = 3600.0; // Default configuration in Cia402Driver
+        // const COUNTS_PER_REV: f64 = 3600.0; // Default configuration in Cia402Driver
+        const COUNTS_PER_REV: f64 = 11500.0; // Magic caliper estimation, must be quick :(
         const LEAD_MM_PER_REV: f64 = 5.0; // Typical, seems right
         const RATED_TORQUE_NM: f64 = 3.1; // From nanotec motor catalog model PD4C6018
         const DEVICE_TORQUE_UNITS_PER_FULL_RATED_TORQUE: f64 = 1000.0; // Nanotec uses 0.1% of rated torque as "torque unit"

@@ -52,38 +52,35 @@ impl GantryEvent {
 
             MotorEvent::PositionModeFeedback {
                 target_reached,
+                limit_exceeded,
+                setpoint_acknowlegded,
                 following_error,
-                ..
-            } => GantryEvent::SyncStatus {
+            } => GantryEvent::PositionModeFeedback {
                 axis,
-                in_sync: target_reached,
+                target_reached,
+                limit_exceeded,
+                setpoint_acknowlegded,
                 following_error,
             },
 
             MotorEvent::VelocityModeFeedback {
-                deviation_error, ..
-            } => GantryEvent::Diagnostic {
+                speed_is_zero,
+                deviation_error,
+            } => GantryEvent::VelocityModeFeedback {
                 axis,
-                level: if deviation_error {
-                    DiagnosticLevel::Error
-                } else {
-                    DiagnosticLevel::Ok
-                },
-                message: "Velocity feedback".into(),
+                speed_is_zero,
+                deviation_error,
             },
 
             MotorEvent::TorqueModeFeedback {
+                axis_braked,
                 setpoint_reached,
                 limit_exceeded,
-                ..
-            } => GantryEvent::Diagnostic {
+            } => GantryEvent::TorqueModeFeedback {
                 axis,
-                level: if limit_exceeded {
-                    DiagnosticLevel::Warn
-                } else {
-                    DiagnosticLevel::Ok
-                },
-                message: format!("Torque setpoint reached: {}", setpoint_reached),
+                axis_braked,
+                setpoint_reached,
+                limit_exceeded,
             },
 
             MotorEvent::CyclicPositionModeFeedback {

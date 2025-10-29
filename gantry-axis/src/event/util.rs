@@ -124,3 +124,24 @@ where
         }
     }
 }
+
+pub async fn wait_for_position_target_reached(
+    event_rx: broadcast::Receiver<GantryEvent>,
+    timeout: Duration,
+) -> anyhow::Result<()> {
+    wait_until_event_matches(
+        event_rx,
+        |event| {
+            matches!(
+                event,
+                GantryEvent::PositionModeFeedback {
+                    target_reached: true,
+                    ..
+                }
+            )
+        },
+        timeout,
+        String::from("PositionModeFeedback::target_reached"),
+    )
+    .await
+}
