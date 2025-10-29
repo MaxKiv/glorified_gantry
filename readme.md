@@ -1,3 +1,86 @@
+# Gantry Control System
+
+A Rust-based software driver stack for controlling CiA 402-compliant motors in gantry configurations over CANopen from x86 Linux environments. This workspace implements a complete event-driven control system using Tokio's multithreaded async runtime.
+
+## Workspace Structure
+
+This repository contains 6 crates organized as follows:
+
+_Core Libraries_
+
+gantry-cia402 - Low-level CiA 402 motor driver implementation
+gantry-axis - Multi-axis gantry coordination layer
+gantry-ros2 - ROS2 bridge for integration with robotics systems
+gantry-demo - Shared testing utilities and example configurations
+
+_Applications_
+
+gantry-sniffer - CANopen bus monitoring and debugging tool
+gantry-gui - Desktop GUI for manual gantry control
+
+_System Requirements_
+
+Platform: x86_64 Linux
+Rust: Stable toolchain
+CAN Interface: SocketCAN-compatible hardware
+Motors: 1+ Cia402-Compatible Motor Drivers
+
+# Quick start
+
+## Set up CAN interface (can0 & 1 Mbit/s)
+
+Use the Just command runner (`just --help` or see justfile):
+`just setup-can`
+
+Or manual setup:
+
+```
+    sudo ip link set can0 up type can bitrate 1000000
+    sudo ip link set can0 txqueuelen 1000
+    sudo ip link set up can0
+
+```
+
+## Run the CANopen sniffer to view CANOpen traffic
+
+`just snif` or `cargo run -p gantry-sniffer`
+
+## Run integration tests (requires connected hardware)
+
+`cargo test -p gantry-cia402 --test basic`
+
+# Architecture Overview
+
+The system is built on the `tokio` async runtime and follows a layered architecture:
+
+```
+┌─────────────────────────────────────────┐
+│ Applications (gantry-gui, gantry-ros2)  │
+├─────────────────────────────────────────┤
+│ gantry-axis (Multi-axis coordination)   │
+├─────────────────────────────────────────┤
+│ gantry-cia402 (Single motor control)    │
+├─────────────────────────────────────────┤
+│ oze-canopen (CANopen protocol)          │
+├─────────────────────────────────────────┤
+│ SocketCAN (Linux kernel)                │
+└─────────────────────────────────────────┘
+```
+
+Each layer communicates via async channels using Tokio's broadcast/mpsc
+synchronisation primitives.
+
+## Testing
+
+The workspace includes basic tests:
+
+- **Unit tests**: Core logic and state machines
+- **Integration tests**: Hardware-in-the-loop tests requiring connected motors
+- **Example tests**: Real-world usage scenarios in `gantry-demo/tests/`
+
+Run tests with: `cargo test` (software tests) or `cargo test --test <name>`
+(hardware/integration tests).
+
 # FIX
 
 - Cia402Driver: cia402 CW flags are bugged. Sending MotorCmd::Enable + Setpoint
@@ -36,27 +119,3 @@ doesnt work fully
 - Make error handling uniform across the driver
 
 - Fuzz test orchestrator state orchestrator/machine, this can be done in isolation without CAN, easy wins
-
-# Set up physical CAN
-
-```bash
-sudo ip link set can0 up type can bitrate 1000000
-sudo ip link set can0 txqueuelen 1000
-sudo ip link set up can0
-```
-
-warning: Git tree '/home/max/git/saxion/ros2_canopen' is dirty
-Resolved URL: git+file:///home/max/git/saxion/ros2_canopen
-Description: ROS 2 development environment using nix
-Path: /nix/store/plgybjyylh40k9vfxgl1yaw8sh3ysyim-source
-Revision: f6be67da6a71b097d34bf721bddb18d63abf0c63-dirty
-Last modified: 2025-07-22 14:57:41
-Fingerprint: fc1d811be2fb8d23980e4c9526ba2d0926b5797a887175532f97115faab174a6
-
-warning: Git tree '/home/max/git/saxion/glorified_gantry' is dirty
-Resolved URL: git+file:///home/max/git/saxion/glorified_gantry
-Description: Nanotec nanolib example CLI build environment
-Path: /nix/store/y3sa6638xnw9xla6cdiaqxjip6isyd1k-source
-Revision: 48e611108427bc6a152583eb1cc130c620f5109a-dirty
-Last modified: 2025-10-24 08:44:00
-Fingerprint: 857cc4538a95045113d7b01cb5597968a754efb67a8f4464bf4e698246568f86
