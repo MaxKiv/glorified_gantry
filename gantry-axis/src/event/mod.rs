@@ -2,8 +2,10 @@ use gantry_cia402::driver::{oms::OperationMode, receiver::parse::EMCY};
 
 use crate::{axis::Axis, axis_state::AxisState, diagnostic::DiagnosticLevel};
 
+pub mod combiner;
 pub mod from_motor;
 pub mod handler;
+pub mod types;
 pub mod util;
 
 #[derive(Debug, Clone, PartialEq)]

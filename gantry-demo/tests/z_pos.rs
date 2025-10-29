@@ -107,16 +107,6 @@ mod tests {
 
             wait_for_position_target_reached(event_rx, TIMEOUT).await?;
 
-            // wait_for_target_reached(
-            //     gantry.get_event_rx(),
-            //     gantry_axis::event::util::TargetQuantity::Position(
-            //         pos_target_z.get::<millimeter>(),
-            //     ),
-            //     Axis::Z,
-            //     TIMEOUT,
-            // )
-            // .await?;
-
             info!("TEST: setpoint: {:?} REACHED", setpoint.clone());
 
             let event_rx = gantry.get_event_rx();
@@ -139,14 +129,6 @@ mod tests {
             gantry.send_command(setpoint.clone()).await?;
 
             wait_for_position_target_reached(event_rx, TIMEOUT).await?;
-
-            // wait_for_target_reached(
-            //     gantry.get_event_rx(),
-            //     gantry_axis::event::util::TargetQuantity::Position(pos_zero.get::<millimeter>()),
-            //     Axis::Z,
-            //     TIMEOUT,
-            // )
-            // .await?;
 
             info!("TEST: setpoint: {:?} REACHED", setpoint.clone());
         }

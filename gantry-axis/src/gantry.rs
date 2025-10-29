@@ -1,4 +1,3 @@
-use gantry_cia402::comms::sdo::SdoAction;
 use oze_canopen::interface::CanOpenInterface;
 use tokio::{
     sync::{broadcast, mpsc},
@@ -16,7 +15,7 @@ use crate::{
         GantryEvent,
         handler::{FeedbackHandle, FeedbackHandler},
     },
-    setpoint::translator::{SetpointTranslator, scaling::DeviceScaling},
+    setpoint::translator::SetpointTranslator,
     sync::{SyncMaster, SyncMasterHandle},
 };
 
@@ -122,6 +121,8 @@ impl Gantry {
         sync_rx: broadcast::Receiver<Instant>,
     ) -> anyhow::Result<(AxisMotors, AxisEventReceiver)> {
         let axis = cfg.axis.clone();
+        let master_id = cfg.master;
+        let slave_id = cfg.slave.clone();
 
         // Construct this axis's motor drivers
         let motor = AxisMotors::new(canopen.clone(), cfg, sync_rx).await?;
@@ -129,7 +130,9 @@ impl Gantry {
         // Construct the motor event receiver for this axis
         let recv = AxisEventReceiver::new(
             axis,
+            master_id,
             motor.master.event_rx.resubscribe(),
+            slave_id,
             motor
                 .slave
                 .as_ref()

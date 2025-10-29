@@ -72,6 +72,23 @@ pub async fn wait_for_target_reached(
             }
 
             (
+                GantryEvent::TorqueModeFeedback {
+                    axis: event_axis,
+                    axis_braked,
+                    setpoint_reached,
+                    limit_exceeded,
+                },
+                TargetQuantity::Torque(target_val),
+            ) => {
+                if *event_axis == axis { 
+                    info!("Axis: {axis:?} - checking TorqueModeFeedback event against target: {target_val}");
+                    *setpoint_reached
+                } else {
+                    false
+                }
+            }
+
+            (
                 GantryEvent::Homing {
                     axis: event_axis,
                     completed,

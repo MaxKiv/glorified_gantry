@@ -32,13 +32,13 @@ mod tests {
 
     use super::*;
 
-    const TEST_SETPOINT_INITIAL: (f64, f64, f64) = (150.0, 100.0, 50.0);
+    const TEST_SETPOINT_INITIAL: (f64, f64, f64) = (15.0, 10.0, 5.0);
     const TEST_VEL: f64 = 0.01;
     const TEST_SETPOINTS: [(f64, f64, f64); 4] = [
-        (200.0, 150.0, 100.0),
-        (100.0, 50.0, 100.0),
-        (0.0, 100.0, 0.0),
-        (100.0, 100.0, 50.0),
+        (20.0, 15.0, 10.0),
+        (10.0, 5.0, 10.0),
+        (0.0, 10.0, 0.0),
+        (10.0, 10.0, 5.0),
     ];
     const TEST_SETPOINTS_LEN: usize = TEST_SETPOINTS.len();
 

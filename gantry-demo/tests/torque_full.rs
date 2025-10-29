@@ -76,6 +76,12 @@ mod tests {
             wait_for_target_reached(
                 gantry.get_event_rx(),
                 gantry_axis::event::util::TargetQuantity::Home(true),
+                Axis::X,
+                HOME_TIMEOUT,
+            ),
+            wait_for_target_reached(
+                gantry.get_event_rx(),
+                gantry_axis::event::util::TargetQuantity::Home(true),
                 Axis::Y,
                 HOME_TIMEOUT,
             ),
@@ -84,8 +90,9 @@ mod tests {
                 gantry_axis::event::util::TargetQuantity::Home(true),
                 Axis::Z,
                 HOME_TIMEOUT,
-            )
+            ),
         )?;
+
         info!("TEST: Gantry homed!");
 
         info!("TEST: Moving to safer position");
@@ -118,7 +125,7 @@ mod tests {
 
         info!("TEST: Safe position reached, starting torque tests");
 
-        let target_x = Torque::new::<newton_meter>(0.60);
+        let target_x = Torque::new::<newton_meter>(0.40);
         let target_y = Torque::new::<newton_meter>(0.40);
         let target_z = Torque::new::<newton_meter>(0.60);
         let vel = Velocity::new::<meter_per_second>(0.001);
@@ -146,9 +153,17 @@ mod tests {
                 wait_for_target_reached(
                     gantry.get_event_rx(),
                     gantry_axis::event::util::TargetQuantity::Torque(
-                        target_z.get::<newton_meter>()
+                        target_y.get::<newton_meter>()
                     ),
                     Axis::Y,
+                    TIMEOUT,
+                ),
+                wait_for_target_reached(
+                    gantry.get_event_rx(),
+                    gantry_axis::event::util::TargetQuantity::Torque(
+                        target_x.get::<newton_meter>()
+                    ),
+                    Axis::X,
                     TIMEOUT,
                 ),
             )?;
@@ -166,7 +181,7 @@ mod tests {
                 wait_for_target_reached(
                     gantry.get_event_rx(),
                     gantry_axis::event::util::TargetQuantity::Torque(
-                        target_z.get::<newton_meter>()
+                        -target_z.get::<newton_meter>()
                     ),
                     Axis::Z,
                     TIMEOUT,
@@ -174,9 +189,17 @@ mod tests {
                 wait_for_target_reached(
                     gantry.get_event_rx(),
                     gantry_axis::event::util::TargetQuantity::Torque(
-                        target_z.get::<newton_meter>()
+                        -target_y.get::<newton_meter>()
                     ),
                     Axis::Y,
+                    TIMEOUT,
+                ),
+                wait_for_target_reached(
+                    gantry.get_event_rx(),
+                    gantry_axis::event::util::TargetQuantity::Torque(
+                        -target_x.get::<newton_meter>()
+                    ),
+                    Axis::X,
                     TIMEOUT,
                 ),
             )?;

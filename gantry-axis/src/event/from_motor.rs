@@ -1,45 +1,39 @@
-use gantry_cia402::driver::event::MotorEvent;
 use uom::si::{length::millimeter, torque::newton_meter, velocity::meter_per_second};
 
 use crate::{
     axis::Axis, axis_state::AxisState, diagnostic::DiagnosticLevel, event::GantryEvent,
-    setpoint::translator::SetpointTranslator,
+    setpoint::translator::event::TranslatedMotorEvent,
 };
 
 impl GantryEvent {
-    pub fn from_motor(axis: Axis, event: MotorEvent, translator: &SetpointTranslator) -> Self {
+    pub fn from_translated(axis: Axis, event: TranslatedMotorEvent) -> Self {
+        use TranslatedMotorEvent::*;
         match event {
-            MotorEvent::PositionFeedback { actual_position } => GantryEvent::Position {
+            PositionFeedback { actual_position } => GantryEvent::Position {
                 axis,
-                value: translator
-                    .translate_motor_position(actual_position)
-                    .get::<millimeter>(),
+                value: actual_position.get::<millimeter>(),
             },
-            MotorEvent::VelocityFeedback { actual_velocity } => GantryEvent::Velocity {
+            VelocityFeedback { actual_velocity } => GantryEvent::Velocity {
                 axis,
-                value: translator
-                    .translate_motor_velocity(actual_velocity)
-                    .get::<meter_per_second>(),
+                value: actual_velocity.get::<meter_per_second>(),
             },
-            MotorEvent::TorqueFeedback { actual_torque } => GantryEvent::Torque {
+            TorqueFeedback { actual_torque } => GantryEvent::Torque {
                 axis,
-                value: translator
-                    .translate_motor_torque(actual_torque)
-                    .get::<newton_meter>(),
+                value: actual_torque.get::<newton_meter>(),
             },
 
-            MotorEvent::OperationModeUpdate(mode) => GantryEvent::ModeChanged { axis, mode },
+            OperationModeUpdate(mode) => GantryEvent::ModeChanged { axis, mode },
 
-            MotorEvent::Cia402StateUpdate(state) => GantryEvent::AxisState {
+            Cia402StateUpdate(state) => GantryEvent::AxisState {
                 axis,
                 state: AxisState::Cia402(state),
             },
-            MotorEvent::NmtStateUpdate(state) => GantryEvent::AxisState {
+            NmtStateUpdate(state) => GantryEvent::AxisState {
                 axis,
                 state: AxisState::Nmt(state),
             },
 
-            MotorEvent::HomingFeedback {
+            HomingFeedback {
                 at_home,
                 homing_completed,
                 homing_error,
@@ -50,7 +44,7 @@ impl GantryEvent {
                 error: homing_error,
             },
 
-            MotorEvent::PositionModeFeedback {
+            PositionModeFeedback {
                 target_reached,
                 limit_exceeded,
                 setpoint_acknowlegded,
@@ -63,7 +57,7 @@ impl GantryEvent {
                 following_error,
             },
 
-            MotorEvent::VelocityModeFeedback {
+            VelocityModeFeedback {
                 speed_is_zero,
                 deviation_error,
             } => GantryEvent::VelocityModeFeedback {
@@ -72,7 +66,7 @@ impl GantryEvent {
                 deviation_error,
             },
 
-            MotorEvent::TorqueModeFeedback {
+            TorqueModeFeedback {
                 axis_braked,
                 setpoint_reached,
                 limit_exceeded,
@@ -83,7 +77,7 @@ impl GantryEvent {
                 limit_exceeded,
             },
 
-            MotorEvent::CyclicPositionModeFeedback {
+            CyclicPositionModeFeedback {
                 device_in_sync,
                 has_following_error,
                 ..
@@ -92,43 +86,39 @@ impl GantryEvent {
                 in_sync: device_in_sync,
                 following_error: has_following_error,
             },
-            MotorEvent::CyclicVelocityModeFeedback { device_in_sync, .. } => {
-                GantryEvent::SyncStatus {
-                    axis,
-                    in_sync: device_in_sync,
-                    following_error: false,
-                }
-            }
-            MotorEvent::CyclicTorqueModeFeedback { device_in_sync, .. } => {
-                GantryEvent::SyncStatus {
-                    axis,
-                    in_sync: device_in_sync,
-                    following_error: false,
-                }
-            }
+            CyclicVelocityModeFeedback { device_in_sync, .. } => GantryEvent::SyncStatus {
+                axis,
+                in_sync: device_in_sync,
+                following_error: false,
+            },
+            CyclicTorqueModeFeedback { device_in_sync, .. } => GantryEvent::SyncStatus {
+                axis,
+                in_sync: device_in_sync,
+                following_error: false,
+            },
 
-            MotorEvent::Fault { code, description } => GantryEvent::Fault {
+            Fault { code, description } => GantryEvent::Fault {
                 axis,
                 code,
                 description,
             },
-            MotorEvent::EMCY(emcy) => GantryEvent::Emcy { axis, emcy },
-            MotorEvent::FaultCleared => GantryEvent::Diagnostic {
+            EMCY(emcy) => GantryEvent::Emcy { axis, emcy },
+            FaultCleared => GantryEvent::Diagnostic {
                 axis,
                 level: DiagnosticLevel::Ok,
                 message: "Fault cleared".into(),
             },
-            MotorEvent::CommunicationLost => GantryEvent::Diagnostic {
+            CommunicationLost => GantryEvent::Diagnostic {
                 axis,
                 level: DiagnosticLevel::Error,
                 message: "Communication lost".into(),
             },
-            MotorEvent::SdoResponse(resp) => GantryEvent::Diagnostic {
+            SdoResponse(resp) => GantryEvent::Diagnostic {
                 axis,
                 level: DiagnosticLevel::Ok,
                 message: format!("SDO: {:?}", resp),
             },
-            MotorEvent::StatusWord(_) => GantryEvent::Diagnostic {
+            StatusWord(_) => GantryEvent::Diagnostic {
                 axis,
                 level: DiagnosticLevel::Ok,
                 message: "Statusword update".into(),
