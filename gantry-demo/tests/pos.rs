@@ -80,17 +80,29 @@ mod tests {
         gantry.send_command(GantryCommand::Home).await?;
 
         info!("TEST: wait on gantry homed");
-        wait_for_target_reached(
-            gantry.get_event_rx(),
-            gantry_axis::event::util::TargetQuantity::Home(true),
-            Axis::Z,
-            HOME_TIMEOUT,
-        )
-        .await?;
+        tokio::try_join!(
+            wait_for_target_reached(
+                gantry.get_event_rx(),
+                gantry_axis::event::util::TargetQuantity::Home(true),
+                Axis::X,
+                HOME_TIMEOUT,
+            ),
+            wait_for_target_reached(
+                gantry.get_event_rx(),
+                gantry_axis::event::util::TargetQuantity::Home(true),
+                Axis::Y,
+                HOME_TIMEOUT,
+            ),
+            wait_for_target_reached(
+                gantry.get_event_rx(),
+                gantry_axis::event::util::TargetQuantity::Home(true),
+                Axis::Z,
+                HOME_TIMEOUT,
+            ),
+        )?;
         info!("TEST: Gantry homed!");
 
         info!("Moving Gantry into initial test position");
-        let event_rx = gantry.get_event_rx();
         let vel = Velocity::new::<meter_per_second>(TEST_VEL);
         let target_x = Length::new::<millimeter>(TEST_SETPOINT_INITIAL.0);
         let target_y = Length::new::<millimeter>(TEST_SETPOINT_INITIAL.1);
@@ -114,12 +126,31 @@ mod tests {
         info!("TEST: Sending setpoint: {:?}", setpoint.clone());
         gantry.send_command(setpoint.clone()).await?;
 
-        wait_for_position_target_reached(event_rx, TIMEOUT).await?;
+        tokio::try_join!(
+            wait_for_target_reached(
+                gantry.get_event_rx(),
+                gantry_axis::event::util::TargetQuantity::Position(target_x.get::<millimeter>()),
+                Axis::X,
+                TIMEOUT,
+            ),
+            wait_for_target_reached(
+                gantry.get_event_rx(),
+                gantry_axis::event::util::TargetQuantity::Position(target_y.get::<millimeter>()),
+                Axis::Y,
+                TIMEOUT,
+            ),
+            wait_for_target_reached(
+                gantry.get_event_rx(),
+                gantry_axis::event::util::TargetQuantity::Position(target_z.get::<millimeter>()),
+                Axis::Z,
+                TIMEOUT,
+            ),
+        )?;
 
         let pos_zero = Length::new::<millimeter>(0.0);
 
         for _num in 1..50 {
-            for setpoint_idx in 0..=3 {
+            for setpoint_idx in 0..TEST_SETPOINTS_LEN {
                 let target_x = Length::new::<millimeter>(TEST_SETPOINTS[setpoint_idx].0);
                 let target_y = Length::new::<millimeter>(TEST_SETPOINTS[setpoint_idx].1);
                 let target_z = Length::new::<millimeter>(TEST_SETPOINTS[setpoint_idx].2);
@@ -143,7 +174,32 @@ mod tests {
 
                 gantry.send_command(setpoint.clone()).await?;
 
-                wait_for_position_target_reached(event_rx, TIMEOUT).await?;
+                tokio::try_join!(
+                    wait_for_target_reached(
+                        gantry.get_event_rx(),
+                        gantry_axis::event::util::TargetQuantity::Position(
+                            target_x.get::<millimeter>()
+                        ),
+                        Axis::X,
+                        TIMEOUT,
+                    ),
+                    wait_for_target_reached(
+                        gantry.get_event_rx(),
+                        gantry_axis::event::util::TargetQuantity::Position(
+                            target_y.get::<millimeter>()
+                        ),
+                        Axis::Y,
+                        TIMEOUT,
+                    ),
+                    wait_for_target_reached(
+                        gantry.get_event_rx(),
+                        gantry_axis::event::util::TargetQuantity::Position(
+                            target_z.get::<millimeter>()
+                        ),
+                        Axis::Z,
+                        TIMEOUT,
+                    ),
+                )?;
 
                 info!("TEST: setpoint: {:?} REACHED", setpoint.clone());
             }

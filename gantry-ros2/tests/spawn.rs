@@ -37,14 +37,7 @@ mod tests {
         let (canopen, _) = oze_canopen::canopen::start(String::from("can0"), Some(1_000_000));
 
         info!("Start Gantry, this initializes all axis motors using the given configs");
-        let gantry = Gantry::start(
-            canopen,
-            TEST_X_CONFIG,
-            TEST_Y_CONFIG,
-            TEST_Z_CONFIG,
-            DeviceScaling::test_setup(),
-        )
-        .await?;
+        let gantry = Gantry::start(canopen, TEST_X_CONFIG, TEST_Y_CONFIG, TEST_Z_CONFIG).await?;
 
         info!("Spawn the ROS2 bridge");
         let (bridge_handle, shutdown_bridge) =
@@ -60,11 +53,11 @@ mod tests {
                 res??;
             }
             _ = signal::ctrl_c() => {
+                let _ = shutdown_bridge.send(true);
                 info!("Ctrl-C received — aborting test");
             }
         }
 
-        let _ = shutdown_bridge.send(true);
         let _ = bridge_handle.await;
 
         Ok(())
@@ -92,7 +85,7 @@ mod tests {
     async fn test_ros_bridge(gantry: Gantry) -> anyhow::Result<()> {
         gantry.send_command(GantryCommand::Home).await?;
 
-        sleep(Duration::from_secs(60)).await;
+        sleep(Duration::from_secs(600)).await;
 
         Ok(())
     }

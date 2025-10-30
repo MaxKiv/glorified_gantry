@@ -47,6 +47,22 @@
         rclcpp
         std-msgs
         can-msgs
+
+        ament-cmake
+        ament-cmake-core
+        ament-index-python
+        ament-lint
+        ament-package
+        can-msgs
+        diagnostic-updater
+        rclcpp
+        ros-core
+        ros2-control
+        ros2cli
+        ros2launch
+        std-msgs
+        yaml-cpp-vendor
+        canopen-interfaces
       ];
 
       # Get a cross compilation toolchain from the rust-toolchain.toml
@@ -101,6 +117,9 @@
               toolchain
               # rust-analyzer
 
+              # ros crap
+              colcon
+
               openssl
               pkg-config
 
@@ -130,6 +149,10 @@
           LD_LIBRARY_PATH = "${pkgs.lib.makeLibraryPath buildInputs}";
 
           WINIT_UNIX_BACKEND = "wayland";
+
+          # shellHook = ''
+          #   export CMAKE_PREFIX_PATH=${pkgs.lib.makeSearchPath "share" rosPkgs}:$CMAKE_PREFIX_PATH
+          # '';
 
           shellHook = ''
             echo "ROS_DISTRO = $ROS_DISTRO"

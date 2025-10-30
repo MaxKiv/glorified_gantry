@@ -122,3 +122,5 @@ doesnt work fully
 - Make error handling uniform across the driver
 
 - Fuzz test orchestrator state orchestrator/machine, this can be done in isolation without CAN, easy wins
+
+!!!FULL DOCUMENTATION WILL BE RELEASED SOON!!!

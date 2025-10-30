@@ -86,6 +86,7 @@ pub async fn run_gantry_ros_bridge(
                 Ok(())
             }
         }
+
         _ = signal::ctrl_c() => {
             info!("Ctrl-C received — stopping ROS2 Bridge");
             Ok(())
