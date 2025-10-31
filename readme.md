@@ -70,7 +70,141 @@ The system is built on the `tokio` async runtime and follows a layered architect
 Each layer communicates via async channels using Tokio's broadcast/mpsc
 synchronisation primitives.
 
-## Testing
+# Toolchain Setup
+
+This project requires both Rust and ROS2 (Jazzy) to build and run. We provide two methods for setting up your development environment.
+
+## Method 1: Using Nix (Recommended)
+
+The preferred method uses Nix to provide a reproducible development environment with all dependencies pre-configured.
+[For more info check here](https://nixos.org/download/).
+
+### Installing Nix
+
+**On Linux, Windows(WSL2) and macOS:**
+
+```bash
+sh <(curl --proto '=https' --tlsv1.2 -L https://nixos.org/nix/install) --daemon
+```
+
+### Entering the Development Shell
+
+**Manual activation:**
+
+```bash
+nix develop
+```
+
+This will download and configure all required dependencies including:
+
+- Rust toolchain (as specified in `rust-toolchain.toml`)
+- ROS2 Jazzy packages + Sourced setup script
+- CANopen libraries
+- GUI dependencies (wayland, X11)
+- Python environment with Poetry
+
+**Automatic activation with direnv (recommended):**
+
+Install direnv:
+
+```bash
+# On NixOS or in nix shell
+nix-shell -p direnv
+
+# On other systems
+sudo apt install direnv  # Debian/Ubuntu
+brew install direnv      # macOS
+```
+
+Add direnv hook to your shell (`~/.bashrc`, `~/.zshrc`, etc.):
+
+```bash
+eval "$(direnv hook bash)"  # or zsh, fish, etc.
+```
+
+Create a `.envrc` file in the project root:
+
+```bash
+echo "use flake" > .envrc
+direnv allow
+```
+
+Now the development environment will activate automatically whenever you enter
+the project directory, and everything will be undone if you leave this
+directory.
+
+## Method 2: Manual Installation
+
+If you cannot or prefer not to use Nix:
+
+### Rust Toolchain
+
+The project uses a specific Rust toolchain defined in `rust-toolchain.toml`. Install rustup:
+
+```bash
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+```
+
+Rustup will automatically use the toolchain specified in `rust-toolchain.toml` when you build the project. The file specifies:
+
+- Channel: stable
+- Components: rust-analyzer, clippy
+- Target: x86_64-unknown-linux-gnu
+
+### ROS2 Jazzy
+
+Follow the official ROS2 Jazzy installation instructions for your platform:
+
+- [Ubuntu installation guide](https://docs.ros.org/en/jazzy/Installation/Ubuntu-Install-Debs.html)
+- [Building from source](https://docs.ros.org/en/jazzy/Installation/Alternatives/Ubuntu-Development-Setup.html)
+
+Required ROS2 packages:
+
+- `ros-core`
+- `ros2cli`
+- `ros2launch`
+- `rclcpp`
+- `std-msgs`
+- `can-msgs`
+
+After installation, source the ROS2 setup script:
+
+```bash
+source /opt/ros/jazzy/setup.bash
+```
+
+### Additional Dependencies
+
+Install system dependencies required for building:
+
+```bash
+# Ubuntu/Debian
+sudo apt install build-essential pkg-config libssl-dev \
+    libxkbcommon-dev libwayland-dev libgl-dev \
+    libfontconfig-dev libegl-dev
+
+# System CAN utilities
+sudo apt install can-utils
+```
+
+### Verification
+
+Verify your setup:
+
+```bash
+# Check Rust
+rustc --version
+cargo --version
+
+# Check ROS2
+ros2 --version
+echo $ROS_DISTRO  # should output 'jazzy'
+
+# Build the project
+cargo check
+```
+
+# Testing
 
 The workspace includes basic tests:
 
@@ -98,7 +232,7 @@ doesnt work fully
 - Finish Implementation of Cyclic Synchronous Modes -> just feedback handler is left
   => I fear this isn't very useful on a non-realtime OS.
 
-- Consecutive movement is broken using `PositionModeFlagsCW::DECELERATE_AFTER_REACHING`
+- Consecutive movement seems broken using `PositionModeFlagsCW::DECELERATE_AFTER_REACHING`
 
 - Profile Torque mode has trouble hitting torque target precisely, sometimes this takes
   ages to converge. -> Listen for torqueFeedback { actual_torque: i32 } instead
@@ -122,5 +256,3 @@ doesnt work fully
 - Make error handling uniform across the driver
 
 - Fuzz test orchestrator state orchestrator/machine, this can be done in isolation without CAN, easy wins
-
-!!!FULL DOCUMENTATION WILL BE RELEASED SOON!!!
