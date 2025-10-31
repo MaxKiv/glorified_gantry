@@ -234,25 +234,36 @@ doesnt work fully
 
 - Consecutive movement seems broken using `PositionModeFlagsCW::DECELERATE_AFTER_REACHING`
 
-- Profile Torque mode has trouble hitting torque target precisely, sometimes this takes
-  ages to converge. -> Listen for torqueFeedback { actual_torque: i32 } instead
-  and define a target reached margin myself.
-  => This is now done more generally in
-  `gantry_axis::event::util::wait_for_target_reached`
-
-- Cia402State::OperationEnabled -> SwitchOnDisabled seems broken, should use quick stop transition?
+- Cia402State::OperationEnabled -> SwitchOnDisabled seems broken, should we use quick stop transition?
 
 # TODO
 
-- !! Add logic to gantry-axis that quick stops all motors in an axis when one of
+## Gantry-axis
+
+- [!] Refactor `DeviceScaling` from guesstimate scaling factors into sensible
+  values that include the fact that the Z-axis has a gearbox.
+
+- [!] Add logic to gantry-axis that quick stops all motors in an axis when one of
   them reports a fault OR reboots.
 
-- ! Figure out how to map T/RPDO's, and how to generalise de/serialisation
+- Add the option to test against a `vcan` interface, unlocking the ability to
+  test without requiring hardware. Use this to fuzz test the gantry-axis
+  synchronisation.
 
-- Invalidate all PDOs in the device before mapping, currently TPDO4 isnt in CUSTOM_TPDOS, so
-  its never changed from the default and will generate warnings
-  -> quick fix by adding EMPTY_TPDO4
+## Gantry-cia402
 
-- Make error handling uniform across the driver
+- [!] Debug multi-motor axis synchronisation issues OR refactor and move
+  synchronisation into gantry-cia402's PDO logic.
 
-- Fuzz test orchestrator state orchestrator/machine, this can be done in isolation without CAN, easy wins
+- [!] Re-enable expected limit switch behaviour after homing. Currently I
+  disable limit switch behaviour before homing (which is required), but never
+  re-enable it again.
+
+- Improve error handling (currently I report them and continue) and make them
+  uniform across the driver.
+
+- Improve T/RPDO's mapping and generalise de/serialisation
+
+## Gantry-gui
+
+- Finish the GUI
