@@ -42,13 +42,7 @@ mod tests {
         info!("Starting can interface");
         let (canopen, _) = oze_canopen::canopen::start(String::from("can0"), Some(1_000_000));
 
-        let gantry = Gantry::start(
-            canopen,
-            DEFAULT_X_CONFIG,
-            DEFAULT_Y_CONFIG,
-            DEFAULT_Z_CONFIG,
-        )
-        .await?;
+        let gantry = Gantry::start(canopen, DEFAULT_CONFIG).await?;
 
         // Create a task for the test logic
         let test_task = tokio::spawn(test_gantry_homing(gantry));

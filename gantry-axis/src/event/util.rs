@@ -4,8 +4,10 @@ use tokio::{
     time::{self, Duration, Instant},
 };
 use tracing::*;
+use futures::future::{try_join_all, TryFutureExt};
+use uom::si::{f32::Velocity, length::millimeter, torque::newton_meter, velocity::meter_per_second};
 
-use crate::{axis::{setpoint::{AxisSetpoint, PositionSetpoint}, Axis, AxisConfig}, cfg::GantryConfig, command::GantryCommand, event::GantryEvent, gantry::Gantry};
+use crate::{axis::{setpoint::{AxisSetpoint, PositionSetpoint, TorqueSetpoint, VelocitySetpoint}, Axis, AxisConfig}, cfg::GantryConfig, command::GantryCommand, event::GantryEvent, gantry::Gantry};
 
 pub const TIMEOUT: Duration = Duration::from_secs(60);
 pub const HOME_TIMEOUT: Duration = Duration::from_secs(60);
@@ -18,21 +20,6 @@ pub enum TargetQuantity {
     Torque(f64),
 }
 
-impl TargetQuantity {
-    pub fn try_from_cmd(cmd: GantryCommand) -> Option<Self> {
-        match cmd {
-            GantryCommand::Setpoint => {
-                // Dirty hack, forgive me im tired
-                cmd.map_axes(|axis| {match axis {
-                    AxisSetpoint::RelativePosition(PositionSetpoint{target, ..}) =>
-                    Some(TargetQuantity::Position(target)),
-                }})
-
-            }
-            GantryCommand::Home => Some(Self::Home(true)),
-        }
-    }
-}
 
 /// Waits until a target is reached for the given axis
 /// Note: The accuracy window
@@ -205,57 +192,116 @@ pub async fn wait_for_position_target_reached(
     .await
 }
 
-pub async fn send_commmand_and_wait_until_completed(
+pub async fn wait_until_gantry_homed(
+    event_rx: broadcast::Receiver<GantryEvent>,
+    gantry: &Gantry,
+    cfg: &GantryConfig,
+    timeout: Duration,
+) -> anyhow::Result<()> {
+    let futures= vec![
+        cfg.x.as_ref().map(|x| wait_for_target_reached(event_rx.resubscribe(), TargetQuantity::Home(true),
+            x.axis.clone(),
+            timeout)), 
+        cfg.y.as_ref().map(|y| wait_for_target_reached(event_rx.resubscribe(), TargetQuantity::Home(true),
+            y.axis.clone(),
+            timeout)), 
+        cfg.z.as_ref().map(|z| wait_for_target_reached(event_rx.resubscribe(), TargetQuantity::Home(true),
+            z.axis.clone(),
+            timeout))
+    ];
+
+    let cmd = GantryCommand::Home;
+    info!("Sending gantry command: {cmd:?}");
+    gantry.send_command(cmd.clone()).await?;
+    info!("Waiting until command: {cmd:?} is completed");
+
+    let futures = futures.into_iter().flatten();
+    try_join_all(futures).await?;
+
+    info!("TEST: Gantry homed!");
+
+    Ok(())
+}
+
+pub async fn wait_until_gantry_command_completed(
     cmd: GantryCommand,
     event_rx: broadcast::Receiver<GantryEvent>,
     gantry: &Gantry,
     cfg: &GantryConfig,
     timeout: Duration,
 ) -> anyhow::Result<()> {
+    // Determine per-axis target quantity based on the given command
+    let target_quantity = match &cmd {
+        GantryCommand::Home => Some(TargetQuantity::Home(true)),
 
-    // Transform 
-    let target = match cmd {
         GantryCommand::Setpoint { x, y, z } => {
-
+            // Pick the first non-None axis to infer target quantity
+            let first = x.as_ref().or(y.as_ref()).or(z.as_ref());
+            first.map(axis_setpoint_to_target_quantity)
         }
-        GantryCommand::Home => TargetQuantity::Home(true),
-    }
-
-
-
-    let fut_x = if let Some(x) = &cfg.x {
-        wait_for_target_reached(event_rx, target, x.axis, timeout)
-    } else {
-        std::future::ready(Some(()));
     };
 
-    info!("Sending gantry command: {cmd:?}");
-    gantry.send_command(cmd).await?;
+    // Build futures if target quantity is defined
+    let futures = match target_quantity {
+        Some(target) => vec![
+            cfg.x.as_ref().map(|x| {
+                wait_for_target_reached(
+                    event_rx.resubscribe(),
+                    target.clone(),
+                    x.axis.clone(),
+                    timeout,
+                )
+            }),
+            cfg.y.as_ref().map(|y| {
+                wait_for_target_reached(
+                    event_rx.resubscribe(),
+                    target.clone(),
+                    y.axis.clone(),
+                    timeout,
+                )
+            }),
+            cfg.z.as_ref().map(|z| {
+                wait_for_target_reached(
+                    event_rx.resubscribe(),
+                    target.clone(),
+                    z.axis.clone(),
+                    timeout,
+                )
+            }),
+        ],
+        _ => vec![], // no target (shouldn't happen for valid commands)
+    };
 
+    let cmd = GantryCommand::Home;
+    info!("Sending gantry command: {cmd:?}");
+    gantry.send_command(cmd.clone()).await?;
     info!("Waiting until command: {cmd:?} is completed");
 
-    tokio::try_join!(
-        wait_for_target_reached(
-            gantry.get_event_rx(),
-            TargetQuantity::Home(true),
-            Axis::X,
-            HOME_TIMEOUT,
-        ),
-        wait_for_target_reached(
-            gantry.get_event_rx(),
-            TargetQuantity::Home(true),
-            Axis::Y,
-            HOME_TIMEOUT,
-        ),
-        wait_for_target_reached(
-            gantry.get_event_rx(),
-            TargetQuantity::Home(true),
-            Axis::Z,
-            HOME_TIMEOUT,
-        ),
-    )?;
+    let futures = futures.into_iter().flatten();
+    try_join_all(futures).await?;
 
     info!("TEST: Gantry homed!");
 
     Ok(())
 }
+
+
+fn axis_setpoint_to_target_quantity(sp: &AxisSetpoint) -> TargetQuantity {
+    match sp {
+        AxisSetpoint::RelativePosition(PositionSetpoint {
+            target,
+        ..}) => {
+            TargetQuantity::Position(target.get::<millimeter>())
+        },
+       AxisSetpoint::AbsolutePosition(PositionSetpoint {
+            target,
+        ..}) => {
+            TargetQuantity::Position(target.get::<millimeter>())
+        },
+        AxisSetpoint::Velocity(VelocitySetpoint{target}) =>
+        TargetQuantity::Velocity(target.get::<meter_per_second>()),
+        AxisSetpoint::Torque(TorqueSetpoint{target}) =>
+        TargetQuantity::Torque(target.get::<newton_meter>()),
+    }
+}
+

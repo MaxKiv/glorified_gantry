@@ -46,13 +46,7 @@ mod tests {
         let (canopen, _) = oze_canopen::canopen::start(String::from("can0"), Some(1_000_000));
 
         info!("Start Gantry, this initializes all axis motors using the given configs");
-        let gantry = Gantry::start(
-            canopen,
-            DEFAULT_X_CONFIG,
-            DEFAULT_Y_CONFIG,
-            DEFAULT_Z_CONFIG,
-        )
-        .await?;
+        let gantry = Gantry::start(canopen, DEFAULT_CONFIG).await?;
 
         info!("Spawn the ROS2 bridge");
         let (bridge_handle, shutdown_bridge) =

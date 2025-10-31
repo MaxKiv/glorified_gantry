@@ -7,6 +7,7 @@ use tracing::*;
 
 use crate::{
     axis::{AxisConfig, AxisMotors, receiver::AxisEventReceiver},
+    cfg::GantryConfig,
     command::{
         GantryCommand,
         handler::{CommandHandle, CommandHandler},
@@ -24,26 +25,22 @@ pub struct Gantry {
     sync: SyncMasterHandle,
     cmd_handler: CommandHandle,
     feedback_handler: FeedbackHandle,
+    cfg: GantryConfig,
 }
 
 impl Gantry {
-    pub async fn start(
-        canopen: CanOpenInterface,
-        x_cfg: Option<AxisConfig>,
-        y_cfg: Option<AxisConfig>,
-        z_cfg: Option<AxisConfig>,
-    ) -> anyhow::Result<Self> {
+    pub async fn start(canopen: CanOpenInterface, cfg: GantryConfig) -> anyhow::Result<Self> {
         info!("Starting SYNC Master");
         let sync = SyncMaster::init(canopen.clone());
 
         info!("Starting X Axis");
         // Initialize X Axis motors and return their handles + device scaling
         // All of this is a NOOP if this axis is disabled by setting its cfg to None
-        let (x_motors, x_recv, x_translator) = if let Some(cfg) = x_cfg {
+        let (x_motors, x_recv, x_translator) = if let Some(ref cfg) = cfg.x {
             let translator = SetpointTranslator::new(&cfg.scaling);
 
             let (motors, recv) =
-                Gantry::start_axis(cfg, canopen.clone(), sync.get_sync_receiver()).await?;
+                Gantry::start_axis(cfg.clone(), canopen.clone(), sync.get_sync_receiver()).await?;
             (Some(motors), Some(recv), Some(translator))
         } else {
             (None, None, None)
@@ -52,11 +49,11 @@ impl Gantry {
         info!("Starting Y Ayis");
         // Initialize X Axis motors and return their handles + device scaling
         // All of this is a NOOP if this axis is disabled by setting its cfg to None
-        let (y_motors, y_recv, y_translator) = if let Some(cfg) = y_cfg {
+        let (y_motors, y_recv, y_translator) = if let Some(ref cfg) = cfg.y {
             let translator = SetpointTranslator::new(&cfg.scaling);
 
             let (motors, recv) =
-                Gantry::start_axis(cfg, canopen.clone(), sync.get_sync_receiver()).await?;
+                Gantry::start_axis(cfg.clone(), canopen.clone(), sync.get_sync_receiver()).await?;
             (Some(motors), Some(recv), Some(translator))
         } else {
             (None, None, None)
@@ -65,11 +62,11 @@ impl Gantry {
         info!("Starting Z Azis");
         // Initialize X Axis motors and return their handles + device scaling
         // All of this is a NOOP if this axis is disabled by setting its cfg to None
-        let (z_motors, z_recv, z_translator) = if let Some(cfg) = z_cfg {
+        let (z_motors, z_recv, z_translator) = if let Some(ref cfg) = cfg.z {
             let translator = SetpointTranslator::new(&cfg.scaling);
 
             let (motors, recv) =
-                Gantry::start_axis(cfg, canopen.clone(), sync.get_sync_receiver()).await?;
+                Gantry::start_axis(cfg.clone(), canopen.clone(), sync.get_sync_receiver()).await?;
             (Some(motors), Some(recv), Some(translator))
         } else {
             (None, None, None)
@@ -102,6 +99,7 @@ impl Gantry {
             sync,
             cmd_handler,
             feedback_handler,
+            cfg,
         })
     }
 

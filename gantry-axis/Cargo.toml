@@ -11,6 +11,7 @@ tracing = "0.1.41"
 uom = "0.37.0"
 gantry-cia402 = { path = "../gantry-cia402/" }
 oze-canopen = { path = "../vendor/oze-canopen/" } 
+futures = "0.3.31"
 
 [dev-dependencies]
 gantry-demo = { path = "../gantry-demo/" } # For tracing setup

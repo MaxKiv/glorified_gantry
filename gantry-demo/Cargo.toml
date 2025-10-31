@@ -5,6 +5,7 @@ edition = "2024"
 
 [dependencies]
 gantry-axis = { path = "../gantry-axis/" }
+gantry-ros2 = { path = "../gantry-ros2/" }
 oze-canopen = { path = "../vendor/oze-canopen/" } 
 
 tokio = { version = "1", features = ["full"] }

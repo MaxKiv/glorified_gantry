@@ -1457,6 +1457,7 @@ name = "gantry-axis"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "futures",
  "gantry-cia402",
  "gantry-demo",
  "oze-canopen",
@@ -1493,6 +1494,7 @@ dependencies = [
  "chrono",
  "gantry-axis",
  "gantry-cia402",
+ "gantry-ros2",
  "owo-colors 4.2.3",
  "oze-canopen",
  "tokio",

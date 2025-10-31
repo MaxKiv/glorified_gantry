@@ -19,6 +19,7 @@ pub enum Axis {
 }
 
 /// Configuration struct for a single gantry axis
+#[derive(Clone)]
 pub struct AxisConfig {
     /// What axis is this config for
     pub axis: Axis,

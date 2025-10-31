@@ -36,7 +36,7 @@ mod tests {
         info!("Starting can interface");
         let (canopen, _) = oze_canopen::canopen::start(String::from("can0"), Some(1_000_000));
 
-        let gantry = Gantry::start(canopen, TEST_X_CONFIG, TEST_Y_CONFIG, TEST_Z_CONFIG).await?;
+        let gantry = Gantry::start(canopen, TEST_CONFIG).await?;
 
         let (bridge_handle, shutdown_bridge) =
             spawn_ros_bridge(gantry.get_event_rx(), gantry.get_cmd_tx());
