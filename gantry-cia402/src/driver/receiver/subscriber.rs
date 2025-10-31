@@ -31,7 +31,7 @@ pub async fn handle_feedback(
     trace!("Starting feedback handling loop");
 
     loop {
-        match tokio::time::timeout(Duration::from_secs(2), canopen.clone().rx.recv()).await {
+        match tokio::time::timeout(Duration::from_secs(2), canopen.rx.recv()).await {
             Ok(Ok(message)) => {
                 let span = span!(Level::TRACE, "receiver");
                 let _enter = span.enter();
@@ -50,7 +50,9 @@ pub async fn handle_feedback(
                     .node_id
                     .is_some_and(|message_id| message_id == this_node_id)
                 {
-                    trace!("message {message:?} is for this node {this_node_id} - processing");
+                    trace!(
+                        "message {message:?} - parsed {parsed:?} is for this node {this_node_id} - processing"
+                    );
                     // Our node talked, you love to see it
                     last_seen = Instant::now();
 

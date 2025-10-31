@@ -21,6 +21,7 @@ use crate::{
 #[derive(Debug)]
 pub struct ParseError(anyhow::Error);
 
+#[derive(Debug)]
 pub struct Frame {
     pub timestamp: Instant,
     pub node_id: Option<NodeId>, // Node id this message is for, None means broadcast

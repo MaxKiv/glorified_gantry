@@ -122,7 +122,7 @@ pub const DEFAULT_PARAMS: &[SdoAction] = &[
     // 6072h:00h – Max Torque [‰ of rated torque]
     SdoAction::Download {
         entry: &MAX_TORQUE,
-        data: &1000u16.to_le_bytes(),
+        data: &200u16.to_le_bytes(),
     },
     // 6073h:00h – Max Current [‰ of rated current]
     SdoAction::Download {

@@ -26,7 +26,7 @@ pub async fn run_gantry_ros_bridge(
     info!("Creating /joint_states publisher");
     let joint_pub = node.create_publisher::<sensor_msgs::msg::JointState>(
         "/joint_states",
-        r2r::QosProfile::sensor_data(),
+        r2r::QosProfile::default(),
     )?;
 
     info!("Creating /diagnostics publisher");

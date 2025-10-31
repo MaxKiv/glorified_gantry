@@ -25,7 +25,7 @@ pub struct Gantry {
     sync: SyncMasterHandle,
     cmd_handler: CommandHandle,
     feedback_handler: FeedbackHandle,
-    cfg: GantryConfig,
+    pub cfg: GantryConfig,
 }
 
 impl Gantry {
@@ -120,7 +120,7 @@ impl Gantry {
     ) -> anyhow::Result<(AxisMotors, AxisEventReceiver)> {
         let axis = cfg.axis.clone();
         let master_id = cfg.master;
-        let slave_id = cfg.slave.clone();
+        let slave_id = cfg.slave;
 
         // Construct this axis's motor drivers
         let motor = AxisMotors::new(canopen.clone(), cfg, sync_rx).await?;

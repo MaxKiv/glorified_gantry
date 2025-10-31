@@ -69,28 +69,50 @@ impl FeedbackHandler {
         gantry_tx: broadcast::Sender<GantryEvent>,
         translator: SetpointTranslator,
     ) -> anyhow::Result<()> {
-        loop {
-            let mut combiner = EventCombiner::new_for_axis(
-                receiver.axis.clone(),
-                receiver.master_id,
-                receiver.slave_id,
-            );
+        let mut combiner = EventCombiner::new_for_axis(
+            receiver.axis.clone(),
+            receiver.master_id,
+            receiver.slave_id,
+        );
 
+        loop {
             // Handle both master and slave events
             if let Some(slave) = &mut receiver.slave {
+                trace!(
+                    "Feedback: Axis {:?} has master + slave configuration",
+                    receiver.axis.clone()
+                );
                 tokio::select! {
                     // Receive motor events from master
                     Ok(event) = receiver.master.recv() => {
+                        trace!(
+                            "Feedback: Axis {:?} received master event: {event:?}",
+                            receiver.axis.clone()
+                        );
+
                         Self::handle_motor_event(receiver.axis.clone(), event, receiver.master_id,
                             &gantry_tx, &translator, &mut combiner);
                     },
                     // Receive motor events from slave
                     Ok(event) = slave.recv() => {
-                        Self::handle_motor_event(receiver.axis.clone(), event, receiver.master_id,
-                            &gantry_tx, &translator, &mut combiner);
+                        if let Some(slave_id) = receiver.slave_id {
+                            trace!(
+                                "Feedback: Axis {:?} received slave event: {event:?}",
+                                receiver.axis.clone()
+                            );
+
+                            Self::handle_motor_event(receiver.axis.clone(), event, slave_id,
+                                &gantry_tx, &translator, &mut combiner);
+                        } else {
+                            error!("Received slave event, but no slave id was configured for {:?}", receiver);
+                        }
                     }
                 }
             } else {
+                trace!(
+                    "Feedback: Axis {:?} has master onnly configuration, NO slave",
+                    receiver.axis.clone()
+                );
                 // If no slave is configured for this axis: Handle just the master events
                 if let Ok(event) = receiver.master.recv().await {
                     Self::handle_motor_event(

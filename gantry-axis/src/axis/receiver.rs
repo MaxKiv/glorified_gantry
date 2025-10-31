@@ -4,6 +4,7 @@ use tokio::sync::broadcast;
 
 use crate::axis::Axis;
 
+#[derive(Debug)]
 pub struct AxisEventReceiver {
     pub axis: Axis,
     pub master_id: NodeId,

@@ -47,6 +47,7 @@
         rclcpp
         std-msgs
         can-msgs
+        sensor-msgs
 
         ament-cmake
         ament-cmake-core

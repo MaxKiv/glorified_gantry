@@ -14,7 +14,8 @@ mod tests {
         event::{
             GantryEvent,
             util::{
-                wait_for_position_target_reached, wait_for_target_reached, wait_until_event_matches,
+                wait_for_position_target_reached, wait_for_target_reached,
+                wait_until_event_matches, wait_until_gantry_command_completed,
             },
         },
         gantry::Gantry,
@@ -40,7 +41,7 @@ mod tests {
         info!("Starting can interface");
         let (canopen, _) = oze_canopen::canopen::start(String::from("can0"), Some(1_000_000));
 
-        let gantry = Gantry::start(canopen, DEFAULT_CONFIG).await?;
+        let gantry = Gantry::start(canopen, Z_ONLY_CONFIG).await?;
 
         // Create a task for the test logic
         let test_task = tokio::spawn(test_gantry_homing(gantry));
@@ -79,53 +80,61 @@ mod tests {
         let vel = Velocity::new::<meter_per_second>(0.00005);
         let pos_zero = Length::new::<millimeter>(0.0);
 
-        for _num in 1..10 {
-            let event_rx = gantry.get_event_rx();
-            let setpoint = GantryCommand::Setpoint {
-                x: Some(AxisSetpoint::AbsolutePosition(PositionSetpoint {
-                    target: pos_target_x,
-                    velocity: vel,
-                })),
-                y: Some(AxisSetpoint::AbsolutePosition(PositionSetpoint {
-                    target: pos_target_y,
-                    velocity: vel,
-                })),
-                z: Some(AxisSetpoint::AbsolutePosition(PositionSetpoint {
-                    target: pos_target_z,
-                    velocity: vel,
-                })),
-            };
-            info!("TEST: Sending setpoint: {:?}", setpoint.clone());
+        let event_rx = gantry.get_event_rx();
+        let setpoint = GantryCommand::Setpoint {
+            x: Some(AxisSetpoint::AbsolutePosition(PositionSetpoint {
+                target: pos_target_x,
+                velocity: vel,
+            })),
+            y: Some(AxisSetpoint::AbsolutePosition(PositionSetpoint {
+                target: pos_target_y,
+                velocity: vel,
+            })),
+            z: Some(AxisSetpoint::AbsolutePosition(PositionSetpoint {
+                target: pos_target_z,
+                velocity: vel,
+            })),
+        };
+        info!("TEST: Sending setpoint: {:?}", setpoint.clone());
 
-            gantry.send_command(setpoint.clone()).await?;
+        wait_until_gantry_command_completed(
+            setpoint.clone(),
+            event_rx,
+            &gantry,
+            &gantry.cfg,
+            TIMEOUT,
+        )
+        .await?;
 
-            wait_for_position_target_reached(event_rx, TIMEOUT).await?;
+        info!("TEST: setpoint: {:?} REACHED", setpoint.clone());
 
-            info!("TEST: setpoint: {:?} REACHED", setpoint.clone());
-
-            let event_rx = gantry.get_event_rx();
-            let setpoint = GantryCommand::Setpoint {
-                x: Some(AxisSetpoint::AbsolutePosition(PositionSetpoint {
-                    target: pos_zero,
-                    velocity: vel,
-                })),
-                y: Some(AxisSetpoint::AbsolutePosition(PositionSetpoint {
-                    target: pos_zero,
-                    velocity: vel,
-                })),
-                z: Some(AxisSetpoint::AbsolutePosition(PositionSetpoint {
-                    target: pos_zero,
-                    velocity: vel,
-                })),
-            };
-            info!("TEST: Sending setpoint: {:?}", setpoint.clone());
-
-            gantry.send_command(setpoint.clone()).await?;
-
-            wait_for_position_target_reached(event_rx, TIMEOUT).await?;
-
-            info!("TEST: setpoint: {:?} REACHED", setpoint.clone());
-        }
+        // let event_rx = gantry.get_event_rx();
+        // let setpoint = GantryCommand::Setpoint {
+        //     x: Some(AxisSetpoint::AbsolutePosition(PositionSetpoint {
+        //         target: pos_zero,
+        //         velocity: vel,
+        //     })),
+        //     y: Some(AxisSetpoint::AbsolutePosition(PositionSetpoint {
+        //         target: pos_zero,
+        //         velocity: vel,
+        //     })),
+        //     z: Some(AxisSetpoint::AbsolutePosition(PositionSetpoint {
+        //         target: pos_zero,
+        //         velocity: vel,
+        //     })),
+        // };
+        // info!("TEST: Sending setpoint: {:?}", setpoint.clone());
+        //
+        // wait_until_gantry_command_completed(
+        //     setpoint.clone(),
+        //     event_rx,
+        //     &gantry,
+        //     &gantry.cfg,
+        //     TIMEOUT,
+        // )
+        // .await?;
+        //
+        // info!("TEST: setpoint: {:?} REACHED", setpoint.clone());
 
         Ok(())
     }

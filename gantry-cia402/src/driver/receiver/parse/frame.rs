@@ -77,6 +77,8 @@ impl TryFrom<RxMessage> for Frame {
 
             // T/RPDO1..4 (0x180 + n*0x200)
             0x180..=0x57F => {
+                // trace!("parsing message with COB-ID: {id} -> this is a T/RPDO");
+
                 let (kind, base) = match id {
                     0x180..=0x1FF => (PdoType::TPDO(1), 0x180),
                     0x200..=0x21F => (PdoType::RPDO(1), 0x200),
@@ -86,10 +88,18 @@ impl TryFrom<RxMessage> for Frame {
                     0x400..=0x41F => (PdoType::RPDO(3), 0x400),
                     0x480..=0x4FF => (PdoType::TPDO(4), 0x480),
                     0x500..=0x51F => (PdoType::RPDO(4), 0x500),
-                    _ => unreachable!(),
+                    _ => {
+                        error!(
+                            "Attempt to parse message {frame:?}, its COB-ID {id} is within T/RPDO range but doesnt map to #1-4?"
+                        );
+                        return Err(ParseError(anyhow::anyhow!(
+                            "Attempt to parse message {frame:?}, its COB-ID {id} is within T/RPDO range but doesnt map to #1-4?"
+                        )));
+                    }
                 };
                 // let node_id = Some((id - base) as u8);
                 let node = (id - base) as u8;
+                // trace!("parsing message with COB-ID: {id} -> this is a T/RPDO");
 
                 let (num, message) = match kind {
                     PdoType::RPDO(1) => (1, PDOMessage::RPDO1(frame.data.try_into()?)),

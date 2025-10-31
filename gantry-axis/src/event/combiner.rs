@@ -1,6 +1,7 @@
 use gantry_cia402::driver::event::MotorEvent;
 use oze_canopen::canopen::NodeId;
 use std::collections::HashMap;
+use tracing::trace;
 
 use crate::{
     axis::Axis,
@@ -9,10 +10,9 @@ use crate::{
     },
 };
 
-use super::GantryEvent;
-
 /// Collects relevant events and information from [`MotorEvents`] of all motors on a given axis and
 /// determines how these are combined into a single [`GantryEvent`]
+#[derive(Debug)]
 pub struct EventCombiner {
     axis: Axis,
     homing_feedback: HashMap<NodeId, HomingFeedback>,
@@ -23,6 +23,8 @@ pub struct EventCombiner {
 
 impl EventCombiner {
     pub fn new_for_axis(axis: Axis, master: NodeId, slave: Option<NodeId>) -> Self {
+        trace!("Constructing EventCombiner for {axis:?} - master: {master} - slave: {slave:?}");
+
         let mut homing_feedback = HashMap::new();
         let mut pos_mode_feedback = HashMap::new();
         let mut vel_mode_feedback = HashMap::new();
@@ -53,12 +55,16 @@ impl EventCombiner {
     /// Ganty-axis uses this to merge [`MotorEvent`] into [`GantryEvent`] to allow users to listen
     /// for e.g. Homing Completed on an axis level
     pub fn update(&mut self, node: NodeId, event: MotorEvent) -> Option<MotorEvent> {
+        trace!("Updating node {node} EventCombiner for event {event:?}");
+
         match event {
             MotorEvent::HomingFeedback {
                 at_home,
                 homing_completed,
                 homing_error,
             } => {
+                trace!("Updating HomingFeedback for node {node} with event {event:?}");
+
                 // Aggregate this new piece of feedback
                 self.homing_feedback.insert(
                     node,
@@ -69,8 +75,10 @@ impl EventCombiner {
                     },
                 );
 
-                // Combine it into a single  level feedback
+                // Combine it into a single level feedback
                 let combined = self.combine_homing_feedback();
+
+                trace!("Combined HomingFeedback for node {node} into {combined:?}");
 
                 Some(MotorEvent::HomingFeedback {
                     at_home: combined.at_home,
@@ -163,6 +171,8 @@ impl EventCombiner {
 
     /// Combines all aggregated homing feedback into a single piece of information
     pub fn combine_homing_feedback(&self) -> HomingFeedback {
+        trace!("Combining homing feedback for {self:?}");
+
         HomingFeedback {
             at_home: self.homing_feedback.values().all(|f| f.at_home),
             homing_completed: self.homing_feedback.values().all(|f| f.homing_completed),

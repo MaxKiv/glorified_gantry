@@ -14,12 +14,14 @@ mod tests {
         event::{
             GantryEvent,
             util::{
-                wait_for_position_target_reached, wait_for_target_reached, wait_until_event_matches,
+                wait_for_position_target_reached, wait_for_target_reached,
+                wait_until_event_matches, wait_until_gantry_command_completed,
             },
         },
         gantry::Gantry,
     };
-    use tokio::signal;
+    use std::time::Duration;
+    use tokio::{signal, time::sleep};
     use uom::si::{
         f64::{Length, Velocity},
         length::millimeter,
@@ -74,26 +76,13 @@ mod tests {
         gantry.send_command(GantryCommand::Home).await?;
 
         info!("TEST: wait on gantry homed");
-        tokio::try_join!(
-            wait_for_target_reached(
-                gantry.get_event_rx(),
-                gantry_axis::event::util::TargetQuantity::Home(true),
-                Axis::X,
-                HOME_TIMEOUT,
-            ),
-            wait_for_target_reached(
-                gantry.get_event_rx(),
-                gantry_axis::event::util::TargetQuantity::Home(true),
-                Axis::Y,
-                HOME_TIMEOUT,
-            ),
-            wait_for_target_reached(
-                gantry.get_event_rx(),
-                gantry_axis::event::util::TargetQuantity::Home(true),
-                Axis::Z,
-                HOME_TIMEOUT,
-            ),
-        )?;
+        wait_for_target_reached(
+            gantry.get_event_rx(),
+            gantry_axis::event::util::TargetQuantity::Home(true),
+            Axis::Z,
+            HOME_TIMEOUT,
+        )
+        .await?;
         info!("TEST: Gantry homed!");
 
         info!("Moving Gantry into initial test position");
@@ -118,28 +107,15 @@ mod tests {
         };
 
         info!("TEST: Sending setpoint: {:?}", setpoint.clone());
-        gantry.send_command(setpoint.clone()).await?;
 
-        tokio::try_join!(
-            wait_for_target_reached(
-                gantry.get_event_rx(),
-                gantry_axis::event::util::TargetQuantity::Position(target_x.get::<millimeter>()),
-                Axis::X,
-                TIMEOUT,
-            ),
-            wait_for_target_reached(
-                gantry.get_event_rx(),
-                gantry_axis::event::util::TargetQuantity::Position(target_y.get::<millimeter>()),
-                Axis::Y,
-                TIMEOUT,
-            ),
-            wait_for_target_reached(
-                gantry.get_event_rx(),
-                gantry_axis::event::util::TargetQuantity::Position(target_z.get::<millimeter>()),
-                Axis::Z,
-                TIMEOUT,
-            ),
-        )?;
+        wait_until_gantry_command_completed(
+            setpoint.clone(),
+            gantry.get_event_rx(),
+            &gantry,
+            &gantry.cfg,
+            TIMEOUT,
+        )
+        .await?;
 
         let pos_zero = Length::new::<millimeter>(0.0);
 
@@ -166,36 +142,17 @@ mod tests {
                 };
                 info!("TEST: Sending setpoint: {:?}", setpoint.clone());
 
-                gantry.send_command(setpoint.clone()).await?;
-
-                tokio::try_join!(
-                    wait_for_target_reached(
-                        gantry.get_event_rx(),
-                        gantry_axis::event::util::TargetQuantity::Position(
-                            target_x.get::<millimeter>()
-                        ),
-                        Axis::X,
-                        TIMEOUT,
-                    ),
-                    wait_for_target_reached(
-                        gantry.get_event_rx(),
-                        gantry_axis::event::util::TargetQuantity::Position(
-                            target_y.get::<millimeter>()
-                        ),
-                        Axis::Y,
-                        TIMEOUT,
-                    ),
-                    wait_for_target_reached(
-                        gantry.get_event_rx(),
-                        gantry_axis::event::util::TargetQuantity::Position(
-                            target_z.get::<millimeter>()
-                        ),
-                        Axis::Z,
-                        TIMEOUT,
-                    ),
-                )?;
-
+                wait_until_gantry_command_completed(
+                    setpoint.clone(),
+                    event_rx,
+                    &gantry,
+                    &gantry.cfg,
+                    TIMEOUT,
+                )
+                .await?;
                 info!("TEST: setpoint: {:?} REACHED", setpoint.clone());
+
+                sleep(Duration::from_millis(1000)).await;
             }
         }
 

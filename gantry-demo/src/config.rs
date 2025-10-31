@@ -5,6 +5,12 @@ use gantry_axis::{
 };
 use gantry_cia402::driver::startup::params::{TEST_PARAMS, default::DEFAULT_PARAMS};
 
+pub const Z_ONLY_CONFIG: GantryConfig = GantryConfig {
+    x: X_DISABLED,
+    y: Y_DISABLED,
+    z: DEFAULT_Z_CONFIG,
+};
+
 pub const DEFAULT_CONFIG: GantryConfig = GantryConfig {
     x: DEFAULT_X_CONFIG,
     y: DEFAULT_Y_CONFIG,
@@ -19,7 +25,8 @@ pub const DEFAULT_X_CONFIG: Option<AxisConfig> = Some(AxisConfig {
     scaling: DeviceScaling::default_setup(),
 });
 
-// pub const DEFAULT_X_CONFIG: Option<AxisConfig> = None;
+pub const X_DISABLED: Option<AxisConfig> = None;
+pub const Y_DISABLED: Option<AxisConfig> = None;
 
 pub const DEFAULT_Y_CONFIG: Option<AxisConfig> = Some(AxisConfig {
     axis: Axis::Y,

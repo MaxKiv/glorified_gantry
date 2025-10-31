@@ -11,6 +11,7 @@ mod tests {
 
     use gantry_axis::sync::SyncMaster;
     use gantry_cia402::{
+        comms::sdo::SdoAction,
         driver::{
             Cia402Driver,
             builder::Cia402DriverBuilder,
@@ -19,6 +20,7 @@ mod tests {
             receiver::subscriber::{
                 wait_for_event, wait_for_setpoint_acknowledge, wait_for_target_reached,
             },
+            startup::params::default::DEFAULT_PARAMS,
             state::Cia402State,
         },
         error::DriveError,
@@ -34,7 +36,8 @@ mod tests {
     async fn test_position_mode() -> anyhow::Result<()> {
         gantry_demo::setup_tracing();
 
-        pub const NODE_ID: u8 = 3;
+        pub const PARAMS: &[SdoAction] = DEFAULT_PARAMS;
+        pub const NODE_ID: u8 = 4;
         let node_id = NODE_ID;
 
         info!("Starting can interface");
@@ -136,8 +139,8 @@ mod tests {
             info!("Doing position relative position movement backward # {num}");
             drive
                 .cmd_tx
-                .send(MotorCommand::MoveAbsolute {
-                    target: -TEST_POSITION,
+                .send(MotorCommand::MoveRelative {
+                    delta: -TEST_POSITION,
                     profile_velocity: TEST_SPEED,
                 })
                 .map_err(DriveError::CommandError)?;

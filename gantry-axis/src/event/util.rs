@@ -272,7 +272,6 @@ pub async fn wait_until_gantry_command_completed(
         _ => vec![], // no target (shouldn't happen for valid commands)
     };
 
-    let cmd = GantryCommand::Home;
     info!("Sending gantry command: {cmd:?}");
     gantry.send_command(cmd.clone()).await?;
     info!("Waiting until command: {cmd:?} is completed");
@@ -280,7 +279,7 @@ pub async fn wait_until_gantry_command_completed(
     let futures = futures.into_iter().flatten();
     try_join_all(futures).await?;
 
-    info!("TEST: Gantry homed!");
+    info!("Gantry command completed: {cmd:?}");
 
     Ok(())
 }
