@@ -8,22 +8,22 @@ This repository contains 6 crates organized as follows:
 
 _Core Libraries_
 
-gantry-cia402 - Low-level CiA 402 motor driver implementation
-gantry-axis - Multi-axis gantry coordination layer
-gantry-ros2 - ROS2 bridge for integration with robotics systems
-gantry-demo - Shared testing utilities and example configurations
+- `gantry-cia402` - Low-level CiA 402 motor driver implementation
+- `gantry-axis` - Multi-axis gantry coordination layer
+- `gantry-ros2` - ROS2 bridge for integration with robotics systems
+- `gantry-demo` - Shared testing utilities and example configurations
 
 _Applications_
 
-gantry-sniffer - CANopen bus monitoring and debugging tool
-gantry-gui - Desktop GUI for manual gantry control
+- `gantry-sniffer` - CANopen bus monitoring and debugging tool
+- `gantry-gui` - Desktop GUI for manual gantry control
 
 _System Requirements_
 
-Platform: x86_64 Linux
-Rust: Stable toolchain
-CAN Interface: SocketCAN-compatible hardware
-Motors: 1+ Cia402-Compatible Motor Drivers
+- Platform: `x86_64 Linux`
+- Rust Toolchain: Stable (see `rust-toolchain.toml`)
+- CAN Interface: `SocketCAN` compatible hardware
+- Motors: 1+ `Cia402` compatible Motor Drivers
 
 # Quick start
 
@@ -234,36 +234,25 @@ doesnt work fully
 
 - Consecutive movement seems broken using `PositionModeFlagsCW::DECELERATE_AFTER_REACHING`
 
-- Cia402State::OperationEnabled -> SwitchOnDisabled seems broken, should we use quick stop transition?
+- Profile Torque mode has trouble hitting torque target precisely, sometimes this takes
+  ages to converge. -> Listen for torqueFeedback { actual_torque: i32 } instead
+  and define a target reached margin myself.
+  => This is now done more generally in
+  `gantry_axis::event::util::wait_for_target_reached`
+
+- Cia402State::OperationEnabled -> SwitchOnDisabled seems broken, should use quick stop transition?
 
 # TODO
 
-## Gantry-axis
-
-- [!] Refactor `DeviceScaling` from guesstimate scaling factors into sensible
-  values that include the fact that the Z-axis has a gearbox.
-
-- [!] Add logic to gantry-axis that quick stops all motors in an axis when one of
+- !! Add logic to gantry-axis that quick stops all motors in an axis when one of
   them reports a fault OR reboots.
 
-- Add the option to test against a `vcan` interface, unlocking the ability to
-  test without requiring hardware. Use this to fuzz test the gantry-axis
-  synchronisation.
+- ! Figure out how to map T/RPDO's, and how to generalise de/serialisation
 
-## Gantry-cia402
+- Invalidate all PDOs in the device before mapping, currently TPDO4 isnt in CUSTOM_TPDOS, so
+  its never changed from the default and will generate warnings
+  -> quick fix by adding EMPTY_TPDO4
 
-- [!] Debug multi-motor axis synchronisation issues OR refactor and move
-  synchronisation into gantry-cia402's PDO logic.
+- Make error handling uniform across the driver
 
-- [!] Re-enable expected limit switch behaviour after homing. Currently I
-  disable limit switch behaviour before homing (which is required), but never
-  re-enable it again.
-
-- Improve error handling (currently I report them and continue) and make them
-  uniform across the driver.
-
-- Improve T/RPDO's mapping and generalise de/serialisation
-
-## Gantry-gui
-
-- Finish the GUI
+- Fuzz test orchestrator state orchestrator/machine, this can be done in isolation without CAN, easy wins
