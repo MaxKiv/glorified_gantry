@@ -9,10 +9,7 @@ use tokio::{
 use tracing::*;
 
 use crate::{
-    comms::pdo::{
-        cmd::PdoCommand,
-        mapping::custom::CUSTOM_PDOS,
-    },
+    comms::pdo::{cmd::PdoCommand, mapping::custom::CUSTOM_PDOS},
     driver::{
         cyclic::CyclicSynchronousMode,
         event::MotorEvent,
@@ -83,9 +80,9 @@ impl SetpointManager {
         (handle, new_setpoint_tx, cs_mode_tx)
     }
 
-    /// Sends new setpoints to the device
-    /// Manages
-    /// Also handles the handshake procedure for profile position
+    /// Sends new setpoints to the device using [`Pdo`] as transport layer
+    /// Handles the handshake procedure for profile position
+    /// And Sync callbacks required for any CyclicSynchronous mode
     async fn run(mut self) {
         loop {
             tokio::select! {

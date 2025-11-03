@@ -31,6 +31,7 @@ impl From<NmtState> for NmtCommandSpecifier {
     }
 }
 
+/// Processes NMT state requests from users and integrates NMT device feedback
 pub async fn nmt_task(
     node_id: u8,
     canopen: CanOpenInterface,

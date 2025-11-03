@@ -351,6 +351,8 @@ impl Pdo {
         Ok(())
     }
 
+    /// Writes the given position setpoint to the device by setting the appropriate operating mode,
+    /// target setpoint and toggling the required controlword bits
     pub async fn write_position_setpoint(
         &mut self,
         PositionSetpoint {
@@ -396,6 +398,8 @@ impl Pdo {
         Ok(())
     }
 
+    /// Writes the given velocity setpoint to the device by setting the appropriate operating mode,
+    /// target setpoint and toggling the required controlword bits
     pub async fn write_velocity_setpoint(
         &mut self,
         VelocitySetpoint {
@@ -420,6 +424,8 @@ impl Pdo {
         Ok(())
     }
 
+    /// Writes the given torque setpoint to the device by setting the appropriate operating mode,
+    /// target setpoint and toggling the required controlword bits
     pub async fn write_torque_setpoint(
         &mut self,
         TorqueSetpoint {
@@ -444,6 +450,8 @@ impl Pdo {
         Ok(())
     }
 
+    /// Writes the given homing setpoint to the device by setting the appropriate operating mode,
+    /// and toggling the required controlword bits
     pub async fn write_homing_setpoint(
         &mut self,
         HomingSetpoint { flags }: &HomingSetpoint,
@@ -503,6 +511,7 @@ impl Pdo {
         false
     }
 
+    /// Send a PDO frame out to the device
     async fn send_rpdo(&mut self, pdo_mapping: PdoMapping) -> Result<(), DriveError> {
         let PdoType::RPDO(num) = pdo_mapping.pdo else {
             return Err(DriveError::ViolatedInvariant(
@@ -548,7 +557,7 @@ impl Pdo {
         Ok(())
     }
 
-    /// Gets current control word
+    /// Gets current control word from internal state
     fn get_current_controlword(&self) -> ControlWord {
         let PdoType::RPDO(num) = RPDO_CONTROL_OPMODE.pdo else {
             panic!("Controlword is not mapped to RPDO");
@@ -589,6 +598,7 @@ impl Pdo {
         info!("Controlword after Set: {cw:?}");
     }
 
+    /// Effect a device operational mode change to the given operational mode
     fn set_operational_mode(&mut self, mode: OperationMode) {
         trace!("setting operational mode to {mode:?}");
 

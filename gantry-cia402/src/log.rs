@@ -8,6 +8,7 @@ use crate::{
 };
 
 #[instrument(skip(event_rx))]
+/// Logs Cia402 Driver [`MotorEvent`] events, which are the output interface of `gantry-cia402`
 pub async fn log_events(
     mut event_rx: broadcast::Receiver<MotorEvent>,
     node_id: u8,

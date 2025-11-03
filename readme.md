@@ -70,6 +70,142 @@ The system is built on the `tokio` async runtime and follows a layered architect
 Each layer communicates via async channels using Tokio's broadcast/mpsc
 synchronisation primitives.
 
+## Task Architecture
+
+A `Cia402` compatible driver must perform multiple distinct tasks, these are
+modelled as `tokio` async tasks.
+
+### **FEEDBACK Task** (`handle_feedback`)
+
+- **Responsibility**: Receive and parse CAN frames from the bus
+- **Key Functions**:
+  - Parse raw CAN frames into structured `Frame` types
+  - Decode TPDOs into motor feedback (position, velocity, torque, statusword)
+  - Broadcast `MotorEvent`s to all subscribers
+- **Channels**:
+  - Input: `CanOpenInterface.rx` (CAN frames)
+  - Output: `broadcast<MotorEvent>` (parsed events)
+
+### **NMT Task** (`nmt_task`)
+
+- **Responsibility**: Manage Network Management state transitions
+- **Key Functions**:
+  - Track current NMT state
+  - Send NMT commands to change device state (PreOperational, Operational, etc.)
+  - Coordinate with startup for configuration phases
+- **Channels**:
+  - Input: `mpsc<NmtState>` (state requests)
+  - Input: `broadcast<MotorEvent>` (NMT feedback)
+  - Output: `CanOpenInterface.tx` (NMT commands)
+
+### **CIA-SM Task** (`cia402_state_machine_task`)
+
+- **Responsibility**: Track CiA402 state and validate transitions
+- **Key Functions**:
+  - Decode `StatusWord` into `Cia402State`
+  - Validate state transition requests
+  - Generate `Cia402Flags` for valid transitions
+  - Broadcast state changes
+- **Channels**:
+  - Input: `broadcast<MotorEvent>` (statusword updates)
+  - Input: `mpsc<Cia402State>` (transition requests from orchestrator)
+  - Output: `broadcast<Cia402State>` (state updates to orchestrator)
+  - Output: `mpsc<Cia402Command>` (transition/update commands to publisher)
+
+### **CIA-OR Task** (`cia402_orchestrator_task`)
+
+- **Responsibility**: Orchestrate multi-step CiA402 state transitions
+- **Key Functions**:
+  - Calculate transition paths (e.g., Fault → OperationEnabled requires multiple steps)
+  - Send individual transition requests to state machine
+  - Handle transition timeouts and retries
+  - Track progress through transition sequences
+- **Channels**:
+  - Input: `broadcast<MotorCommand>` (Enable/Disable commands)
+  - Input: `broadcast<Cia402State>` (state feedback from SM)
+  - Output: `mpsc<Cia402State>` (single transition requests)
+
+### **UPDATE Task** (`publish_updates`)
+
+- **Responsibility**: Aggregate and route motor commands
+- **Key Functions**:
+  - Convert `MotorCommand`s to `Setpoint`s or `PdoCommand`s
+  - Handle mode switches (e.g., entering Cyclic Synchronous Mode)
+  - Coordinate between state machine transitions and setpoint writes
+- **Channels**:
+  - Input: `broadcast<MotorCommand>` (user commands)
+  - Input: `mpsc<Cia402Command>` (state machine requests)
+  - Output: `mpsc<Setpoint>` (to setpoint manager)
+  - Output: `mpsc<PdoCommand>` (to PDO task)
+
+### **SETPOINT MANAGER Task** (`SetpointManager`)
+
+- **Responsibility**: Manage setpoint timing and handshakes
+- **Key Functions**:
+  - Handle Profile Position handshake (set bit 4, wait for acknowledge, clear bit 4)
+  - Manage Cyclic Synchronous Mode setpoint transmission on SYNC
+  - Track current setpoint and operational mode
+- **Channels**:
+  - Input: `mpsc<Setpoint>` (new setpoints)
+  - Input: `broadcast<Instant>` (SYNC events)
+  - Input: `broadcast<MotorEvent>` (feedback for handshakes)
+  - Output: `mpsc<PdoCommand>` (to PDO task)
+
+### **PDO Task** (`Pdo`)
+
+- **Responsibility**: Low-level PDO frame construction and transmission
+- **Key Functions**:
+  - Maintain RPDO frame state (controlword, operation mode, targets)
+  - Apply updates to RPDO frames
+  - Send RPDO frames to CAN bus
+  - Handle PDO remapping for mode switches
+- **Channels**:
+  - Input: `mpsc<PdoCommand>` (update requests)
+  - Output: `CanOpenInterface.tx` (RPDO frames)
+
+### **STARTUP Task** (`motor_startup_task`)
+
+- **Responsibility**: Initialize motor on power-up
+- **Key Functions**:
+  - Set device to NMT PreOperational
+  - Write motor parameters via SDO (acceleration, velocity limits, etc.)
+  - Configure TPDO/RPDO mappings
+  - Set device to NMT Operational
+- **Channels**:
+  - Input: Parameters (`&[SdoAction]`)
+  - Output: `mpsc<NmtState>` (NMT transitions)
+  - Output: SDO client (parameter writes)
+
+## Key Data Types
+
+### Commands & Events
+
+- **`MotorCommand`**: User-level commands (Enable, Home, MoveAbsolute, SetTorque, etc.)
+- **`MotorEvent`**: Device feedback (StatusWord, PositionFeedback, HomingFeedback, etc.)
+- **`PdoCommand`**: Low-level PDO operations (WriteSetpoint, WriteCia402Transition, etc.)
+- **`Cia402Command`**: State machine commands (Update, Transition)
+
+### State Types
+
+- **`Cia402State`**: CiA402 state machine states (ReadyToSwitchOn, OperationEnabled, etc.)
+- **`Cia402Flags`**: Control word flags for state transitions
+- **`NmtState`**: CANopen NMT states (PreOperational, Operational, etc.)
+- **`OperationMode`**: CiA402 operation modes (ProfilePosition, Homing, CyclicSynchronousPosition, etc.)
+
+### Setpoint Types
+
+- **`Setpoint`**: Enum of all mode-specific setpoints (ProfilePosition, Home, CyclicTorque, etc.)
+- **`PositionSetpoint`**: Target position + flags + profile velocity
+- **`VelocitySetpoint`**: Target velocity
+- **`TorqueSetpoint`**: Target torque
+- **`HomingSetpoint`**: Homing flags
+
+## Design Patterns
+
+1. **Task Isolation**: Each task has a single, well-defined responsibility
+2. **Event-Driven**: Tasks react to events rather than polling
+3. **Channel-Based Communication**: Tasks communicate via typed channels (mpsc/broadcast)
+
 # Toolchain Setup
 
 This project requires both Rust and ROS2 (Jazzy) to build and run. We provide two methods for setting up your development environment.

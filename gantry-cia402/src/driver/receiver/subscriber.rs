@@ -20,6 +20,8 @@ use crate::{
     log::format_frame,
 };
 
+/// Central task that handles all receiving communications from the motor/device
+/// This device feedback is parsed, and relevant information is broadcast as [`MotorEvent`]
 pub async fn handle_feedback(
     this_node_id: u8,
     mut canopen: CanOpenInterface,
