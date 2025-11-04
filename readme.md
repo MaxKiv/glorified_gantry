@@ -70,6 +70,8 @@ The system is built on the `tokio` async runtime and follows a layered architect
 Each layer communicates via async channels using Tokio's broadcast/mpsc
 synchronisation primitives.
 
+<img src="./data/gantry_architecture.svg" alt="Gantry Architecture" width="800"/>
+
 ## Task Architecture
 
 A `Cia402` compatible driver must perform multiple distinct tasks, these are

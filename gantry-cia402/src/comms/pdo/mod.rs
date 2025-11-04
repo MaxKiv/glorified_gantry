@@ -111,13 +111,7 @@ impl Pdo {
                     use PdoCommand::*;
                     match cmd {
                         UpdateCia402Flags(cia402flags) => {
-                            if let Err(err) = self.update_cia402_state_transition(&cia402flags) {
-                                error!(
-                                    "PDO unable to write cia402 state transition: 
-                                    {cia402flags:?} to device id {} - {err}",
-                                    self.node_id
-                                );
-                            }
+                            self.update_cia402_state_transition(&cia402flags);
                         }
                         WriteCia402Transition(cia402flags) => {
                             if let Err(err) = self.write_cia402_state_transition(&cia402flags).await
@@ -150,11 +144,13 @@ impl Pdo {
                             }
                         }
                         ExitCyclicSynchronousMode => {
-                            self.disable_cyclic_synchronous_mode().await;
+                            if let Err(err) = self.disable_cyclic_synchronous_mode().await {
+                                error!("Unable to disable cyclic synchronous mode: {err}");
+                            }
                         }
                     }
                 }
-                None => {
+                _ => {
                     error!(
                         "PDO receiver channel closed -> update publisher and 
                         setpoint manager both dropped their pdo_tx,
@@ -168,10 +164,7 @@ impl Pdo {
     /// Updates the cia402 Controlword flags to a new value
     /// This is required when the device informs us of a state update
     /// or when we want to effect a cia402 transition ourselves
-    pub fn update_cia402_state_transition(
-        &mut self,
-        flags: &Cia402Flags,
-    ) -> Result<(), DriveError> {
+    pub fn update_cia402_state_transition(&mut self, flags: &Cia402Flags) {
         trace!("Cia402 CW Flags are updated to: {flags:?}");
 
         // Set the cia402 controlword bits to represent the requested state
@@ -180,8 +173,6 @@ impl Pdo {
 
         cw = cw.with_cia402_flags(flags);
         self.set_controlword_rpdo(cw);
-
-        Ok(())
     }
 
     // Perform the given cia402 state transition by writing the corresponding controlword flags and

@@ -140,6 +140,8 @@ MotorCommand → [Command Handler]
 CAN Bus MotorEvent → [Subscribers]
 ```
 
+<img src="../data/cia402_diagram.png" alt="Cia402 Architecture" width="800"/>
+
 # Data Flow
 
 Command Path: MotorCommand → Orchestrator determines state transitions → State Machine validates → Update Publisher centrally combines device updates → PDO Task sends these onto the bus

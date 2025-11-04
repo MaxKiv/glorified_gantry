@@ -147,7 +147,8 @@ impl Cia402Driver {
                 .expect("unable to construct PDO client for node id {node_id}");
         handles.push(pdo_handle);
 
-        // Start the setpoint manager for this node, this encapsulates reactive setpoint logic by clearing CW bit 4 when device posts SW 12
+        // Start the setpoint manager for this device, handles setpoint writes and OMS specifics
+        // like profile position handshaking
         let (setpoint_manager_handle, new_setpoint_tx, cs_mode_tx) =
             SetpointManager::init(event_rx_setpoint_manager, pdo_tx.clone(), sync_rx);
         handles.push(setpoint_manager_handle);
