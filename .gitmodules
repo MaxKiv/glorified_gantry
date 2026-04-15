@@ -1,0 +1,3 @@
+[submodule "vendor/oze-canopen"]
+	path = vendor/oze-canopen
+	url = git@github.com:MaxKiv/oze-canopen.git
