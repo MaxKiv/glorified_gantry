@@ -4,7 +4,7 @@ use tokio::{
     time::{self, Duration, Instant},
 };
 use tracing::*;
-use futures::future::{try_join_all, TryFutureExt};
+use futures::future::{join_all, try_join_all, TryFutureExt};
 use uom::si::{f32::Velocity, length::millimeter, torque::newton_meter, velocity::meter_per_second};
 
 use crate::{axis::{setpoint::{AxisSetpoint, PositionSetpoint, TorqueSetpoint, VelocitySetpoint}, Axis, AxisConfig}, cfg::GantryConfig, command::GantryCommand, event::GantryEvent, gantry::Gantry};
@@ -198,27 +198,8 @@ pub async fn wait_until_gantry_homed(
     cfg: &GantryConfig,
     timeout: Duration,
 ) -> anyhow::Result<()> {
-    let futures= vec![
-        cfg.x.as_ref().map(|x| wait_for_target_reached(event_rx.resubscribe(), TargetQuantity::Home(true),
-            x.axis.clone(),
-            timeout)), 
-        cfg.y.as_ref().map(|y| wait_for_target_reached(event_rx.resubscribe(), TargetQuantity::Home(true),
-            y.axis.clone(),
-            timeout)), 
-        cfg.z.as_ref().map(|z| wait_for_target_reached(event_rx.resubscribe(), TargetQuantity::Home(true),
-            z.axis.clone(),
-            timeout))
-    ];
-
-    let cmd = GantryCommand::Home;
-    info!("Sending gantry command: {cmd:?}");
-    gantry.send_command(cmd.clone()).await?;
-    info!("Waiting until command: {cmd:?} is completed");
-
-    let futures = futures.into_iter().flatten();
-    try_join_all(futures).await?;
-
-    info!("TEST: Gantry homed!");
+    wait_until_gantry_command_completed(GantryCommand::Home, event_rx, gantry, cfg,
+        timeout).await?;
 
     Ok(())
 }
@@ -277,7 +258,7 @@ pub async fn wait_until_gantry_command_completed(
     info!("Waiting until command: {cmd:?} is completed");
 
     let futures = futures.into_iter().flatten();
-    try_join_all(futures).await?;
+    join_all(futures).await;
 
     info!("Gantry command completed: {cmd:?}");
 

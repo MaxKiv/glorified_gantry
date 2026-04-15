@@ -48,7 +48,7 @@ mod tests {
         info!("Starting can interface");
         let (canopen, _) = oze_canopen::canopen::start(String::from("can0"), Some(1_000_000));
 
-        let gantry = Gantry::start(canopen, Z_ONLY_CONFIG).await?;
+        let gantry = Gantry::start(canopen, YZ_CONFIG).await?;
 
         // Create a task for the test logic
         let test_task = tokio::spawn(test_gantry_ros(gantry));
@@ -67,10 +67,6 @@ mod tests {
     }
 
     async fn test_gantry_ros(gantry: Gantry) -> anyhow::Result<()> {
-        info!("Spawn the ROS2 bridge");
-        let (bridge_handle, shutdown_bridge) =
-            spawn_ros_bridge(gantry.get_event_rx(), gantry.get_cmd_tx());
-
         info!("TEST: Homing gantry");
         info!("TEST: wait on gantry homed");
         wait_until_gantry_command_completed(
@@ -118,8 +114,14 @@ mod tests {
 
         info!("TEST: Starting position reached!");
 
-        info!("TEST: Sleeping for 10 minutes");
-        sleep(Duration::from_secs(6000)).await;
+        info!("Spawn the ROS2 bridge");
+        let (bridge_handle, shutdown_bridge) =
+            spawn_ros_bridge(gantry.get_event_rx(), gantry.get_cmd_tx());
+
+        info!("TEST: Sleeping forever...");
+        std::future::pending::<()>().await;
+        // info!("TEST: Sleeping for 10 minutes");
+        // sleep(Duration::from_secs(6000)).await;
 
         Ok(())
     }

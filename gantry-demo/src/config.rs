@@ -11,6 +11,12 @@ pub const Z_ONLY_CONFIG: GantryConfig = GantryConfig {
     z: DEFAULT_Z_CONFIG,
 };
 
+pub const YZ_CONFIG: GantryConfig = GantryConfig {
+    x: X_DISABLED,
+    y: DEFAULT_Y_CONFIG,
+    z: DEFAULT_Z_CONFIG,
+};
+
 pub const DEFAULT_CONFIG: GantryConfig = GantryConfig {
     x: DEFAULT_X_CONFIG,
     y: DEFAULT_Y_CONFIG,
