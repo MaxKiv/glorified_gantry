@@ -39,14 +39,14 @@ mod tests {
     const TEST_SETPOINTS: [(f64, f64, f64); 4] = [
         (20.0, 5.0, 5.0),
         (10.0, 50.0, 5.0),
-        (0.0, 50.0, 80.0),
-        (10.0, 5.0, 80.0),
+        (0.0, 50.0, 84.5),
+        (10.0, 5.0, 84.5),
     ];
     const TEST_SETPOINTS_LEN: usize = TEST_SETPOINTS.len();
 
     #[tokio::test]
     /// Test basic cia402 state transitions
-    async fn pos_test() -> anyhow::Result<()> {
+    async fn hannover_messe() -> anyhow::Result<()> {
         gantry_demo::setup_tracing();
 
         info!("Starting can interface");
@@ -156,7 +156,7 @@ mod tests {
                 .await?;
                 info!("TEST: setpoint: {:?} REACHED", setpoint.clone());
 
-                // sleep(Duration::from_millis(1000)).await;
+                sleep(Duration::from_millis(666)).await;
             }
         }
 

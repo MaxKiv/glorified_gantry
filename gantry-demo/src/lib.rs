@@ -13,29 +13,42 @@ use owo_colors::OwoColorize;
 use tracing::field::{Field, Visit};
 use tracing_subscriber::EnvFilter;
 use tracing_subscriber::fmt::*;
+use tracing_subscriber::FmtSubscriber;
 use tracing_subscriber::{fmt::format::Writer, registry::LookupSpan};
 
 /// Sets up the tracing logging library
 pub fn setup_tracing() {
     // Default: info, can be overridden via RUST_LOG
-    let env_filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));
+    // let env_filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));
 
-    // Custom canopen formatter used to pretty print canopen traffic
-    let frame_fmt_layer = tracing_subscriber::fmt::layer()
-        .event_format(FrameFormatter)
-        .with_filter(filter_fn(|meta| meta.target() == "canopen"));
+    // // Custom canopen formatter used to pretty print canopen traffic
+    // let frame_fmt_layer = tracing_subscriber::fmt::layer()
+    //     .event_format(FrameFormatter)
+    //     .with_filter(filter_fn(|meta| meta.target() == "canopen"));
 
-    // Default formatter for the rest
-    let default_layer =
-        tracing_subscriber::fmt::layer().with_filter(filter_fn(|meta| meta.target() != "canopen"));
+    // // Default formatter for the rest
+    // let default_layer =
+    //     tracing_subscriber::fmt::layer().with_filter(filter_fn(|meta| meta.target() != "canopen"));
 
-    let subscriber = Registry::default()
-        .with(frame_fmt_layer)
-        .with(env_filter)
-        .with(default_layer);
+    // let subscriber = Registry::default()
+    //     .with(frame_fmt_layer)
+    //     .with(env_filter)
+    //     .with(default_layer);
 
-    tracing::subscriber::set_global_default(subscriber)
-        .expect("setting default tracing subscriber failed");
+    // tracing::subscriber::set_global_default(subscriber)
+    //     .expect("setting default tracing subscriber failed");
+
+
+            // a builder for `FmtSubscriber`.
+    let subscriber = FmtSubscriber::builder()
+    // all spans/events with a level higher than TRACE (e.g, debug, info, warn, etc.)
+    // will be written to stdout.
+    .with_max_level(Level::INFO)
+    // completes the builder.
+    .finish();
+
+tracing::subscriber::set_global_default(subscriber)
+    .expect("setting default subscriber failed");
 }
 
 /// Helper that spawns a task and logs error if it ever exits
