@@ -13,16 +13,13 @@ use tokio::{
 use tracing::*;
 
 use crate::{
-    comms::{
-        pdo::mapping::PDOSet,
-        sdo::SdoAction,
-    },
+    comms::{pdo::mapping::PDOSet, sdo::SdoAction},
     driver::{
         event::MotorEvent,
         nmt::{NmtState, set_to_nmt_state},
         startup::{parametrise::parametrise_motor, pdo_mapping::configure_pdo_mappings},
     },
-    error::DriveError,
+    error::{DriveError, InitialisationError},
 };
 
 pub const RETRY_DURATION: Duration = Duration::from_secs(1);
@@ -35,11 +32,13 @@ pub async fn motor_startup_task(
     parameters: &[SdoAction<'_>],
     default_pdo_set: &'static PDOSet,
     event_rx: broadcast::Receiver<MotorEvent>,
-) -> Result<(), DriveError> {
+) -> Result<(), InitialisationError> {
     trace!("Starting up motor at node id {node_id}");
 
     // Put the drive in NMT PreOperational, required for parametrisation & pdo mapping
-    set_to_nmt_state(NmtState::PreOperational, &nmt_tx, event_rx.resubscribe()).await?;
+    set_to_nmt_state(NmtState::PreOperational, &nmt_tx, event_rx.resubscribe())
+        .await
+        .map_err(|_| InitialisationError::ParametrisationNMTPreOp(node_id))?;
 
     // Parametrise this motor
     loop {
@@ -89,7 +88,9 @@ pub async fn motor_startup_task(
     }
 
     // Put the drive in NMT Operational
-    set_to_nmt_state(NmtState::Operational, &nmt_tx, event_rx.resubscribe()).await?;
+    set_to_nmt_state(NmtState::Operational, &nmt_tx, event_rx.resubscribe())
+        .await
+        .map_err(|_| InitialisationError::ParametrisationNMTOp(node_id))?;
 
     trace!("Device reporst NMT Opertional -> Startup Completed!");
 

@@ -22,7 +22,7 @@ mod tests {
 
     #[tokio::test]
     /// Test basic cia402 state transitions
-    async fn test_homing() -> Result<(), DriveError> {
+    async fn test_homing() -> anyhow::Result<()> {
         gantry_demo::setup_tracing();
 
         let node_id = NODE_ID;

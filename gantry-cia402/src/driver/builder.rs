@@ -7,7 +7,7 @@ use crate::{
         sdo::SdoAction,
     },
     driver::{Cia402Driver, startup::params::TEST_PARAMS},
-    error::DriveError,
+    error::{DriveError, InitialisationError},
 };
 
 pub const DEFAULT_PDO_SET: &PDOSet = &CUSTOM_PDOS;
@@ -159,7 +159,7 @@ impl<C, M, S> Cia402DriverBuilder<C, M, S> {
 // Only allowed when all requried configuration is passed
 impl Cia402DriverBuilder<HasCanOpen, HasMapping, HasSyncReceiver> {
     /// Build the Cia402Driver
-    pub async fn build(self) -> Result<Cia402Driver, DriveError> {
+    pub async fn build(self) -> Result<Cia402Driver, InitialisationError> {
         let canopen = self.canopen.unwrap();
         let minimal_pdo_set = self.minimal_pdo_set.unwrap();
         let default_pdo_set = self.default_pdo_set.unwrap();

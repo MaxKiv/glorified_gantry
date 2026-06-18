@@ -22,7 +22,20 @@ use crate::{
         receiver::{StatusWord, setpoint_manager::SetpointManagerModeTypes},
         state::Cia402State,
     },
+    od::entry::ODEntry,
 };
+
+#[derive(Debug, Error)]
+pub enum InitialisationError {
+    #[error("PDO Manager Initialisation Error: Missing required PDO mapping: {0:?}")]
+    MissingRequiredPDOMapping(ODEntry),
+    #[error("Unable to construct an SDO client for node id {0}")]
+    SdoClientConstructionFailed(u8),
+    #[error("Unable to put drive (node {0}) into NMT PreOperational, required for parametrisation")]
+    ParametrisationNMTPreOp(u8),
+    #[error("Unable to put drive (node {0}) into NMT Operational, required after parametrisation")]
+    ParametrisationNMTOp(u8),
+}
 
 #[derive(Debug, Error)]
 pub enum DriveError {

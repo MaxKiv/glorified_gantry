@@ -25,7 +25,7 @@ use crate::{
         state::{orchestrator::cia402_orchestrator_task, state_machine::cia402_state_machine_task},
         update::publisher::publish_updates,
     },
-    error::DriveError,
+    error::{DriveError, InitialisationError},
     log::log_events,
 };
 
@@ -68,7 +68,7 @@ impl Cia402Driver {
         default_pdo_set: &'static PDOSet,
         minimal_pdo_set: &'static PDOSet,
         sync_rx: broadcast::Receiver<Instant>,
-    ) -> Result<Self, DriveError> {
+    ) -> Result<Self, InitialisationError> {
         // Track task handles that we are about to spawn to bind their lifetimes to this object
         let mut handles: Vec<JoinHandle<()>> = Vec::new();
 
@@ -135,16 +135,15 @@ impl Cia402Driver {
         }));
 
         // Get the SDO client for this node id, we use this to make SDO read/writes
-        let sdo = canopen
-            .clone()
-            .get_sdo_client(node_id)
-            .expect("Unable to construct SDO client for node id {node_id}");
+        let Some(sdo) = canopen.clone().get_sdo_client(node_id) else {
+            return Err(InitialisationError::SdoClientConstructionFailed(node_id));
+        };
 
         // Get the PDO client for this node id, we use this to manage R/TPDOs
         trace!("Starting PDO task for device {node_id}");
         let (pdo_handle, pdo_tx) =
-            Pdo::init(canopen.clone(), node_id, default_pdo_set, minimal_pdo_set)
-                .expect("unable to construct PDO client for node id {node_id}");
+            Pdo::init(canopen.clone(), node_id, default_pdo_set, minimal_pdo_set)?;
+
         handles.push(pdo_handle);
 
         // Start the setpoint manager for this device, handles setpoint writes and OMS specifics
@@ -193,7 +192,7 @@ impl Cia402Driver {
 
         // Start the startup task for this motor, this does parametrisation and configures pdo mapping
         trace!("Performing Startup for motor at node id {node_id}");
-        if let Err(err) = motor_startup_task(
+        motor_startup_task(
             node_id,
             nmt_tx.clone(),
             sdo.clone(),
@@ -201,11 +200,7 @@ impl Cia402Driver {
             default_pdo_set,
             event_rx_startup,
         )
-        .await
-        {
-            error!("Unable to perform startup for motor at node id {node_id}: {err}");
-            return Err(err);
-        }
+        .await?;
         trace!("Startup done for motor at node id {node_id}");
 
         // Drive is now parametrised, T/RPDO are configured and in NMT::Operational

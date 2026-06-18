@@ -22,7 +22,7 @@ mod tests {
     use super::*;
 
     #[tokio::test]
-    async fn test_startup() -> Result<(), DriveError> {
+    async fn test_startup() -> anyhow::Result<()> {
         gantry_demo::setup_tracing();
 
         let node_id = NODE_ID;

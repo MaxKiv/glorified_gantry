@@ -4,7 +4,7 @@ use crate::od::{OD_LOOKUP, ODIdx, mappable::MappableType};
 
 use super::{access::AccessType, value::ODValue};
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ODEntry {
     // Index of the OD entry
     pub index: u16,

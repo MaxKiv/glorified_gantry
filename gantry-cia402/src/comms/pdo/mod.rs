@@ -25,6 +25,7 @@ use crate::driver::oms::position::*;
 use crate::driver::oms::setpoint::Setpoint;
 use crate::driver::oms::torque::*;
 use crate::driver::oms::velocity::*;
+use crate::error::InitialisationError;
 use crate::od;
 use std::time::Duration;
 
@@ -65,7 +66,7 @@ impl Pdo {
         node_id: u8,
         default_pdo_set: &'static PDOSet,
         minimal_pdo_set: &'static PDOSet,
-    ) -> Result<(JoinHandle<()>, mpsc::Sender<PdoCommand>), DriveError> {
+    ) -> Result<(JoinHandle<()>, mpsc::Sender<PdoCommand>), InitialisationError> {
         // Check if all required mappings are present
         Pdo::check_required_rpdo_mappings(default_pdo_set.rpdos)?;
 
@@ -472,23 +473,20 @@ impl Pdo {
         Ok(())
     }
 
-    // Check if these rpdo mappings contain a controlword
-    // TODO: move this into type system
+    // Check if the RPDO mappings required for proper operation are present
+    // TODO: use typestate instead -> compiler error, not runtime
     fn check_required_rpdo_mappings(
         rpdo_mapping_set: &'static [PdoMapping],
-    ) -> Result<(), DriveError> {
-        if Self::check_if_mapped(rpdo_mapping_set, &od::CONTROL_WORD)
-            && Self::check_if_mapped(rpdo_mapping_set, &od::SET_OPERATION_MODE)
-        {
-            Ok(())
-        } else {
-            Err(DriveError::ViolatedInvariant(
-                format!(
-                    "RPDO mapping check failed for {rpdo_mapping_set:?} - control word is not present"
-                )
-                .to_string(),
-            ))
+    ) -> Result<(), InitialisationError> {
+        for od_entry in [&od::CONTROL_WORD, &od::SET_OPERATION_MODE] {
+            if !Self::check_if_mapped(rpdo_mapping_set, od_entry) {
+                return Err(InitialisationError::MissingRequiredPDOMapping(
+                    od_entry.clone(),
+                ));
+            }
         }
+
+        Ok(())
     }
 
     fn check_if_mapped(rpdo_mapping_set: &'static [PdoMapping], entry: &ODEntry) -> bool {
@@ -499,6 +497,7 @@ impl Pdo {
                 }
             }
         }
+
         false
     }
 
