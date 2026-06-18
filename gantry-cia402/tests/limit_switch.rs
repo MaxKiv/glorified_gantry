@@ -33,8 +33,8 @@ mod tests {
     async fn test_limit_switches() -> Result<(), String> {
         gantry_demo::setup_tracing();
 
-        const NODE_ID: u8 = 4;
-        let node_id = NODE_ID;
+        let identifier = TEST_MOTOR;
+        let node_id = identifier.node_id;
 
         info!("Starting can interface");
         let (canopen, _) = oze_canopen::canopen::start(String::from("can0"), Some(1000000));
@@ -42,17 +42,18 @@ mod tests {
         let tpdo_mapping_set = TEST_PDOS;
 
         info!("Starting CANOpen event logger");
-        let (_, event_rx) = start_feedback_task(canopen.clone(), node_id, tpdo_mapping_set.tpdos);
-        task::spawn(log_events(event_rx.resubscribe(), node_id));
+        let (_, event_rx) =
+            start_feedback_task(canopen.clone(), identifier.node_id, tpdo_mapping_set.tpdos);
+        task::spawn(log_events(event_rx.resubscribe(), identifier.node_id));
 
         // Ghetto synchronisation to make sure event logger is up
         tokio::time::sleep(Duration::from_millis(250)).await;
 
         let (nmt_tx, nmt_rx) = tokio::sync::mpsc::channel(10);
         // Start the NMT task
-        info!("Starting NMT State Machine task for motor with node id {node_id}");
+        info!("Starting NMT State Machine task for motor {identifier}");
         task::spawn(nmt_task(
-            node_id,
+            identifier.node_id,
             canopen.clone(),
             nmt_rx,
             event_rx.resubscribe(),
@@ -82,7 +83,7 @@ mod tests {
             .unwrap_or_else(|| panic!("Unable to construct SDO client for node id {node_id}"));
 
         info!("Starting Parametrisation of motor at node id {node_id}");
-        parametrise_motor(node_id, TEST_PARAMS, sdo.clone())
+        parametrise_motor(identifier, TEST_PARAMS, sdo.clone())
             .await
             .map_err(|err| format!("Error during motor parametrisation: {err}").to_string())?;
 

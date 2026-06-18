@@ -15,7 +15,7 @@ mod tests {
         error::DriveError,
     };
 
-    use crate::common::{NODE_ID, PARAMS, TIMEOUT};
+    use crate::common::{PARAMS, TEST_MOTOR, TIMEOUT};
 
     use super::*;
 
@@ -24,7 +24,7 @@ mod tests {
     async fn test_cia402_pdo() -> anyhow::Result<()> {
         gantry_demo::setup_tracing();
 
-        let node_id = NODE_ID;
+        let identifier = TEST_MOTOR;
 
         info!("Starting can interface");
         let (canopen, _) = oze_canopen::canopen::start(String::from("can0"), Some(1000000));
@@ -32,8 +32,8 @@ mod tests {
         let sync_master = SyncMaster::init(canopen.clone());
         let sync_rx = sync_master.get_sync_receiver();
 
-        info!("Initializing Cia402Driver for motor driver at node id {node_id}");
-        let drive = Cia402DriverBuilder::new(node_id)
+        info!("Initializing Cia402Driver for motor {identifier}");
+        let drive = Cia402DriverBuilder::new(identifier)
             .with_canopen(canopen.clone())
             .with_default_pdo_mappings()
             .with_parameters(PARAMS)

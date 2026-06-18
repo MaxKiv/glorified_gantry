@@ -5,9 +5,9 @@ use tracing::*;
 #[cfg(test)]
 mod tests {
 
-    const TEST_POSITION: i32 = 5000;
+    const TEST_POSITION: i32 = 50;
     // const TEST_POSITION: i32 = 100;
-    const TEST_SPEED: u32 = 100;
+    const TEST_SPEED: u32 = 1;
 
     use gantry_axis::sync::SyncMaster;
     use gantry_cia402::{
@@ -27,7 +27,7 @@ mod tests {
     };
     use tokio::signal;
 
-    use crate::common::{NODE_ID, PARAMS, TIMEOUT};
+    use crate::common::{PARAMS, TIMEOUT};
 
     use super::*;
 
@@ -37,8 +37,9 @@ mod tests {
         gantry_demo::setup_tracing();
 
         pub const PARAMS: &[SdoAction] = DEFAULT_PARAMS;
-        pub const NODE_ID: u8 = 4;
-        let node_id = NODE_ID;
+
+        let identifier = common::TEST_MOTOR;
+        let node_id = identifier.node_id;
 
         info!("Starting can interface");
         let (canopen, _) = oze_canopen::canopen::start(String::from("can0"), Some(1000000));
@@ -47,7 +48,7 @@ mod tests {
         let sync_rx = sync_master.get_sync_receiver();
 
         info!("Initializing Cia402Driver for motor driver at node id {node_id}");
-        let drive = Cia402DriverBuilder::new(node_id)
+        let drive = Cia402DriverBuilder::new(identifier)
             .with_canopen(canopen.clone())
             .with_default_pdo_mappings()
             .with_parameters(PARAMS)

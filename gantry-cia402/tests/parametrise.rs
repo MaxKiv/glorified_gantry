@@ -26,7 +26,7 @@ mod tests {
         log::{log_canopen_pretty, log_events},
     };
 
-    use crate::common::{NODE_ID, TIMEOUT, start_feedback_task};
+    use crate::common::{TIMEOUT, start_feedback_task};
 
     use super::*;
 
@@ -34,7 +34,8 @@ mod tests {
     async fn parametrise_test() -> Result<(), String> {
         gantry_demo::setup_tracing();
 
-        let node_id = NODE_ID;
+        let identifier = common::TEST_MOTOR;
+        let node_id = identifier.node_id;
 
         info!("Starting can interface");
         let (canopen, _) = oze_canopen::canopen::start(String::from("can0"), Some(1000000));
@@ -83,7 +84,7 @@ mod tests {
             .get_sdo_client(node_id)
             .unwrap_or_else(|| panic!("Unable to construct SDO client for node id {node_id}"));
 
-        parametrise_motor(node_id, TEST_PARAMS, sdo.clone())
+        parametrise_motor(identifier, TEST_PARAMS, sdo.clone())
             .await
             .map_err(|err| format!("Error during motor parametrisation: {err}").to_string())?;
 

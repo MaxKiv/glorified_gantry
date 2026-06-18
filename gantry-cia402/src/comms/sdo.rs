@@ -28,8 +28,8 @@ pub enum SdoResult {
 
 #[derive(Debug)]
 pub struct SdoTransaction<'a> {
-    action: &'a SdoAction<'a>,
-    result: SdoResult,
+    pub action: &'a SdoAction<'a>,
+    pub result: SdoResult,
 }
 
 impl<'a> SdoAction<'a> {

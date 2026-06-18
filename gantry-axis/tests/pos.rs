@@ -23,7 +23,7 @@ mod tests {
         velocity::meter_per_second,
     };
 
-    use gantry_demo::config::{TEST_X_CONFIG, TEST_Y_CONFIG, TEST_Z_CONFIG};
+    use gantry_demo::config::{TEST_CONFIG, TEST_X_CONFIG, TEST_Y_CONFIG, TEST_Z_CONFIG};
 
     use crate::common::TIMEOUT;
 

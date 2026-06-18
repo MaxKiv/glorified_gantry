@@ -119,8 +119,8 @@ impl Gantry {
         sync_rx: broadcast::Receiver<Instant>,
     ) -> anyhow::Result<(AxisMotors, AxisEventReceiver)> {
         let axis = cfg.axis.clone();
-        let master_id = cfg.master;
-        let slave_id = cfg.slave;
+        let master_id = cfg.master.clone();
+        let slave_id = cfg.slave.clone();
 
         // Construct this axis's motor drivers
         let motor = AxisMotors::new(canopen.clone(), cfg, sync_rx).await?;

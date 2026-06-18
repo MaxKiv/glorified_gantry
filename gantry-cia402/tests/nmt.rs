@@ -15,7 +15,7 @@ mod tests {
         log::{log_canopen_pretty, log_events},
     };
 
-    use crate::common::{NODE_ID, TIMEOUT, start_feedback_task};
+    use crate::common::{TIMEOUT, start_feedback_task};
 
     use super::*;
 
@@ -23,7 +23,8 @@ mod tests {
     async fn nmt_boot_test() -> Result<(), String> {
         gantry_demo::setup_tracing();
 
-        let node_id = NODE_ID;
+        let identifier = common::TEST_MOTOR;
+        let node_id = identifier.node_id;
 
         info!("Starting can interface");
         let (canopen, _) = oze_canopen::canopen::start(String::from("can0"), Some(1000000));

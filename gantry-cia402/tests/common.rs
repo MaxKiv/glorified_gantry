@@ -6,10 +6,13 @@ use gantry_cia402::{
         sdo::SdoAction,
     },
     driver::{
-        event::MotorEvent, nmt::NmtState, receiver::subscriber::handle_feedback, spawn_logged,
-        startup,
+        event::MotorEvent, identifier::Cia402Identifier, nmt::NmtState,
+        receiver::subscriber::handle_feedback, spawn_logged, startup,
     },
     error::DriveError,
+};
+use gantry_demo::config::{
+    TEST_SETUP_DEVICE_NAME, TEST_SETUP_MOTOR_TYPE, TEST_SETUP_PROFILE_NUMBER,
 };
 use oze_canopen::{error::CoError, interface::CanOpenInterface};
 use thiserror::Error;
@@ -26,7 +29,12 @@ use tracing::*;
 // Default test parameters
 pub const CAN_INTERFACE: &str = "can0";
 pub const CAN_BITRATE: u32 = 1_000_000;
-pub const NODE_ID: u8 = 1;
+pub const TEST_MOTOR: Cia402Identifier = Cia402Identifier {
+    node_id: 1,
+    device_profile_number: TEST_SETUP_PROFILE_NUMBER,
+    motor_type: TEST_SETUP_MOTOR_TYPE,
+    device_name: TEST_SETUP_DEVICE_NAME,
+};
 pub const PARAMS: &[SdoAction] = startup::params::TEST_PARAMS;
 pub const TIMEOUT: Duration = Duration::from_secs(5);
 pub const CYCLIC_PDOS: PDOSet = MINIMAL_CYCLIC_SYNCHRONOUS_PDO_SET;

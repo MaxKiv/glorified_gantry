@@ -3,7 +3,10 @@ pub mod setpoint;
 
 use gantry_cia402::{
     comms::sdo::SdoAction,
-    driver::{Cia402Driver, builder::Cia402DriverBuilder, command::MotorCommand},
+    driver::{
+        Cia402Driver, builder::Cia402DriverBuilder, command::MotorCommand,
+        identifier::Cia402Identifier,
+    },
 };
 use oze_canopen::interface::CanOpenInterface;
 use tokio::{sync::broadcast, time::Instant};
@@ -11,6 +14,7 @@ use tracing::*;
 
 use crate::setpoint::translator::scaling::DeviceScaling;
 
+// TODO: this should probably be [`AxisConfig`]?
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Axis {
     X,
@@ -24,9 +28,9 @@ pub struct AxisConfig {
     /// What axis is this config for
     pub axis: Axis,
     /// Whats the masters CANopen node id
-    pub master: u8,
+    pub master: Cia402Identifier,
     /// The slave's node id, if there is one
-    pub slave: Option<u8>,
+    pub slave: Option<Cia402Identifier>,
     /// Required parameters for each motor of this axis
     pub params: &'static [SdoAction<'static>],
     /// Define how to map from SI units <-> Motor units

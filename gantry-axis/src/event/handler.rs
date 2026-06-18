@@ -71,8 +71,8 @@ impl FeedbackHandler {
     ) -> anyhow::Result<()> {
         let mut combiner = EventCombiner::new_for_axis(
             receiver.axis.clone(),
-            receiver.master_id,
-            receiver.slave_id,
+            receiver.master_id.node_id,
+            receiver.slave_id.as_ref().map(|x| x.node_id),
         );
 
         loop {
@@ -90,18 +90,18 @@ impl FeedbackHandler {
                             receiver.axis.clone()
                         );
 
-                        Self::handle_motor_event(receiver.axis.clone(), event, receiver.master_id,
+                        Self::handle_motor_event(receiver.axis.clone(), event, receiver.master_id.node_id,
                             &gantry_tx, &translator, &mut combiner);
                     },
                     // Receive motor events from slave
                     Ok(event) = slave.recv() => {
-                        if let Some(slave_id) = receiver.slave_id {
+                        if let Some(ref slave_id) = receiver.slave_id {
                             trace!(
                                 "Feedback: Axis {:?} received slave event: {event:?}",
                                 receiver.axis.clone()
                             );
 
-                            Self::handle_motor_event(receiver.axis.clone(), event, slave_id,
+                            Self::handle_motor_event(receiver.axis.clone(), event, slave_id.node_id,
                                 &gantry_tx, &translator, &mut combiner);
                         } else {
                             error!("Received slave event, but no slave id was configured for {:?}", receiver);
@@ -118,7 +118,7 @@ impl FeedbackHandler {
                     Self::handle_motor_event(
                         receiver.axis.clone(),
                         event,
-                        receiver.master_id,
+                        receiver.master_id.node_id,
                         &gantry_tx,
                         &translator,
                         &mut combiner,

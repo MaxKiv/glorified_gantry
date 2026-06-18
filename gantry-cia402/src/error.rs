@@ -13,10 +13,14 @@ use tokio::{
 };
 
 use crate::{
-    comms::pdo::mapping::PdoMapping,
+    comms::{pdo::mapping::PdoMapping, sdo::SdoAction},
     driver::{
         command::MotorCommand,
         event::MotorEvent,
+        identifier::{
+            Cia402Identifier, CiaProfileNumber, InvalidCiaProfileNumber, InvalidMotorTypeError,
+            MotorType,
+        },
         nmt::NmtState,
         oms::{OperationMode, setpoint::Setpoint},
         receiver::{StatusWord, setpoint_manager::SetpointManagerModeTypes},
@@ -30,11 +34,25 @@ pub enum InitialisationError {
     #[error("PDO Manager Initialisation Error: Missing required PDO mapping: {0:?}")]
     MissingRequiredPDOMapping(ODEntry),
     #[error("Unable to construct an SDO client for node id {0}")]
-    SdoClientConstructionFailed(u8),
+    SdoClientConstructionFailed(Cia402Identifier),
     #[error("Unable to put drive (node {0}) into NMT PreOperational, required for parametrisation")]
-    ParametrisationNMTPreOp(u8),
+    ParametrisationNMTPreOp(Cia402Identifier),
     #[error("Unable to put drive (node {0}) into NMT Operational, required after parametrisation")]
-    ParametrisationNMTOp(u8),
+    ParametrisationNMTOp(Cia402Identifier),
+    #[error("Wrong motor type: ({0:?}) for motor {1}")]
+    ParametrisationWrongMotorType(MotorType, Cia402Identifier),
+    #[error("Invalid motor type: ({0:?}) for motor {1}")]
+    ParametrisationInvalidMotorType(InvalidMotorTypeError, Cia402Identifier),
+    #[error("Wrong cia profile number: ({0:?}) for motor {1}")]
+    ParametrisationWrongCiaProfileNumber(CiaProfileNumber, Cia402Identifier),
+    #[error("Invalid cia profile number: ({0:?}) for motor {1}")]
+    ParametrisationInvalidCiaProfileNumber(InvalidCiaProfileNumber, Cia402Identifier),
+    #[error("Wrong device name: ({0}) for motor {1}")]
+    ParametrisationWrongDeviceName(String, Cia402Identifier),
+    #[error("Unable to communicate with motor {0}")]
+    ParametrisationCommunicationFailure(Cia402Identifier),
+    #[error("Unable to parametrise motor {0}")]
+    ParametrisationError(Cia402Identifier),
 }
 
 #[derive(Debug, Error)]

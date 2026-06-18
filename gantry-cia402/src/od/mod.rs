@@ -5,7 +5,7 @@ use crate::{
     driver::startup::home::HomingMethods,
     od::{entry::ODEntry, mappable::MappableType, value::ODValue},
 };
-use heapless::index_map::FnvIndexMap;
+use heapless::{String, index_map::FnvIndexMap};
 
 pub mod access;
 pub mod entry;
@@ -21,6 +21,15 @@ pub const DEVICE_TYPE: ODEntry = ODEntry::new(
     AccessType::ReadOnly,
     MappableType::None,
     ODValue::U32(0x0004_0192), // CiA 402 drive
+);
+
+/// Device Type — identifies the device profile
+pub const DEVICE_NAME: ODEntry = ODEntry::new(
+    0x1008,
+    0x00,
+    AccessType::ReadOnly,
+    MappableType::None,
+    ODValue::VisibleString(std::string::String::new()),
 );
 
 /// Controlword — control state machine & motion commands

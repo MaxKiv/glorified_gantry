@@ -6,7 +6,7 @@ use crate::{
         pdo::mapping::{PDOSet, custom::CUSTOM_PDOS, minimal::MINIMAL_CYCLIC_SYNCHRONOUS_PDO_SET},
         sdo::SdoAction,
     },
-    driver::{Cia402Driver, startup::params::TEST_PARAMS},
+    driver::{Cia402Driver, identifier::Cia402Identifier, startup::params::TEST_PARAMS},
     error::{DriveError, InitialisationError},
 };
 
@@ -31,8 +31,7 @@ pub struct HasSyncReceiver;
 
 /// Typestate Builder for the Cia402Driver
 pub struct Cia402DriverBuilder<C, M, S> {
-    node_id: u8,
-    name: Option<String>,
+    identifier: Cia402Identifier,
     canopen: Option<CanOpenInterface>,
     parameters: Option<&'static [SdoAction<'static>]>,
     default_pdo_set: Option<&'static PDOSet>,
@@ -45,10 +44,9 @@ pub struct Cia402DriverBuilder<C, M, S> {
 
 impl Cia402DriverBuilder<NoCanOpen, NoMapping, NoSyncReceiver> {
     /// Start building a new Cia402Driver
-    pub fn new(node_id: u8) -> Self {
+    pub fn new(identifier: Cia402Identifier) -> Self {
         Self {
-            node_id,
-            name: None,
+            identifier,
             canopen: None,
             parameters: None,
             default_pdo_set: None,
@@ -66,8 +64,7 @@ impl<M, S> Cia402DriverBuilder<NoCanOpen, M, S> {
     /// Configure the Cia402Driver with a CANOpen interface
     pub fn with_canopen(self, iface: CanOpenInterface) -> Cia402DriverBuilder<HasCanOpen, M, S> {
         Cia402DriverBuilder {
-            node_id: self.node_id,
-            name: self.name,
+            identifier: self.identifier,
             canopen: Some(iface),
             parameters: self.parameters,
             minimal_pdo_set: self.minimal_pdo_set,
@@ -97,8 +94,7 @@ impl<C, S> Cia402DriverBuilder<C, NoMapping, S> {
     ) -> Cia402DriverBuilder<C, HasMapping, S> {
         if default_pdo_set.contains_default_rpdo() && minimal_pdo_set.contains_minimal_rpdo() {
             Cia402DriverBuilder {
-                node_id: self.node_id,
-                name: self.name,
+                identifier: self.identifier,
                 canopen: self.canopen,
                 parameters: self.parameters,
                 default_pdo_set: Some(default_pdo_set),
@@ -125,8 +121,7 @@ impl<C, M> Cia402DriverBuilder<C, M, NoSyncReceiver> {
         sync_rx: broadcast::Receiver<Instant>,
     ) -> Cia402DriverBuilder<C, M, HasSyncReceiver> {
         Cia402DriverBuilder {
-            node_id: self.node_id,
-            name: self.name,
+            identifier: self.identifier,
             canopen: self.canopen,
             parameters: self.parameters,
             minimal_pdo_set: self.minimal_pdo_set,
@@ -149,11 +144,6 @@ impl<C, M, S> Cia402DriverBuilder<C, M, S> {
         self.parameters = Some(TEST_PARAMS);
         self
     }
-
-    pub fn with_name(mut self, name: String) -> Self {
-        self.name = Some(name);
-        self
-    }
 }
 
 // Only allowed when all requried configuration is passed
@@ -165,11 +155,10 @@ impl Cia402DriverBuilder<HasCanOpen, HasMapping, HasSyncReceiver> {
         let default_pdo_set = self.default_pdo_set.unwrap();
         let sync_rx = self.sync_rx.unwrap();
         let params = self.parameters.unwrap_or(&[]);
-        let name = self.name.unwrap_or(format!("Motor #{}", self.node_id));
+        let identifier = self.identifier;
 
         Cia402Driver::spawn_tasks(
-            self.node_id,
-            name,
+            identifier,
             canopen,
             params,
             default_pdo_set,

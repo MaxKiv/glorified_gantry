@@ -2,11 +2,14 @@ pub mod default;
 
 use crate::{comms::sdo::SdoAction, driver::startup::home::HomingMethods, od::*};
 
+pub const DEVICE_TYPE_ACTION: SdoAction = SdoAction::Upload {
+    entry: &DEVICE_TYPE,
+};
+pub const DEVICE_NAME_ACTION: SdoAction = SdoAction::Upload {
+    entry: &DEVICE_NAME,
+};
+
 pub const TEST_PARAMS: &[SdoAction] = &[
-    // Always good to upload device type for info
-    SdoAction::Upload {
-        entry: &DEVICE_TYPE,
-    },
     // --- Profile Position ---
     // Set target position = 0 (we start from home or zero)
     SdoAction::Download {
