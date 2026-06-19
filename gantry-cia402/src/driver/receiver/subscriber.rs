@@ -369,17 +369,15 @@ pub async fn wait_for_setpoint_acknowledge(
 pub async fn wait_for_target_reached(
     event_rx: broadcast::Receiver<MotorEvent>,
     timeout: Duration,
+    target: i32,
 ) -> Result<(), DriveError> {
     wait_until_event_matches(
         event_rx,
-        |event| {
-            matches!(
-                event,
-                MotorEvent::PositionModeFeedback {
-                    target_reached: true,
-                    ..
-                }
-            )
+        |event| match event {
+            MotorEvent::PositionFeedback { actual_position } => {
+                pos_within_epsilon(target, *actual_position)
+            }
+            _ => false,
         },
         timeout,
     )
@@ -405,4 +403,15 @@ pub async fn wait_for_homing_completed(
         timeout,
     )
     .await
+}
+
+pub fn pos_within_epsilon(target: i32, current: i32) -> bool {
+    const TARGET_POS_EPSILON: u32 = 3;
+
+    error!(
+        "pos_within_epsilon(target: {target}, current: {current}) -> diff: {}",
+        target.abs_diff(current)
+    );
+
+    target.abs_diff(current) <= TARGET_POS_EPSILON
 }

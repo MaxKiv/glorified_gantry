@@ -127,7 +127,8 @@ mod tests {
             wait_for_setpoint_acknowledge(drive.event_rx.resubscribe(), COMMS_TIMEOUT).await?;
 
             info!("Wait for target reached event");
-            wait_for_target_reached(drive.event_rx.resubscribe(), COMMS_TIMEOUT).await?;
+            wait_for_target_reached(drive.event_rx.resubscribe(), COMMS_TIMEOUT, TEST_POSITION)
+                .await?;
 
             info!("Doing position relative position movement backward # {num}");
             drive
@@ -142,7 +143,7 @@ mod tests {
             wait_for_setpoint_acknowledge(drive.event_rx.resubscribe(), COMMS_TIMEOUT).await?;
 
             info!("Wait for target reached event");
-            wait_for_target_reached(drive.event_rx.resubscribe(), POS_TIMEOUT).await?;
+            wait_for_target_reached(drive.event_rx.resubscribe(), COMMS_TIMEOUT, 0).await?;
         }
 
         Ok(())
