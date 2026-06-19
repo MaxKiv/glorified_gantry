@@ -6,11 +6,15 @@ use tracing::*;
 #[cfg(test)]
 mod tests {
 
-    use gantry_axis::sync::SyncMaster;
+    use gantry_axis::{event::util::HOME_TIMEOUT, sync::SyncMaster};
     use gantry_cia402::{
         driver::{
-            Cia402Driver, builder::Cia402DriverBuilder, command::MotorCommand, event::MotorEvent,
-            receiver::subscriber::wait_for_event, state::Cia402State,
+            Cia402Driver,
+            builder::Cia402DriverBuilder,
+            command::MotorCommand,
+            event::MotorEvent,
+            receiver::subscriber::{wait_for_event, wait_for_homing_completed},
+            state::Cia402State,
         },
         error::DriveError,
         log::log_events,
@@ -79,16 +83,7 @@ mod tests {
             .map_err(DriveError::CommandError)?;
 
         info!("Wait for Homing completed event");
-        wait_for_event(
-            drive.event_rx.resubscribe(),
-            MotorEvent::HomingFeedback {
-                at_home: true,
-                homing_completed: true,
-                homing_error: false,
-            },
-            TIMEOUT,
-        )
-        .await?;
+        wait_for_homing_completed(drive.event_rx.resubscribe(), HOME_TIMEOUT).await?;
 
         Ok(())
     }

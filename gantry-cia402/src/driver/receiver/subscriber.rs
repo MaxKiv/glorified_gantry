@@ -280,21 +280,24 @@ pub async fn wait_for_event(
 
         match result {
             Ok(Ok(event)) => {
+                // Is this our event?
                 if event == watch_for {
                     return Ok(());
                 }
                 // else keep looping for the next one
             }
             Ok(Err(err @ broadcast::error::RecvError::Lagged(_))) => {
-                // Messages were missed, continue to next one
+                // Messages were missed
                 error!("Lagged in wait_for_event, indicates serious issue");
                 return Err(DriveError::BroadcastLagged(Some(watch_for), err));
             }
             Ok(Err(err @ broadcast::error::RecvError::Closed)) => {
+                // Channel closed
                 error!("Event channel closed in wait_for_event");
                 return Err(DriveError::BroadcastClosed(Some(watch_for), err));
             }
             Err(err) => {
+                // Timeout
                 warn!("Timeout when waiting for event: {watch_for:?}");
                 return Err(DriveError::EventTimeout(watch_for, Some(err)));
             }
@@ -376,6 +379,27 @@ pub async fn wait_for_target_reached(
                     target_reached: true,
                     ..
                 }
+            )
+        },
+        timeout,
+    )
+    .await
+}
+
+pub async fn wait_for_homing_completed(
+    event_rx: broadcast::Receiver<MotorEvent>,
+    timeout: Duration,
+) -> Result<(), DriveError> {
+    wait_until_event_matches(
+        event_rx,
+        |event| {
+            matches!(
+                event,
+                MotorEvent::HomingFeedback {
+                    at_home: true,
+                    homing_completed: true,
+                    homing_error: false,
+                },
             )
         },
         timeout,

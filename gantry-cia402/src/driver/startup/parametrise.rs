@@ -8,10 +8,7 @@ use tracing::*;
 use crate::{
     comms::sdo::{SDO_PROCESS_DURATION, SdoAction},
     driver::{
-        identifier::{
-            Cia402Identifier, CiaProfileNumber,
-            MotorType,
-        },
+        identifier::{Cia402Identifier, CiaProfileNumber, MotorType},
         startup::params::{DEVICE_NAME_ACTION, DEVICE_TYPE_ACTION},
     },
     error::InitialisationError,
@@ -35,6 +32,7 @@ pub async fn parametrise_motor(
         identifier.node_id
     );
 
+    // Now start motor parametrisation
     // parametrisation is done through a series of SDO calls, perform these in order
     for action in parameters {
         trace!(

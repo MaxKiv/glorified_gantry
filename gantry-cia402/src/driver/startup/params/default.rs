@@ -1,10 +1,6 @@
 use crate::{comms::sdo::SdoAction, driver::startup::home::HomingMethods, od::*};
 
 pub const DEFAULT_PARAMS: &[SdoAction] = &[
-    // Always good to upload device type for info
-    SdoAction::Upload {
-        entry: &DEVICE_TYPE,
-    },
     // --- Limit Switches ---
     // NOTE: This causes the drive to error with: Value Out Of Range, wrong datasheet?
     // Forget previous limit switch position
@@ -139,7 +135,7 @@ pub const DEFAULT_PARAMS: &[SdoAction] = &[
     // 6098h – Homing Method
     SdoAction::Download {
         entry: &HOMING_METHOD,
-        data: &HomingMethods::PosLimitOnly.as_i8().to_le_bytes(),
+        data: &HomingMethods::NegLimitOnly.as_i8().to_le_bytes(),
     },
     // Enable Default Limit Switch Operation: Only note limit switch position
     // Required when homing the motor using limit switches

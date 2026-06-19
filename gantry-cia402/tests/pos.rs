@@ -20,7 +20,7 @@ mod tests {
             receiver::subscriber::{
                 wait_for_event, wait_for_setpoint_acknowledge, wait_for_target_reached,
             },
-            startup::params::default::DEFAULT_PARAMS,
+            startup::params::{TEST_PARAMS, default::DEFAULT_PARAMS},
             state::Cia402State,
         },
         error::DriveError,
@@ -36,7 +36,7 @@ mod tests {
     async fn test_position_mode() -> anyhow::Result<()> {
         gantry_demo::setup_tracing();
 
-        pub const PARAMS: &[SdoAction] = DEFAULT_PARAMS;
+        pub const PARAMS: &[SdoAction] = TEST_PARAMS;
 
         let identifier = common::TEST_MOTOR;
         let node_id = identifier.node_id;

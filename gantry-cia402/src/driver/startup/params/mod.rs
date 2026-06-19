@@ -19,11 +19,12 @@ pub const TEST_PARAMS: &[SdoAction] = &[
     // Software position limits (disable by using min > max or wide range)
     SdoAction::Download {
         entry: &SOFTWARE_POSITION_RANGE_LIMIT_MIN,
-        data: &0i32.to_le_bytes(), // often used as "disable"
+        data: &(1i32).to_le_bytes(), // often used as "disable"
     },
     SdoAction::Download {
         entry: &SOFTWARE_POSITION_RANGE_LIMIT_MAX,
-        data: &0i32.to_le_bytes(), // often used as "disable"
+        // data: &0i32.to_le_bytes(), // often used as "disable"
+        data: &1000i32.to_le_bytes(), // TODO: find limits
     },
     SdoAction::Download {
         entry: &HOME_OFFSET,
@@ -86,12 +87,14 @@ pub const TEST_PARAMS: &[SdoAction] = &[
     // 6098h – Homing Method
     SdoAction::Download {
         entry: &HOMING_METHOD,
-        data: &HomingMethods::IndexOnly.as_i8().to_le_bytes(),
+        data: &HomingMethods::BlockingNegLimitThenPreviousIndexPulse
+            .as_i8()
+            .to_le_bytes(),
     },
     // 6099h:01h – Speed During Search For Switch
     SdoAction::Download {
         entry: &HOMING_SPEED_SWITCH_SEARCH,
-        data: &0x32u32.to_le_bytes(),
+        data: &0x16u32.to_le_bytes(),
     },
     // 6099h:02h – Speed During Search For Zero
     SdoAction::Download {

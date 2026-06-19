@@ -7,19 +7,28 @@ pub enum HomingMethods {
     /// 0 — No homing operation defined
     None = 0,
     /// 1 — Move to negative limit switch, then to index pulse
-    NegLimitThenIndexLeftSwing = 1,
+    NegLimitThenPrevIndexPulse = 1,
     /// 2 — Move to positive limit switch, then to index pulse
-    PosLimitThenIndexLeftSwing = 2,
+    PosLimitThenPrevIndexPulse = 2,
     /// 17 — Move to positive limit switch only (no index)
-    PosLimitOnly = 17,
+    NegLimitOnly = 17,
     /// 18 — Move to negative limit switch only (no index)
-    NegLimitOnly = 18,
+    PosLimitOnly = 18,
     /// 33 — Home on positive switch, then index
     PosSwitchThenIndex = 33,
     /// 34 — Home on index pulse only (no switch)
     IndexOnly = 34,
     /// 35 — Set current position as home (no movement)
     CurrentPosition = 35,
+
+    /// 17 — Move to negative limit switch only (no index)
+    BlockingNegLimitOnly = -17,
+    /// 17 — Move to negative limit switch only (no index)
+    BlockingPosLimitOnly = -18,
+    /// 2 — Move to negative limit switch, then to index pulse
+    BlockingNegLimitThenPreviousIndexPulse = -1,
+    /// 2 — Move to positive limit switch, then to index pulse
+    BlockingPosLimitThenPreviousIndexPulse = -2,
 }
 
 impl HomingMethods {
@@ -33,8 +42,8 @@ impl HomingMethods {
     pub const fn from_i8(value: i8) -> Option<Self> {
         match value {
             0 => Some(Self::None),
-            1 => Some(Self::NegLimitThenIndexLeftSwing),
-            2 => Some(Self::PosLimitThenIndexLeftSwing),
+            1 => Some(Self::NegLimitThenPrevIndexPulse),
+            2 => Some(Self::PosLimitThenPrevIndexPulse),
             17 => Some(Self::PosLimitOnly),
             18 => Some(Self::NegLimitOnly),
             33 => Some(Self::PosSwitchThenIndex),

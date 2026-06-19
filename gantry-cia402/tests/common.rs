@@ -37,6 +37,7 @@ pub const TEST_MOTOR: Cia402Identifier = Cia402Identifier {
 };
 pub const PARAMS: &[SdoAction] = startup::params::TEST_PARAMS;
 pub const TIMEOUT: Duration = Duration::from_secs(5);
+pub const HOMING_TIMEOUT: Duration = Duration::from_secs(60);
 pub const CYCLIC_PDOS: PDOSet = MINIMAL_CYCLIC_SYNCHRONOUS_PDO_SET;
 pub const SYNC_PERIOD: Duration = Duration::from_millis(1000);
 
