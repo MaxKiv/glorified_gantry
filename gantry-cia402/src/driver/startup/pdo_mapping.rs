@@ -124,7 +124,9 @@ async fn set_pdo_mapping(
     if let PdoType::TPDO(_) = pdo_mapping.pdo
         && pdo_mapping.transmission_type == TransmissionType::OnChange
     {
-        const SYNCHRONISATION_PERIOD_MS: u16 = 100;
+        // NOTE: this is a critical communication parameter to tune in order to obtain maximum CAN
+        // bus bandwidth, see datasheet page 122 & 202
+        const SYNCHRONISATION_PERIOD_MS: u16 = 2;
         const SYNCHRONISATION_SUB_IDX: u8 = 0x05;
 
         trace!(
@@ -151,7 +153,9 @@ async fn set_pdo_mapping(
     if let PdoType::TPDO(_) = pdo_mapping.pdo
         && pdo_mapping.transmission_type == TransmissionType::OnChange
     {
-        const INHIBIT_TIME: u16 = 2000; // = 100ms, this is in 100us blocks
+        // NOTE: this is a critical communication parameter to tune in order to obtain maximum CAN
+        // bus bandwidth, see datasheet page 122 & 202
+        const INHIBIT_TIME: u16 = 10; // = 10ms, this is in 100us blocks
         const INHIBIT_TIME_SUB_IDX: u8 = 0x03;
 
         trace!(

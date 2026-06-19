@@ -18,3 +18,7 @@ check:
 # Run a CANopen sniffer
 snif:
     cargo run -p gantry-sniffer
+
+# Show the current canbus load
+show-can-load:
+    canbusload can0@1000000 -rbtscv

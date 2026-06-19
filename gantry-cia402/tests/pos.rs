@@ -9,7 +9,7 @@ mod tests {
     // const TEST_POSITION: i32 = 100;
     const TEST_SPEED: u32 = 10;
 
-    use gantry_axis::sync::SyncMaster;
+    use gantry_axis::{event::util::HOME_TIMEOUT, sync::SyncMaster};
     use gantry_cia402::{
         comms::sdo::SdoAction,
         driver::{
@@ -18,7 +18,8 @@ mod tests {
             command::MotorCommand,
             event::MotorEvent,
             receiver::subscriber::{
-                wait_for_event, wait_for_setpoint_acknowledge, wait_for_target_reached,
+                wait_for_event, wait_for_homing_completed, wait_for_setpoint_acknowledge,
+                wait_for_target_reached,
             },
             startup::params::{TEST_PARAMS, default::DEFAULT_PARAMS},
             state::Cia402State,
@@ -110,16 +111,7 @@ mod tests {
             .map_err(DriveError::CommandError)?;
 
         info!("Wait for Homing completed event");
-        wait_for_event(
-            drive.event_rx.resubscribe(),
-            MotorEvent::HomingFeedback {
-                at_home: true,
-                homing_completed: true,
-                homing_error: false,
-            },
-            COMMS_TIMEOUT,
-        )
-        .await?;
+        wait_for_homing_completed(drive.event_rx.resubscribe(), HOME_TIMEOUT).await?;
 
         for num in 1..=10 {
             info!("Doing absolute position movement forward # {num}");

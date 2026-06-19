@@ -11,7 +11,7 @@ mod tests {
 
     use std::time::Duration;
 
-    use gantry_axis::sync::SyncMaster;
+    use gantry_axis::{event::util::HOME_TIMEOUT, sync::SyncMaster};
     use gantry_cia402::{
         comms::sdo::SdoAction,
         driver::{
@@ -19,7 +19,7 @@ mod tests {
             builder::Cia402DriverBuilder,
             command::MotorCommand,
             event::MotorEvent,
-            receiver::subscriber::wait_for_event,
+            receiver::subscriber::{wait_for_event, wait_for_homing_completed},
             startup::{self, params::default::DEFAULT_PARAMS},
             state::Cia402State,
         },
@@ -110,16 +110,7 @@ mod tests {
             .map_err(DriveError::CommandError)?;
 
         info!("Wait for Homing completed event");
-        wait_for_event(
-            drive.event_rx.resubscribe(),
-            MotorEvent::HomingFeedback {
-                at_home: true,
-                homing_completed: true,
-                homing_error: false,
-            },
-            HOMING_TIMEOUT,
-        )
-        .await?;
+        wait_for_homing_completed(drive.event_rx.resubscribe(), HOME_TIMEOUT).await?;
 
         for num in 1..=10 {
             info!("#{num} Setting {TEST_TORQUE} torque target");
