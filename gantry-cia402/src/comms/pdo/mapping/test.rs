@@ -1,6 +1,6 @@
 use crate::{
     comms::pdo::mapping::{
-        BitRange, PDOSet, PdoMapping, PdoMappingSource, PdoType, custom::*, empty::*,
+        BitRange, PDOSet, PdoMapping, PdoMappingSource, PdoType, custom::*,
     },
     driver::startup::pdo_mapping::TransmissionType,
     od,

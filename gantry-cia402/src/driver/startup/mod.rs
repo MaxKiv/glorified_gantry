@@ -20,7 +20,7 @@ use crate::{
         nmt::{NmtState, set_to_nmt_state},
         startup::{parametrise::parametrise_motor, pdo_mapping::configure_pdo_mappings},
     },
-    error::{DriveError, InitialisationError},
+    error::InitialisationError,
 };
 
 pub const RETRY_DURATION: Duration = Duration::from_secs(1);

@@ -9,7 +9,7 @@ use crate::{
     comms::sdo::{SDO_PROCESS_DURATION, SdoAction},
     driver::{
         identifier::{
-            Cia402Identifier, CiaProfileNumber, InvalidCiaProfileNumber, InvalidMotorTypeError,
+            Cia402Identifier, CiaProfileNumber,
             MotorType,
         },
         startup::params::{DEVICE_NAME_ACTION, DEVICE_TYPE_ACTION},

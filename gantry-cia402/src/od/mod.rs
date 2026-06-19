@@ -5,7 +5,7 @@ use crate::{
     driver::startup::home::HomingMethods,
     od::{entry::ODEntry, mappable::MappableType, value::ODValue},
 };
-use heapless::{String, index_map::FnvIndexMap};
+use heapless::index_map::FnvIndexMap;
 
 pub mod access;
 pub mod entry;

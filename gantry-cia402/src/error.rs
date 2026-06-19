@@ -13,7 +13,7 @@ use tokio::{
 };
 
 use crate::{
-    comms::{pdo::mapping::PdoMapping, sdo::SdoAction},
+    comms::pdo::mapping::PdoMapping,
     driver::{
         command::MotorCommand,
         event::MotorEvent,

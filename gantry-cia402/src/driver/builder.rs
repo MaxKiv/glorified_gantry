@@ -7,7 +7,7 @@ use crate::{
         sdo::SdoAction,
     },
     driver::{Cia402Driver, identifier::Cia402Identifier, startup::params::TEST_PARAMS},
-    error::{DriveError, InitialisationError},
+    error::InitialisationError,
 };
 
 pub const DEFAULT_PDO_SET: &PDOSet = &CUSTOM_PDOS;

@@ -32,7 +32,7 @@ use crate::{
 };
 
 use anyhow::Result;
-use oze_canopen::{canopen::NodeId, interface::CanOpenInterface, sdo_client::SdoClient};
+use oze_canopen::{interface::CanOpenInterface, sdo_client::SdoClient};
 use tokio::{
     sync::{Mutex, broadcast, mpsc},
     task::JoinHandle,

@@ -25,7 +25,7 @@ use crate::{
             velocity::VelocitySetpoint,
         },
         receiver::setpoint_manager::{SetpointManager, SetpointManagerModeTypes},
-        state::{Cia402Flags, state_machine::Cia402Command},
+        state::state_machine::Cia402Command,
     },
     error::DriveError,
 };
