@@ -27,7 +27,7 @@ mod tests {
     };
     use tokio::signal;
 
-    use crate::common::{PARAMS, TIMEOUT};
+    use crate::common::{COMMS_TIMEOUT, HOMING_TIMEOUT, PARAMS};
 
     use super::*;
 
@@ -85,7 +85,7 @@ mod tests {
         wait_for_event(
             drive.event_rx.resubscribe(),
             MotorEvent::Cia402StateUpdate(Cia402State::ReadyToSwitchOn),
-            TIMEOUT,
+            COMMS_TIMEOUT,
         )
         .await?;
 
@@ -99,7 +99,7 @@ mod tests {
         wait_for_event(
             drive.event_rx.resubscribe(),
             MotorEvent::Cia402StateUpdate(Cia402State::OperationEnabled),
-            TIMEOUT,
+            COMMS_TIMEOUT,
         )
         .await?;
 
@@ -117,7 +117,7 @@ mod tests {
                 homing_completed: true,
                 homing_error: false,
             },
-            TIMEOUT,
+            HOMING_TIMEOUT,
         )
         .await?;
 

@@ -20,7 +20,7 @@ mod tests {
         log::log_events,
     };
 
-    use crate::common::{PARAMS, TEST_MOTOR, TIMEOUT};
+    use crate::common::{COMMS_TIMEOUT, PARAMS, TEST_MOTOR};
 
     use super::*;
 
@@ -58,7 +58,7 @@ mod tests {
         wait_for_event(
             drive.event_rx.resubscribe(),
             MotorEvent::Cia402StateUpdate(Cia402State::SwitchOnDisabled),
-            TIMEOUT,
+            COMMS_TIMEOUT,
         )
         .await?;
 
@@ -72,7 +72,7 @@ mod tests {
         wait_for_event(
             drive.event_rx.resubscribe(),
             MotorEvent::Cia402StateUpdate(Cia402State::OperationEnabled),
-            TIMEOUT,
+            COMMS_TIMEOUT,
         )
         .await?;
 

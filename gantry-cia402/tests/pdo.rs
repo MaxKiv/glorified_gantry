@@ -68,7 +68,7 @@ mod tests {
         wait_for_event(
             event_rx.resubscribe(),
             MotorEvent::NmtStateUpdate(NmtState::PreOperational),
-            TIMEOUT,
+            COMMS_TIMEOUT,
         )
         .await
         .map_err(|err| {
@@ -106,7 +106,7 @@ mod tests {
         wait_for_event(
             event_rx.resubscribe(),
             MotorEvent::NmtStateUpdate(NmtState::Operational),
-            TIMEOUT,
+            COMMS_TIMEOUT,
         )
         .await
         .map_err(|err| format!("Error waiting for NmtState::Operational: {err:?}").to_string())?;

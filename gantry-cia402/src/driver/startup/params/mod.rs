@@ -44,7 +44,7 @@ pub const TEST_PARAMS: &[SdoAction] = &[
     },
     SdoAction::Download {
         entry: &PROFILE_VELOCITY,
-        data: &(30u32).to_le_bytes(), // 30 revs/minute
+        data: &(15u32).to_le_bytes(), // 15 revs/minute
     },
     SdoAction::Download {
         entry: &END_VELOCITY,

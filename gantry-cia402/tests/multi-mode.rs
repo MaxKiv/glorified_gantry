@@ -23,7 +23,7 @@ mod tests {
     };
     use tokio::signal;
 
-    use crate::common::{PARAMS, TIMEOUT};
+    use crate::common::{COMMS_TIMEOUT, HOMING_TIMEOUT, PARAMS, POS_TIMEOUT};
 
     use super::*;
 
@@ -78,7 +78,7 @@ mod tests {
         wait_for_event(
             drive.event_rx.resubscribe(),
             MotorEvent::Cia402StateUpdate(Cia402State::ReadyToSwitchOn),
-            TIMEOUT,
+            COMMS_TIMEOUT,
         )
         .await?;
 
@@ -92,7 +92,7 @@ mod tests {
         wait_for_event(
             drive.event_rx.resubscribe(),
             MotorEvent::Cia402StateUpdate(Cia402State::OperationEnabled),
-            TIMEOUT,
+            COMMS_TIMEOUT,
         )
         .await?;
 
@@ -110,7 +110,7 @@ mod tests {
                 homing_completed: true,
                 homing_error: false,
             },
-            TIMEOUT,
+            HOMING_TIMEOUT,
         )
         .await?;
 
@@ -213,7 +213,7 @@ mod tests {
                         setpoint_acknowlegded: true,
                         following_error: false,
                     },
-                    TIMEOUT,
+                    POS_TIMEOUT,
                 )
                 .await?;
                 wait_for_event(
@@ -224,7 +224,7 @@ mod tests {
                         setpoint_acknowlegded: false,
                         following_error: false,
                     },
-                    TIMEOUT,
+                    POS_TIMEOUT,
                 )
                 .await?;
 
@@ -246,7 +246,7 @@ mod tests {
                         setpoint_acknowlegded: true,
                         following_error: false,
                     },
-                    TIMEOUT,
+                    POS_TIMEOUT,
                 )
                 .await?;
                 wait_for_event(
@@ -257,7 +257,7 @@ mod tests {
                         setpoint_acknowlegded: false,
                         following_error: false,
                     },
-                    TIMEOUT,
+                    POS_TIMEOUT,
                 )
                 .await?;
             }

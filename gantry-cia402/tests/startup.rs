@@ -17,7 +17,7 @@ mod tests {
         error::DriveError,
     };
 
-    use crate::common::{PARAMS, TIMEOUT};
+    use crate::common::{COMMS_TIMEOUT, PARAMS};
 
     use super::*;
 
@@ -48,7 +48,7 @@ mod tests {
         wait_for_event(
             drive.event_rx.resubscribe(),
             MotorEvent::Cia402StateUpdate(Cia402State::OperationEnabled),
-            TIMEOUT,
+            COMMS_TIMEOUT,
         )
         .await?;
 

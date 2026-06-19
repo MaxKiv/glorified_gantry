@@ -27,7 +27,7 @@ mod tests {
     };
     use tokio::signal;
 
-    use crate::common::{PARAMS, TIMEOUT};
+    use crate::common::{COMMS_TIMEOUT, PARAMS, POS_TIMEOUT};
 
     use super::*;
 
@@ -85,7 +85,7 @@ mod tests {
         wait_for_event(
             drive.event_rx.resubscribe(),
             MotorEvent::Cia402StateUpdate(Cia402State::SwitchOnDisabled),
-            TIMEOUT,
+            COMMS_TIMEOUT,
         )
         .await?;
 
@@ -99,7 +99,7 @@ mod tests {
         wait_for_event(
             drive.event_rx.resubscribe(),
             MotorEvent::Cia402StateUpdate(Cia402State::OperationEnabled),
-            TIMEOUT,
+            COMMS_TIMEOUT,
         )
         .await?;
 
@@ -117,7 +117,7 @@ mod tests {
                 homing_completed: true,
                 homing_error: false,
             },
-            TIMEOUT,
+            COMMS_TIMEOUT,
         )
         .await?;
 
@@ -132,10 +132,10 @@ mod tests {
                 .map_err(DriveError::CommandError)?;
 
             info!("Wait for setpoint acknowledged event");
-            wait_for_setpoint_acknowledge(drive.event_rx.resubscribe(), TIMEOUT).await?;
+            wait_for_setpoint_acknowledge(drive.event_rx.resubscribe(), COMMS_TIMEOUT).await?;
 
             info!("Wait for target reached event");
-            wait_for_target_reached(drive.event_rx.resubscribe(), TIMEOUT).await?;
+            wait_for_target_reached(drive.event_rx.resubscribe(), COMMS_TIMEOUT).await?;
 
             info!("Doing position relative position movement backward # {num}");
             drive
@@ -147,10 +147,10 @@ mod tests {
                 .map_err(DriveError::CommandError)?;
 
             info!("Wait for setpoint acknowledged event");
-            wait_for_setpoint_acknowledge(drive.event_rx.resubscribe(), TIMEOUT).await?;
+            wait_for_setpoint_acknowledge(drive.event_rx.resubscribe(), COMMS_TIMEOUT).await?;
 
             info!("Wait for target reached event");
-            wait_for_target_reached(drive.event_rx.resubscribe(), TIMEOUT).await?;
+            wait_for_target_reached(drive.event_rx.resubscribe(), POS_TIMEOUT).await?;
         }
 
         Ok(())
