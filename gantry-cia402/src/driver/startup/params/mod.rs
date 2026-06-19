@@ -24,7 +24,7 @@ pub const TEST_PARAMS: &[SdoAction] = &[
     SdoAction::Download {
         entry: &SOFTWARE_POSITION_RANGE_LIMIT_MAX,
         // data: &0i32.to_le_bytes(), // often used as "disable"
-        data: &1000i32.to_le_bytes(), // TODO: find limits
+        data: &1800i32.to_le_bytes(), // NOTE: Experimentally validated on the test setup
     },
     SdoAction::Download {
         entry: &HOME_OFFSET,

@@ -5,9 +5,9 @@ use tracing::*;
 #[cfg(test)]
 mod tests {
 
-    const TEST_POSITION: i32 = 50;
+    const TEST_POSITION: i32 = 100;
     // const TEST_POSITION: i32 = 100;
-    const TEST_SPEED: u32 = 1;
+    const TEST_SPEED: u32 = 10;
 
     use gantry_axis::sync::SyncMaster;
     use gantry_cia402::{
