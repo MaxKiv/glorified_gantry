@@ -20,7 +20,7 @@ mod tests {
             command::MotorCommand,
             event::MotorEvent,
             receiver::subscriber::{wait_for_event, wait_for_homing_completed},
-            startup::{self, params::default::DEFAULT_PARAMS},
+            startup::{self, params::default::DEMO_PARAMS},
             state::Cia402State,
         },
         error::DriveError,
@@ -36,7 +36,7 @@ mod tests {
     async fn test_torque() -> anyhow::Result<()> {
         gantry_demo::setup_tracing();
 
-        pub const PARAMS: &[SdoAction] = DEFAULT_PARAMS;
+        pub const PARAMS: &[SdoAction] = DEMO_PARAMS;
 
         let identifier = common::TEST_MOTOR;
         let node_id = identifier.node_id;

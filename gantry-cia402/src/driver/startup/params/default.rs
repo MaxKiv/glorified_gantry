@@ -1,6 +1,6 @@
 use crate::{comms::sdo::SdoAction, driver::startup::home::HomingMethods, od::*};
 
-pub const DEFAULT_PARAMS: &[SdoAction] = &[
+pub const DEMO_PARAMS: &[SdoAction] = &[
     // --- Limit Switches ---
     // NOTE: This causes the drive to error with: Value Out Of Range, wrong datasheet?
     // Forget previous limit switch position

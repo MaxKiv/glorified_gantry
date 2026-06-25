@@ -29,7 +29,7 @@ pub async fn wait_for_target_reached(
     axis: Axis,
     timeout: Duration,
 ) -> anyhow::Result<()> {
-    const POS_WINDOW: f64 = 1.0;
+    const POS_WINDOW: f64 = 0.01;
     const TORQUE_WINDOW: f64 = 0.01;
 
     info!("Waiting until axis: {axis:?} target is reached: {target:?}");
@@ -251,14 +251,14 @@ pub async fn wait_until_gantry_command_completed(
         _ => vec![], // no target (shouldn't happen for valid commands)
     };
 
-    info!("Sending gantry command: {cmd:?}");
+    info!("xxx Sending gantry command: {cmd:?}");
     gantry.send_command(cmd.clone()).await?;
-    info!("Waiting until command: {cmd:?} is completed");
+    info!("xxx Waiting until command: {cmd:?} is completed");
 
     let futures = futures.into_iter().flatten();
     join_all(futures).await;
 
-    info!("Gantry command completed: {cmd:?}");
+    info!("xxx Gantry command completed: {cmd:?}");
 
     Ok(())
 }

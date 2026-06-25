@@ -42,7 +42,7 @@ pub async fn handle_feedback(
 
                 // Parse received frames
                 let Ok(parsed): Result<Frame, _> = message.try_into() else {
-                    error!("Error parsing message: {message:?}");
+                    debug!("Error parsing message: {message:?}");
                     continue;
                 };
                 parsed.log();

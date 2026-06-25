@@ -21,7 +21,7 @@ mod tests {
                 wait_for_event, wait_for_homing_completed, wait_for_setpoint_acknowledge,
                 wait_for_target_reached,
             },
-            startup::params::{TEST_PARAMS, default::DEFAULT_PARAMS},
+            startup::params::{TEST_PARAMS, default::DEMO_PARAMS},
             state::Cia402State,
         },
         error::DriveError,

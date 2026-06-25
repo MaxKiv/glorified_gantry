@@ -37,7 +37,7 @@ pub async fn log_canopen_pretty(mut canopen: CanOpenInterface) -> Result<(), Rec
                 match message {
                     Ok(message) => {
                         let Ok(parsed): Result<Frame, _> = message.try_into() else {
-                            error!("Error parsing message: {message:?}");
+                            debug!("Error parsing message: {message:?}");
                             continue;
                         };
                         parsed.log();
