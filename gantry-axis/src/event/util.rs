@@ -195,11 +195,9 @@ pub async fn wait_for_position_target_reached(
 pub async fn wait_until_gantry_homed(
     event_rx: broadcast::Receiver<GantryEvent>,
     gantry: &Gantry,
-    cfg: &GantryConfig,
     timeout: Duration,
 ) -> anyhow::Result<()> {
-    wait_until_gantry_command_completed(GantryCommand::Home, event_rx, gantry, cfg,
-        timeout).await?;
+    wait_until_gantry_command_completed(GantryCommand::Home, event_rx, gantry, &gantry.cfg, timeout).await?;
 
     Ok(())
 }

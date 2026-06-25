@@ -12,10 +12,11 @@ mod tests {
             setpoint::{AxisSetpoint, PositionSetpoint},
         },
         command::GantryCommand,
-        event::util::wait_for_target_reached,
+        event::util::{HOME_TIMEOUT, wait_for_target_reached, wait_until_gantry_homed},
         gantry::Gantry,
         setpoint::translator::scaling::DeviceScaling,
     };
+    use gantry_cia402::driver::receiver::subscriber::wait_for_homing_completed;
     use tokio::{signal, time::sleep};
     use uom::si::{
         f64::{Length, Velocity},
@@ -31,7 +32,7 @@ mod tests {
 
     #[tokio::test]
     /// Test basic cia402 state transitions
-    async fn homing_test() -> anyhow::Result<()> {
+    async fn pos_test() -> anyhow::Result<()> {
         gantry_demo::setup_tracing();
 
         info!("Starting can interface");
@@ -40,7 +41,7 @@ mod tests {
         let gantry = Gantry::start(canopen, TEST_CONFIG).await?;
 
         // Create a task for the test logic
-        let test_task = tokio::spawn(test_gantry_homing(gantry));
+        let test_task = tokio::spawn(test_gantry_pos(gantry));
 
         // Wait for either Ctrl-C or test completion
         tokio::select! {
@@ -55,18 +56,13 @@ mod tests {
         Ok(())
     }
 
-    async fn test_gantry_homing(gantry: Gantry) -> anyhow::Result<()> {
+    async fn test_gantry_pos(gantry: Gantry) -> anyhow::Result<()> {
+        info!("Homing gantry");
         gantry.send_command(GantryCommand::Home).await?;
 
-        wait_for_target_reached(
-            gantry.get_event_rx(),
-            gantry_axis::event::util::TargetQuantity::Home(true),
-            Axis::X,
-            TIMEOUT,
-        )
-        .await?;
+        wait_until_gantry_homed(gantry.get_event_rx(), &gantry, HOME_TIMEOUT).await?;
 
-        let pos_target_x = Length::new::<millimeter>(60.0);
+        let pos_target_x = Length::new::<millimeter>(10.0);
         let pos_target_z = Length::new::<millimeter>(10.0);
         let vel = Velocity::new::<meter_per_second>(0.01);
 
