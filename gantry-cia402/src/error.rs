@@ -53,6 +53,10 @@ pub enum InitialisationError {
     ParametrisationCommunicationFailure(Cia402Identifier),
     #[error("Unable to parametrise motor {0}")]
     ParametrisationError(Cia402Identifier),
+    #[error("External Command TX channel provided, but RX missing")]
+    ExternalRXCommandChannelMissing(Cia402Identifier),
+    #[error("External Command RX channel provided, but TX missing")]
+    ExternalTXCommandChannelMissing(Cia402Identifier),
 }
 
 #[derive(Debug, Error)]

@@ -4,7 +4,7 @@ pub mod setpoint;
 use gantry_cia402::{
     comms::sdo::SdoAction,
     driver::{
-        Cia402Driver, builder::Cia402DriverBuilder, command::MotorCommand,
+        AxisMaster, AxisSlave, Cia402Driver, builder::Cia402DriverBuilder, command::MotorCommand,
         identifier::Cia402Identifier,
     },
 };
@@ -39,8 +39,8 @@ pub struct AxisConfig {
 
 pub struct AxisMotors {
     pub axis: Axis,
-    pub master: Cia402Driver,
-    pub slave: Option<Cia402Driver>,
+    pub master: Cia402Driver<AxisMaster>,
+    pub slave: Option<Cia402Driver<AxisSlave>>,
 }
 
 impl AxisMotors {
@@ -64,6 +64,7 @@ impl AxisMotors {
             .with_default_pdo_mappings()
             .with_parameters(params)
             .with_sync_receiver(sync_rx.resubscribe())
+            .as_master()
             .build()
             .await?;
 
@@ -75,6 +76,7 @@ impl AxisMotors {
                     .with_default_pdo_mappings()
                     .with_parameters(params)
                     .with_sync_receiver(sync_rx.resubscribe())
+                    .as_slave_with_master(&master)
                     .build()
                     .await?,
             )
@@ -92,25 +94,13 @@ impl AxisMotors {
 
     /// Send given motorcommand to the master and slave motors of this axis
     pub fn send_command_to_motors(&self, command: &MotorCommand) {
-        let master_cmd = command.clone();
-        let slave_cmd = command.clone();
-
         info!("Axis {:?} sending command: {command:?}", self.axis);
 
-        // Send to master driver
-        if let Err(e) = self.master.cmd_tx.send(master_cmd) {
+        // Send command to all Cia402Drivers that make up this axis
+        // NOTE:
+        if let Err(e) = self.master.cmd_tx.send(command.clone()) {
             error!(
                 "Axis {:?} unable to send command to Master: {command:?} - {e}",
-                self.axis
-            );
-        }
-
-        // Send to slave driver if that exists
-        if let Some(slave) = &self.slave
-            && let Err(e) = slave.cmd_tx.send(slave_cmd)
-        {
-            error!(
-                "Axis {:?} unable to send command to Slave: {command:?} - {e}",
                 self.axis
             );
         }

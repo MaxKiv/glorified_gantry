@@ -70,12 +70,6 @@ pub async fn cia402_orchestrator_task(
             Ok(cmd) = cmd_rx.recv() => {
                 trace!("Orchestrator received command: {:?}", cmd);
 
-                // Cancel current task
-                if let Some(task) = current_task.take() {
-                    task.abort();
-                    trace!("Aborted current transition due to new command");
-                }
-
                 // Determine new target state
                 let new_target = match cmd {
                     MotorCommand::Enable => Cia402State::OperationEnabled,
@@ -84,6 +78,12 @@ pub async fn cia402_orchestrator_task(
                     _ => continue,
                 };
                 target_state = Some(new_target);
+
+                // New target cia402 state requested; Cancel current transition
+                if let Some(task) = current_task.take() {
+                    task.abort();
+                    trace!("Aborted current transition due to new command");
+                }
 
                 // Start fresh transition attempt
                 trace!("Starting transition toward {:?}", new_target);

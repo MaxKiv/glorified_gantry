@@ -22,7 +22,7 @@ impl SetpointTranslator {
         }
     }
 
-    pub fn to_motor_cmd(&self, setpoint: AxisSetpoint) -> MotorCommand {
+    pub fn scale_to_motor_cmd(&self, setpoint: AxisSetpoint) -> MotorCommand {
         let cmd = match setpoint.clone() {
             AxisSetpoint::RelativePosition(position_setpoint) => {
                 // Scale setpoint

@@ -61,7 +61,7 @@ impl CommandHandler {
                         cmd_x = if let Some(setpoint) = x
                             && let Some(ref translator) = x_translator
                         {
-                            Some(translator.to_motor_cmd(setpoint))
+                            Some(translator.scale_to_motor_cmd(setpoint))
                         } else {
                             None
                         };
@@ -69,7 +69,7 @@ impl CommandHandler {
                         cmd_y = if let Some(setpoint) = y
                             && let Some(ref translator) = y_translator
                         {
-                            Some(translator.to_motor_cmd(setpoint))
+                            Some(translator.scale_to_motor_cmd(setpoint))
                         } else {
                             None
                         };
@@ -77,7 +77,7 @@ impl CommandHandler {
                         cmd_z = if let Some(setpoint) = z
                             && let Some(ref translator) = z_translator
                         {
-                            Some(translator.to_motor_cmd(setpoint))
+                            Some(translator.scale_to_motor_cmd(setpoint))
                         } else {
                             None
                         };
@@ -98,6 +98,7 @@ impl CommandHandler {
                             .as_ref()
                             .map(|cmd| z_axis.as_ref().map(|z| z.send_command_to_motors(cmd)));
                     }
+
                     GantryCommand::Home => {
                         info!(
                             "Homing gantry: Sending Enable (cia402 transition to Operation Enabled)"

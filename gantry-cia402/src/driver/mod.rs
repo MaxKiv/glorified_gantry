@@ -40,18 +40,27 @@ use tokio::{
 };
 use tracing::*;
 
+/// Cia402Driver configured standalone, default
+pub struct Standalone;
+/// Cia402Driver configured as axis master
+pub struct AxisMaster;
+/// Cia402Driver configured as axis slave
+pub struct AxisSlave;
+
 /// CiA-402 driver built on top of a CANopen protocol manager
-pub struct Cia402Driver {
+pub struct Cia402Driver<Mode = Standalone> {
     pub identifier: Cia402Identifier,
     pub cmd_tx: broadcast::Sender<MotorCommand>,
+    pub cmd_rx: broadcast::Receiver<MotorCommand>,
     pub nmt_tx: mpsc::Sender<NmtState>,
     pub event_rx: broadcast::Receiver<MotorEvent>,
     canopen: CanOpenInterface,
     _handles: Vec<JoinHandle<()>>,
     sdo: Arc<Mutex<SdoClient>>,
+    _mode: std::marker::PhantomData<Mode>,
 }
 
-impl Cia402Driver {
+impl<Mode> Cia402Driver<Mode> {
     /// Initialize a new Cia402Driver to manage all CiA-402 related interactions with a single motor
     /// connected to the given CANopen interface on the given node id.
     /// It requires motor parametrisation defined as a slice of SdoActions, and a valid TPDO and
@@ -68,13 +77,12 @@ impl Cia402Driver {
         default_pdo_set: &'static PDOSet,
         minimal_pdo_set: &'static PDOSet,
         sync_rx: broadcast::Receiver<Instant>,
+        cmd_tx: broadcast::Sender<MotorCommand>,
+        cmd_rx: broadcast::Receiver<MotorCommand>,
     ) -> Result<Self, InitialisationError> {
         // Track task handles that we are about to spawn to bind their lifetimes to this object
         let mut handles: Vec<JoinHandle<()>> = Vec::new();
         let node_id = identifier.node_id;
-
-        // Initialize input interfaces
-        let (cmd_tx, cmd_rx) = tokio::sync::broadcast::channel(10);
 
         // Initialize output interfaces
         let (event_tx, event_rx): (
@@ -206,14 +214,16 @@ impl Cia402Driver {
 
         // Drive is now parametrised, T/RPDO are configured and in NMT::Operational
         info!("Cia402Driver for motor {identifier} constructed and initialized");
-        Ok(Cia402Driver {
+        Ok(Cia402Driver::<Mode> {
             identifier,
             cmd_tx,
+            cmd_rx,
             nmt_tx,
             event_rx: event_rx.resubscribe(),
             canopen,
             _handles: handles,
             sdo,
+            _mode: std::marker::PhantomData::<Mode>,
         })
     }
 
@@ -225,6 +235,14 @@ impl Cia402Driver {
         for handle in self._handles {
             handle.abort();
         }
+    }
+
+    pub fn get_cmd_tx_channel(&self) -> broadcast::Sender<MotorCommand> {
+        self.cmd_tx.clone()
+    }
+
+    pub fn get_cmd_rx_channel(&self) -> broadcast::Receiver<MotorCommand> {
+        self.cmd_rx.resubscribe()
     }
 }
 
