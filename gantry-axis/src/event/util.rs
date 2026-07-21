@@ -30,6 +30,7 @@ pub async fn wait_for_target_reached(
     timeout: Duration,
 ) -> anyhow::Result<()> {
     const POS_WINDOW: f64 = 0.01;
+    const VEL_WINDOW: f64 = 0.01;
     const TORQUE_WINDOW: f64 = 0.01;
 
     info!("Waiting until axis: {axis:?} target is reached: {target:?}");
@@ -55,28 +56,12 @@ pub async fn wait_for_target_reached(
             }
 
             (
-                GantryEvent::PositionModeFeedback {
-                    axis: event_axis,
-                    target_reached,
-                    ..
-                },
-                TargetQuantity::Position(target_val),
-            ) => {
-                if *event_axis == axis {
-                    info!("Axis: {axis:?} - checking PositionModeFeedback event against target: {target_val}");
-                    return *target_reached
-                }
-                false
-            }
-
-
-            (
                 GantryEvent::Velocity {
                     axis: event_axis,
                     value,
                 },
                 TargetQuantity::Velocity(target_val),
-            ) if *event_axis == axis && (value - target_val).abs() <= POS_WINDOW => true,
+            ) if *event_axis == axis && (value - target_val).abs() <= VEL_WINDOW => true,
 
             (
                 GantryEvent::Torque {
@@ -93,21 +78,35 @@ pub async fn wait_for_target_reached(
                 }
             }
 
-            (
-                GantryEvent::TorqueModeFeedback {
-                    axis: event_axis,
-                    setpoint_reached,
-                    ..
-                },
-                TargetQuantity::Torque(target_val),
-            ) => {
-                if *event_axis == axis { 
-                    info!("Axis: {axis:?} - checking TorqueModeFeedback event against target: {target_val}");
-                    *setpoint_reached
-                } else {
-                    false
-                }
-            }
+            // (
+            //     GantryEvent::PositionModeFeedback {
+            //         axis: event_axis,
+            //         target_reached,
+            //         ..
+            //     },
+            //     TargetQuantity::Position(target_val),
+            // ) => {
+            //     if *event_axis == axis {
+            //         info!("Axis: {axis:?} - checking PositionModeFeedback event against target: {target_val}");
+            //         return *target_reached
+            //     }
+            //     false
+            // }
+            // (
+            //     GantryEvent::TorqueModeFeedback {
+            //         axis: event_axis,
+            //         setpoint_reached,
+            //         ..
+            //     },
+            //     TargetQuantity::Torque(target_val),
+            // ) => {
+            //     if *event_axis == axis { 
+            //         info!("Axis: {axis:?} - checking TorqueModeFeedback event against target: {target_val}");
+            //         *setpoint_reached
+            //     } else {
+            //         false
+            //     }
+            // }
 
             (
                 GantryEvent::Homing {
@@ -119,6 +118,7 @@ pub async fn wait_for_target_reached(
                 TargetQuantity::Home(reached),
             ) => *event_axis == axis && completed == reached && !(*(error)),
 
+            // NOTE: defaults to false, meaning any other event type is irrelevant to the current target
             _ => false,
         },
         timeout,
