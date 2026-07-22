@@ -1,6 +1,7 @@
 use anyhow::Context;
 use gantry_axis::command::GantryCommand;
-use gantry_axis::{diagnostic::DiagnosticLevel, event::GantryEvent};
+use gantry_axis::event::GantryMotorEvent;
+use gantry_axis::{diagnostic::DiagnosticLevel, event::GantryMotorEventContent};
 use r2r::geometry_msgs::msg::Vector3;
 use r2r::{self, QosProfile, diagnostic_msgs, sensor_msgs};
 use std::time::Duration;
@@ -14,7 +15,7 @@ use crate::setpoints::bridge_gantry_setpoints;
 const EXECUTOR_SPIN_PERIOD: Duration = Duration::from_millis(100);
 
 pub async fn run_gantry_ros_bridge(
-    rx: broadcast::Receiver<GantryEvent>,
+    rx: broadcast::Receiver<GantryMotorEvent>,
     tx: mpsc::Sender<GantryCommand>,
 ) -> anyhow::Result<()> {
     info!("running gantry ros bridge");

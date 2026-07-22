@@ -14,8 +14,7 @@ use tracing::*;
 
 use crate::setpoint::translator::scaling::DeviceScaling;
 
-// TODO: this should probably be [`AxisConfig`]?
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Axis {
     X,
     Y,

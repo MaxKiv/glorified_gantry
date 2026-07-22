@@ -9,7 +9,7 @@ mod tests {
         axis::setpoint::{AxisSetpoint, PositionSetpoint},
         command::GantryCommand,
         event::{
-            GantryEvent,
+            GantryMotorEvent, GantryMotorEventContent,
             util::{
                 wait_for_position_target_reached, wait_for_target_reached,
                 wait_until_event_matches, wait_until_gantry_command_completed,
@@ -73,7 +73,6 @@ mod tests {
             GantryCommand::Home,
             gantry.get_event_rx(),
             &gantry,
-            &gantry.cfg,
             HOME_TIMEOUT,
         )
         .await?;
@@ -103,14 +102,8 @@ mod tests {
 
         info!("TEST: Sending gantry to starting position: {setpoint:?}",);
 
-        wait_until_gantry_command_completed(
-            setpoint,
-            gantry.get_event_rx(),
-            &gantry,
-            &gantry.cfg,
-            TIMEOUT,
-        )
-        .await?;
+        wait_until_gantry_command_completed(setpoint, gantry.get_event_rx(), &gantry, TIMEOUT)
+            .await?;
 
         info!("TEST: Starting position reached!");
 
@@ -127,7 +120,7 @@ mod tests {
     }
 
     fn spawn_ros_bridge(
-        rx: broadcast::Receiver<GantryEvent>,
+        rx: broadcast::Receiver<GantryMotorEvent>,
         tx: mpsc::Sender<GantryCommand>,
     ) -> (JoinHandle<()>, watch::Sender<bool>) {
         let (shutdown_tx, mut shutdown_rx) = tokio::sync::watch::channel(false);

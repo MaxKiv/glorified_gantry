@@ -5,14 +5,14 @@ use tracing::*;
 
 use crate::{
     axis::{Axis, receiver::AxisEventReceiver},
-    event::{GantryEvent, combiner::EventCombiner},
+    event::{GantryMotorEvent, combiner::EventCombiner},
     setpoint::translator::SetpointTranslator,
     spawn_logged,
 };
 
 pub struct FeedbackHandle {
     _handles: Vec<Option<JoinHandle<()>>>,
-    pub gantry_rx: broadcast::Receiver<GantryEvent>,
+    pub gantry_rx: broadcast::Receiver<GantryMotorEvent>,
 }
 
 pub struct FeedbackHandler;
@@ -37,7 +37,7 @@ impl FeedbackHandler {
         let gantry_tx_z = gantry_tx.clone();
 
         // Spawn a axis feedback handler for each configured gantry axis
-        // Spawn X Axis handler, if axis isconfigured
+        // Spawn X Axis handler, if axis is configured
         handles.push(x.map(|x| {
             spawn_logged("FEEDBACK_X", async {
                 FeedbackHandler::handle_axis_feedback(x, gantry_tx_x, x_translator.unwrap()).await
@@ -51,7 +51,7 @@ impl FeedbackHandler {
             })
         }));
 
-        // Spawn Z Axis handler, if configured
+        // Spawn Z Axis handler, if axis is configured
         handles.push(z.map(|z| {
             spawn_logged("FEEDBACK_Z", async {
                 FeedbackHandler::handle_axis_feedback(z, gantry_tx_z, z_translator.unwrap()).await
@@ -66,13 +66,13 @@ impl FeedbackHandler {
 
     pub async fn handle_axis_feedback(
         mut receiver: AxisEventReceiver,
-        gantry_tx: broadcast::Sender<GantryEvent>,
+        gantry_tx: broadcast::Sender<GantryMotorEvent>,
         translator: SetpointTranslator,
     ) -> anyhow::Result<()> {
         let mut combiner = EventCombiner::new_for_axis(
             receiver.axis.clone(),
             receiver.master_id.node_id,
-            receiver.slave_id.as_ref().map(|x| x.node_id),
+            receiver.slave_id.as_ref().map(|s| s.node_id),
         );
 
         loop {
@@ -90,8 +90,14 @@ impl FeedbackHandler {
                             receiver.axis.clone()
                         );
 
-                        Self::handle_motor_event(receiver.axis.clone(), event, receiver.master_id.node_id,
-                            &gantry_tx, &translator, &mut combiner);
+                        Self::handle_motor_event(
+                            receiver.axis.clone(),
+                            event,
+                            receiver.master_id.node_id,
+                            &gantry_tx,
+                            &translator,
+                            &mut combiner
+                        );
                     },
                     // Receive motor events from slave
                     Ok(event) = slave.recv() => {
@@ -110,7 +116,7 @@ impl FeedbackHandler {
                 }
             } else {
                 trace!(
-                    "Feedback: Axis {:?} has master onnly configuration, NO slave",
+                    "Feedback: Axis {:?} has only master configured, NO slave for this axis",
                     receiver.axis.clone()
                 );
                 // If no slave is configured for this axis: Handle just the master events
@@ -134,17 +140,18 @@ impl FeedbackHandler {
         axis: Axis,
         event: MotorEvent,
         from_id: NodeId,
-        gantry_tx: &broadcast::Sender<GantryEvent>,
+        gantry_tx: &broadcast::Sender<GantryMotorEvent>,
         translator: &SetpointTranslator,
         combiner: &mut EventCombiner,
     ) {
         trace!(target: "events", "Gantry: motor event received: {:?}", event);
 
+        // TODO: this unwrap_or defaults to uncombined events for pos/vel/torque feedback;
         let combined_event = combiner.update(from_id, event.clone()).unwrap_or(event);
 
         let translated_event = translator.translate_motor_event(combined_event);
 
-        let gantry_event = GantryEvent::from_translated(axis, translated_event);
+        let gantry_event = GantryMotorEvent::from_translated(from_id, axis, translated_event);
 
         info!("Sending gantry event: {gantry_event:?}");
 

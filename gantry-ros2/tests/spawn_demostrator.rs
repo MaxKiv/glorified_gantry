@@ -11,8 +11,11 @@ mod tests {
         },
         command::GantryCommand,
         event::{
-            GantryEvent,
-            util::{wait_for_position_target_reached, wait_for_target_reached},
+            GantryMotorEvent, GantryMotorEventContent,
+            util::{
+                wait_for_position_target_reached, wait_for_target_reached,
+                wait_until_gantry_command_completed,
+            },
         },
         gantry::Gantry,
         setpoint::translator::scaling::DeviceScaling,
@@ -73,7 +76,7 @@ mod tests {
     }
 
     fn spawn_ros_bridge(
-        rx: broadcast::Receiver<GantryEvent>,
+        rx: broadcast::Receiver<GantryMotorEvent>,
         tx: mpsc::Sender<GantryCommand>,
     ) -> (JoinHandle<()>, watch::Sender<bool>) {
         let (shutdown_tx, mut shutdown_rx) = tokio::sync::watch::channel(false);
@@ -94,30 +97,13 @@ mod tests {
     async fn test_ros_bridge(gantry: Gantry) -> anyhow::Result<()> {
         info!("TEST: Homing gantry");
 
-        gantry.send_command(GantryCommand::Home).await?;
-
-        info!("TEST: wait on gantry homed");
-
-        tokio::try_join!(
-            wait_for_target_reached(
-                gantry.get_event_rx(),
-                gantry_axis::event::util::TargetQuantity::Home(true),
-                Axis::X,
-                HOME_TIMEOUT,
-            ),
-            wait_for_target_reached(
-                gantry.get_event_rx(),
-                gantry_axis::event::util::TargetQuantity::Home(true),
-                Axis::Y,
-                HOME_TIMEOUT,
-            ),
-            wait_for_target_reached(
-                gantry.get_event_rx(),
-                gantry_axis::event::util::TargetQuantity::Home(true),
-                Axis::Z,
-                HOME_TIMEOUT,
-            ),
-        )?;
+        wait_until_gantry_command_completed(
+            GantryCommand::Home,
+            gantry.get_event_rx(),
+            &gantry,
+            HOME_TIMEOUT,
+        )
+        .await?;
 
         info!("TEST: Gantry homed!");
 

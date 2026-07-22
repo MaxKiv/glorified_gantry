@@ -12,7 +12,7 @@ use tracing::*;
 
 use crate::{driver::event::MotorEvent, error::DriveError};
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum NmtState {
     Bootup,
     Stopped,

@@ -9,7 +9,7 @@ pub struct SdoRequest {
     pub value: Option<ODEntry>,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct SdoError {
     pub from: NodeId,
     pub index: u16,
@@ -17,7 +17,7 @@ pub struct SdoError {
     pub code: u32,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct SdoUploadResult {
     pub from: NodeId,
     pub dlc: u8,
@@ -26,14 +26,14 @@ pub struct SdoUploadResult {
     pub data: [u8; 4],
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct SdoDownloadConfirmed {
     pub from: NodeId,
     pub index: u16,
     pub sub_index: u8,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SdoResponse {
     Error(SdoError),
     DownloadConfirm(SdoDownloadConfirmed),

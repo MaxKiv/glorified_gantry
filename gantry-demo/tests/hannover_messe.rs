@@ -12,7 +12,7 @@ mod tests {
         },
         command::GantryCommand,
         event::{
-            GantryEvent,
+            GantryMotorEventContent,
             util::{
                 TargetQuantity, wait_for_position_target_reached, wait_for_target_reached,
                 wait_until_event_matches, wait_until_gantry_command_completed,
@@ -53,7 +53,8 @@ mod tests {
         let (canopen, _) = oze_canopen::canopen::start(String::from("can0"), Some(1_000_000));
 
         info!("Starting gantry");
-        let gantry = Gantry::start(canopen, YZ_CONFIG).await?;
+        let cfg = YZ_CONFIG;
+        let gantry = Gantry::start(canopen, cfg).await?;
 
         // Create a task for the test logic
         let test_task = tokio::spawn(test_gantry_hannover_messe(gantry));
@@ -81,7 +82,6 @@ mod tests {
             GantryCommand::Home,
             gantry.get_event_rx(),
             &gantry,
-            &gantry.cfg,
             HOME_TIMEOUT,
         )
         .await?;
@@ -145,41 +145,14 @@ mod tests {
                         velocity: vel,
                     })),
                 };
-                info!("xxx: Sending setpoints: {:?}", TEST_SETPOINTS[setpoint_idx]);
 
-                gantry.send_command(setpoint.clone()).await?;
-
-                info!("xxx: Waiting on setpoint: {:?}", setpoint.clone());
-
-                tokio::try_join!(
-                    wait_for_target_reached(
-                        gantry.get_event_rx(),
-                        gantry_axis::event::util::TargetQuantity::Position(
-                            target_z.get::<decimeter>()
-                        ),
-                        Axis::Z,
-                        TIMEOUT
-                    ),
-                    wait_for_target_reached(
-                        gantry.get_event_rx(),
-                        gantry_axis::event::util::TargetQuantity::Position(
-                            target_y.get::<decimeter>()
-                        ),
-                        Axis::Y,
-                        TIMEOUT
-                    ),
-                )?;
-
-                // wait_until_gantry_command_completed(
-                //     setpoint.clone(),
-                //     event_rx,
-                //     &gantry,
-                //     &gantry.cfg,
-                //     TIMEOUT,
-                // )
-                // .await?;
-
-                info!("xxx: setpoint: {:?} REACHED\n\n", setpoint.clone());
+                wait_until_gantry_command_completed(
+                    setpoint,
+                    gantry.get_event_rx(),
+                    &gantry,
+                    TIMEOUT,
+                )
+                .await?;
 
                 // sleep(Duration::from_millis(666)).await;
             }

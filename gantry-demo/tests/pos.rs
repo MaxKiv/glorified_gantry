@@ -12,7 +12,7 @@ mod tests {
         },
         command::GantryCommand,
         event::{
-            GantryEvent,
+            GantryMotorEventContent,
             util::{
                 wait_for_position_target_reached, wait_for_target_reached,
                 wait_until_event_matches, wait_until_gantry_command_completed,
@@ -80,7 +80,6 @@ mod tests {
             GantryCommand::Home,
             gantry.get_event_rx(),
             &gantry,
-            &gantry.cfg,
             HOME_TIMEOUT,
         )
         .await?;
@@ -146,14 +145,8 @@ mod tests {
                 };
                 info!("TEST: Sending setpoint: {:?}", setpoint.clone());
 
-                wait_until_gantry_command_completed(
-                    setpoint.clone(),
-                    event_rx,
-                    &gantry,
-                    &gantry.cfg,
-                    TIMEOUT,
-                )
-                .await?;
+                wait_until_gantry_command_completed(setpoint.clone(), event_rx, &gantry, TIMEOUT)
+                    .await?;
                 info!("TEST: setpoint: {:?} REACHED", setpoint.clone());
 
                 // sleep(Duration::from_millis(1000)).await;

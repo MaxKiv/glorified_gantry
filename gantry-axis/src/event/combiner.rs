@@ -165,6 +165,7 @@ impl EventCombiner {
                 })
             }
 
+            // TODO: fix actual position/vel/torque feedback combining
             _ => None,
         }
     }

@@ -86,7 +86,7 @@ pub enum TranslatedMotorEvent {
     },
 
     /// Fault detected (e.g. fault bit set in statusword)
-    Fault { code: u16, description: String },
+    Fault { code: u16 },
 
     /// EMCY message from motor driver
     EMCY(parse::EMCY),

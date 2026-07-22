@@ -8,7 +8,7 @@ mod tests {
     use gantry_axis::{
         axis::setpoint::{AxisSetpoint, PositionSetpoint},
         command::GantryCommand,
-        event::GantryEvent,
+        event::{GantryMotorEvent, GantryMotorEventContent},
         gantry::Gantry,
         setpoint::translator::scaling::DeviceScaling,
     };
@@ -64,7 +64,7 @@ mod tests {
     }
 
     fn spawn_ros_bridge(
-        rx: broadcast::Receiver<GantryEvent>,
+        rx: broadcast::Receiver<GantryMotorEvent>,
         tx: mpsc::Sender<GantryCommand>,
     ) -> (JoinHandle<()>, watch::Sender<bool>) {
         let (shutdown_tx, mut shutdown_rx) = tokio::sync::watch::channel(false);

@@ -250,7 +250,7 @@ async fn handle_parsed_tpdo3(
 fn send_update(event: MotorEvent, event_tx: &broadcast::Sender<MotorEvent>) {
     match event_tx.send(event.clone()) {
         Ok(num_subscribers) => {
-            info!(
+            trace!(
                 "Succesfully sent update {:?} to {num_subscribers} subscribers",
                 event
             )

@@ -12,7 +12,7 @@ mod tests {
         },
         command::GantryCommand,
         event::{
-            GantryEvent,
+            GantryMotorEventContent,
             util::{
                 wait_for_position_target_reached, wait_for_target_reached,
                 wait_until_event_matches, wait_until_gantry_command_completed,
@@ -71,7 +71,6 @@ mod tests {
             GantryCommand::Home,
             gantry.get_event_rx(),
             &gantry,
-            &gantry.cfg,
             HOME_TIMEOUT,
         )
         .await?;
@@ -103,7 +102,6 @@ mod tests {
             setpoint.clone(),
             gantry.get_event_rx(),
             &gantry,
-            &gantry.cfg,
             TIMEOUT,
         )
         .await?;

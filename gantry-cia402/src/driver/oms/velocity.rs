@@ -2,7 +2,6 @@ use crate::driver::{event::MotorEvent, receiver::StatusWord};
 
 #[derive(Clone, Debug)]
 pub struct VelocitySetpoint {
-    // TODO uom?
     pub target_velocity: i32,
 }
 

@@ -12,7 +12,7 @@ mod tests {
         },
         command::GantryCommand,
         event::{
-            GantryEvent,
+            GantryMotorEventContent,
             util::{
                 wait_for_position_target_reached, wait_for_target_reached,
                 wait_until_event_matches, wait_until_gantry_command_completed,

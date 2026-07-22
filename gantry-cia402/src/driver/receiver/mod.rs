@@ -8,7 +8,7 @@ use std::time::Duration;
 const COMMS_TIMEOUT: Duration = Duration::from_secs(1);
 
 bitflags::bitflags! {
-    #[derive(Clone, Copy, Debug, PartialEq)]
+    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
     pub struct StatusWord: u16 {
         /// Bit 0: Ready to switch on
         const READY_TO_SWITCH_ON   = 1 << 0;

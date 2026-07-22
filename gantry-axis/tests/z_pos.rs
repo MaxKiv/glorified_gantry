@@ -12,7 +12,7 @@ mod tests {
             setpoint::{AxisSetpoint, PositionSetpoint},
         },
         command::GantryCommand,
-        event::util::wait_for_target_reached,
+        event::util::{HOME_TIMEOUT, wait_for_target_reached, wait_until_gantry_homed},
         gantry::Gantry,
         setpoint::translator::scaling::DeviceScaling,
     };
@@ -25,117 +25,54 @@ mod tests {
 
     use gantry_demo::config::{TEST_X_CONFIG, TEST_Y_CONFIG, TEST_Z_CONFIG, Z_ONLY_CONFIG};
 
-    use crate::common::TIMEOUT;
+    use crate::common::{TIMEOUT, test_gantry_cmds};
 
     use super::*;
 
     #[tokio::test]
-    /// Test basic cia402 state transitions
-    async fn homing_test() -> anyhow::Result<()> {
+    async fn z_pos_test() -> anyhow::Result<()> {
         gantry_demo::setup_tracing();
 
         info!("Starting can interface");
         let (canopen, _) = oze_canopen::canopen::start(String::from("can0"), Some(1_000_000));
 
-        let gantry = Gantry::start(canopen, Z_ONLY_CONFIG).await?;
+        let cfg = Z_ONLY_CONFIG;
+        let gantry = Gantry::start(canopen, cfg).await?;
 
-        // Create a task for the test logic
-        let test_task = tokio::spawn(test_gantry_homing(gantry));
+        let vel = Velocity::new::<meter_per_second>(0.01);
+        let pos_targets = [
+            (10.0, 5.0, 10.0),
+            (20.0, 0.0, 20.0),
+            (10.0, 5.0, 10.0),
+            (20.0, 0.0, 20.0),
+        ];
+
+        let mut cmds = vec![GantryCommand::Home];
+        for i in 0..pos_targets.len() {
+            cmds.push(GantryCommand::Setpoint {
+                x: Some(AxisSetpoint::AbsolutePosition(PositionSetpoint {
+                    target: Length::new::<millimeter>(pos_targets[i].0),
+                    velocity: vel,
+                })),
+                y: Some(AxisSetpoint::AbsolutePosition(PositionSetpoint {
+                    target: Length::new::<millimeter>(pos_targets[i].0),
+                    velocity: vel,
+                })),
+                z: Some(AxisSetpoint::AbsolutePosition(PositionSetpoint {
+                    target: Length::new::<millimeter>(pos_targets[i].0),
+                    velocity: vel,
+                })),
+            });
+        }
 
         // Wait for either Ctrl-C or test completion
         tokio::select! {
-            res = test_task => {
-                res??;
+            res = test_gantry_cmds(gantry, &cmds, "Z position") => {
+                res?;
             }
             _ = signal::ctrl_c() => {
                 info!("Ctrl-C received — aborting test");
             }
-        }
-
-        Ok(())
-    }
-
-    async fn test_gantry_homing(gantry: Gantry) -> anyhow::Result<()> {
-        gantry.send_command(GantryCommand::Home).await?;
-
-        wait_for_target_reached(
-            gantry.get_event_rx(),
-            gantry_axis::event::util::TargetQuantity::Home(true),
-            Axis::Z,
-            TIMEOUT,
-        )
-        .await?;
-
-        let pos_target_x = Length::new::<millimeter>(60.0);
-        let pos_target_z = Length::new::<millimeter>(10.0);
-        let vel = Velocity::new::<meter_per_second>(0.01);
-
-        for num in 1..10 {
-            let setpoint = GantryCommand::Setpoint {
-                x: Some(AxisSetpoint::AbsolutePosition(PositionSetpoint {
-                    target: pos_target_x,
-                    velocity: vel,
-                })),
-                y: None,
-                z: Some(AxisSetpoint::AbsolutePosition(PositionSetpoint {
-                    target: pos_target_z,
-                    velocity: vel,
-                })),
-            };
-
-            gantry.send_command(setpoint).await?;
-
-            tokio::try_join!(
-                wait_for_target_reached(
-                    gantry.get_event_rx(),
-                    gantry_axis::event::util::TargetQuantity::Position(
-                        pos_target_z.get::<millimeter>()
-                    ),
-                    Axis::Z,
-                    TIMEOUT,
-                ),
-                // wait_for_target_reached(
-                //     gantry.get_event_rx(),
-                //     gantry_axis::event::util::TargetQuantity::Position(
-                //         pos_target_x.get::<millimeter>()
-                //     ),
-                //     Axis::X,
-                //     TIMEOUT,
-                // ),
-            )?;
-
-            let setpoint = GantryCommand::Setpoint {
-                x: Some(AxisSetpoint::AbsolutePosition(PositionSetpoint {
-                    target: -pos_target_x,
-                    velocity: vel,
-                })),
-                y: None,
-                z: Some(AxisSetpoint::AbsolutePosition(PositionSetpoint {
-                    target: -pos_target_z,
-                    velocity: vel,
-                })),
-            };
-
-            gantry.send_command(setpoint).await?;
-
-            tokio::try_join!(
-                wait_for_target_reached(
-                    gantry.get_event_rx(),
-                    gantry_axis::event::util::TargetQuantity::Position(
-                        -pos_target_z.get::<millimeter>()
-                    ),
-                    Axis::Z,
-                    TIMEOUT,
-                ),
-                // wait_for_target_reached(
-                //     gantry.get_event_rx(),
-                //     gantry_axis::event::util::TargetQuantity::Position(
-                //         -pos_target_x.get::<millimeter>()
-                //     ),
-                //     Axis::X,
-                //     TIMEOUT,
-                // ),
-            )?;
         }
 
         Ok(())

@@ -1,16 +1,28 @@
 use anyhow::bail;
+use futures::future::{TryFutureExt, join_all, try_join_all};
+use oze_canopen::canopen::NodeId;
 use tokio::{
     sync::broadcast,
     time::{self, Duration, Instant},
 };
 use tracing::*;
-use futures::future::{join_all, try_join_all, TryFutureExt};
-use uom::si::{f32::Velocity, length::millimeter, torque::newton_meter, velocity::meter_per_second};
+use uom::si::{
+    f32::Velocity, length::millimeter, torque::newton_meter, velocity::meter_per_second,
+};
 
-use crate::{axis::{setpoint::{AxisSetpoint, PositionSetpoint, TorqueSetpoint, VelocitySetpoint}, Axis, AxisConfig}, cfg::GantryConfig, command::GantryCommand, event::GantryEvent, gantry::Gantry};
+use crate::{
+    axis::{
+        Axis, AxisConfig,
+        setpoint::{AxisSetpoint, PositionSetpoint, TorqueSetpoint, VelocitySetpoint},
+    },
+    cfg::GantryConfig,
+    command::GantryCommand,
+    event::{GantryMotorEvent, GantryMotorEventContent},
+    gantry::Gantry,
+};
 
 pub const TIMEOUT: Duration = Duration::from_secs(60);
-pub const HOME_TIMEOUT: Duration = Duration::from_secs(60);
+pub const HOME_TIMEOUT: Duration = Duration::from_secs(120);
 
 #[derive(Debug, Clone)]
 pub enum TargetQuantity {
@@ -20,12 +32,12 @@ pub enum TargetQuantity {
     Torque(f64),
 }
 
-
 /// Waits until a target is reached for the given axis
 /// Note: The accuracy window
 pub async fn wait_for_target_reached(
-    event_rx: broadcast::Receiver<GantryEvent>,
+    event_rx: broadcast::Receiver<GantryMotorEvent>,
     target: TargetQuantity,
+    node: NodeId,
     axis: Axis,
     timeout: Duration,
 ) -> anyhow::Result<()> {
@@ -40,86 +52,35 @@ pub async fn wait_for_target_reached(
 
     wait_until_event_matches(
         event_rx,
-        move |event| match (event, &target) {
-            (
-                GantryEvent::Position {
-                    axis: event_axis,
-                    value,
-                },
-                TargetQuantity::Position(target_val),
-            ) => {
-                if *event_axis == axis {
-                    info!("Axis: {axis:?} - checking position event value: {value} against target: {target_val}");
-                    return (value - target_val).abs() <= POS_WINDOW;
+        move |event| {
+            event.axis == axis // Is this event for the right axis?
+                && event.motor == node // Is this event for the right motor?
+                && match (event.content, &target) { // Does this event indicate target quantity is reached?
+                    (
+                        GantryMotorEventContent::Position { value },
+                        TargetQuantity::Position(target_val),
+                    ) => (value - target_val).abs() <= POS_WINDOW,
+
+                    (
+                        GantryMotorEventContent::Velocity { value },
+                        TargetQuantity::Velocity(target_val),
+                    ) => (value - target_val).abs() <= VEL_WINDOW,
+
+                    (
+                        GantryMotorEventContent::Torque { value },
+                        TargetQuantity::Torque(target_val),
+                    ) => (value - target_val).abs() <= TORQUE_WINDOW,
+
+                    (
+                        GantryMotorEventContent::Homing {
+                            completed, error, ..
+                        },
+                        TargetQuantity::Home(reached),
+                    ) => completed == *reached && !(error),
+
+                    // NOTE: defaults to false, meaning any other event type is irrelevant to the current target
+                    _ => false,
                 }
-                false
-            }
-
-            (
-                GantryEvent::Velocity {
-                    axis: event_axis,
-                    value,
-                },
-                TargetQuantity::Velocity(target_val),
-            ) if *event_axis == axis && (value - target_val).abs() <= VEL_WINDOW => true,
-
-            (
-                GantryEvent::Torque {
-                    axis: event_axis,
-                    value,
-                },
-                TargetQuantity::Torque(target_val),
-            ) => {
-                if *event_axis == axis { 
-                    info!("Axis: {axis:?} - checking torque event value: {value} against target: {target_val}");
-                    (value - target_val).abs() <= TORQUE_WINDOW
-                } else {
-                    false
-                }
-            }
-
-            // (
-            //     GantryEvent::PositionModeFeedback {
-            //         axis: event_axis,
-            //         target_reached,
-            //         ..
-            //     },
-            //     TargetQuantity::Position(target_val),
-            // ) => {
-            //     if *event_axis == axis {
-            //         info!("Axis: {axis:?} - checking PositionModeFeedback event against target: {target_val}");
-            //         return *target_reached
-            //     }
-            //     false
-            // }
-            // (
-            //     GantryEvent::TorqueModeFeedback {
-            //         axis: event_axis,
-            //         setpoint_reached,
-            //         ..
-            //     },
-            //     TargetQuantity::Torque(target_val),
-            // ) => {
-            //     if *event_axis == axis { 
-            //         info!("Axis: {axis:?} - checking TorqueModeFeedback event against target: {target_val}");
-            //         *setpoint_reached
-            //     } else {
-            //         false
-            //     }
-            // }
-
-            (
-                GantryEvent::Homing {
-                    axis: event_axis,
-                    completed,
-                    error,
-                    ..
-                },
-                TargetQuantity::Home(reached),
-            ) => *event_axis == axis && completed == reached && !(*(error)),
-
-            // NOTE: defaults to false, meaning any other event type is irrelevant to the current target
-            _ => false,
         },
         timeout,
         format!("Target: {:?} - Axis: {:?}", target_print, axis_print),
@@ -171,44 +132,14 @@ where
     }
 }
 
-pub async fn wait_for_position_target_reached(
-    event_rx: broadcast::Receiver<GantryEvent>,
-    timeout: Duration,
-) -> anyhow::Result<()> {
-    wait_until_event_matches(
-        event_rx,
-        |event| {
-            matches!(
-                event,
-                GantryEvent::PositionModeFeedback {
-                    target_reached: true,
-                    ..
-                }
-            )
-        },
-        timeout,
-        String::from("PositionModeFeedback::target_reached"),
-    )
-    .await
-}
-
-pub async fn wait_until_gantry_homed(
-    event_rx: broadcast::Receiver<GantryEvent>,
-    gantry: &Gantry,
-    timeout: Duration,
-) -> anyhow::Result<()> {
-    wait_until_gantry_command_completed(GantryCommand::Home, event_rx, gantry, &gantry.cfg, timeout).await?;
-
-    Ok(())
-}
-
 pub async fn wait_until_gantry_command_completed(
     cmd: GantryCommand,
-    event_rx: broadcast::Receiver<GantryEvent>,
+    event_rx: broadcast::Receiver<GantryMotorEvent>,
     gantry: &Gantry,
-    cfg: &GantryConfig,
     timeout: Duration,
 ) -> anyhow::Result<()> {
+    let cfg = &gantry.cfg;
+
     // Determine per-axis target quantity based on the given command
     let target_quantity = match &cmd {
         GantryCommand::Home => Some(TargetQuantity::Home(true)),
@@ -220,41 +151,73 @@ pub async fn wait_until_gantry_command_completed(
         }
     };
 
-    // Build futures if target quantity is defined
-    let futures = match target_quantity {
-        Some(target) => vec![
-            cfg.x.as_ref().map(|x| {
-                wait_for_target_reached(
+    // Build master and slave futures if target quantity is defined
+    let mut futures = Vec::with_capacity(6);
+    if let Some(target) = &target_quantity {
+        if let Some(cfg) = &cfg.x {
+            futures.push(Some(wait_for_target_reached(
+                event_rx.resubscribe(),
+                target.clone(),
+                cfg.master.node_id,
+                cfg.axis.clone(),
+                timeout,
+            )));
+
+            if let Some(slave) = &cfg.slave {
+                futures.push(Some(wait_for_target_reached(
                     event_rx.resubscribe(),
                     target.clone(),
-                    x.axis.clone(),
+                    slave.node_id,
+                    cfg.axis.clone(),
                     timeout,
-                )
-            }),
-            cfg.y.as_ref().map(|y| {
-                wait_for_target_reached(
+                )));
+            }
+        };
+        if let Some(cfg) = &cfg.y {
+            futures.push(Some(wait_for_target_reached(
+                event_rx.resubscribe(),
+                target.clone(),
+                cfg.master.node_id,
+                cfg.axis.clone(),
+                timeout,
+            )));
+
+            if let Some(slave) = &cfg.slave {
+                futures.push(Some(wait_for_target_reached(
                     event_rx.resubscribe(),
                     target.clone(),
-                    y.axis.clone(),
+                    slave.node_id,
+                    cfg.axis.clone(),
                     timeout,
-                )
-            }),
-            cfg.z.as_ref().map(|z| {
-                wait_for_target_reached(
+                )));
+            }
+        };
+        if let Some(cfg) = &cfg.z {
+            futures.push(Some(wait_for_target_reached(
+                event_rx.resubscribe(),
+                target.clone(),
+                cfg.master.node_id,
+                cfg.axis.clone(),
+                timeout,
+            )));
+
+            if let Some(slave) = &cfg.slave {
+                futures.push(Some(wait_for_target_reached(
                     event_rx.resubscribe(),
                     target.clone(),
-                    z.axis.clone(),
+                    slave.node_id,
+                    cfg.axis.clone(),
                     timeout,
-                )
-            }),
-        ],
-        _ => vec![], // no target (shouldn't happen for valid commands)
+                )));
+            }
+        };
     };
 
     info!("xxx Sending gantry command: {cmd:?}");
     gantry.send_command(cmd.clone()).await?;
     info!("xxx Waiting until command: {cmd:?} is completed");
 
+    // Await all futures, meaning all master and slave nodes must have their appropriate target reached
     let futures = futures.into_iter().flatten();
     join_all(futures).await;
 
@@ -263,23 +226,19 @@ pub async fn wait_until_gantry_command_completed(
     Ok(())
 }
 
-
 fn axis_setpoint_to_target_quantity(sp: &AxisSetpoint) -> TargetQuantity {
     match sp {
-        AxisSetpoint::RelativePosition(PositionSetpoint {
-            target,
-        ..}) => {
+        AxisSetpoint::RelativePosition(PositionSetpoint { target, .. }) => {
             TargetQuantity::Position(target.get::<millimeter>())
-        },
-       AxisSetpoint::AbsolutePosition(PositionSetpoint {
-            target,
-        ..}) => {
+        }
+        AxisSetpoint::AbsolutePosition(PositionSetpoint { target, .. }) => {
             TargetQuantity::Position(target.get::<millimeter>())
-        },
-        AxisSetpoint::Velocity(VelocitySetpoint{target}) =>
-        TargetQuantity::Velocity(target.get::<meter_per_second>()),
-        AxisSetpoint::Torque(TorqueSetpoint{target}) =>
-        TargetQuantity::Torque(target.get::<newton_meter>()),
+        }
+        AxisSetpoint::Velocity(VelocitySetpoint { target }) => {
+            TargetQuantity::Velocity(target.get::<meter_per_second>())
+        }
+        AxisSetpoint::Torque(TorqueSetpoint { target }) => {
+            TargetQuantity::Torque(target.get::<newton_meter>())
+        }
     }
 }
-

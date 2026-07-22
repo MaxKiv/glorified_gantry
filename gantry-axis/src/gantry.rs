@@ -13,7 +13,7 @@ use crate::{
         handler::{CommandHandle, CommandHandler},
     },
     event::{
-        GantryEvent,
+        GantryMotorEvent, GantryMotorEventContent,
         handler::{FeedbackHandle, FeedbackHandler},
     },
     setpoint::translator::SetpointTranslator,
@@ -73,7 +73,6 @@ impl Gantry {
         };
 
         info!("Starting Feedback Handler");
-
         let feedback_handler = FeedbackHandler::init(
             x_recv,
             y_recv,
@@ -140,7 +139,7 @@ impl Gantry {
         Ok((motor, recv))
     }
 
-    pub fn get_event_rx(&self) -> broadcast::Receiver<GantryEvent> {
+    pub fn get_event_rx(&self) -> broadcast::Receiver<GantryMotorEvent> {
         self.feedback_handler.gantry_rx.resubscribe()
     }
 

@@ -9,10 +9,13 @@ mod tests {
     use gantry_axis::{
         axis::{
             Axis,
-            setpoint::{AxisSetpoint, PositionSetpoint},
+            setpoint::{AxisSetpoint, PositionSetpoint, TorqueSetpoint},
         },
         command::GantryCommand,
-        event::util::wait_for_target_reached,
+        event::util::{
+            HOME_TIMEOUT, wait_for_target_reached, wait_until_gantry_command_completed,
+            wait_until_gantry_homed,
+        },
         gantry::Gantry,
         setpoint::translator::scaling::DeviceScaling,
     };
@@ -26,112 +29,75 @@ mod tests {
 
     use gantry_demo::config::{TEST_CONFIG, TEST_X_CONFIG, TEST_Y_CONFIG, TEST_Z_CONFIG};
 
-    use crate::common::TIMEOUT;
+    use crate::common::{TIMEOUT, test_gantry_cmds};
 
     use super::*;
 
     #[tokio::test]
-    /// Test basic cia402 state transitions
-    async fn homing_test() -> anyhow::Result<()> {
+    async fn torque_test() -> anyhow::Result<()> {
         gantry_demo::setup_tracing();
 
         info!("Starting can interface");
         let (canopen, _) = oze_canopen::canopen::start(String::from("can0"), Some(1_000_000));
 
-        let gantry = Gantry::start(canopen, TEST_CONFIG).await?;
+        let cfg = TEST_CONFIG;
+        let gantry = Gantry::start(canopen, cfg).await?;
 
-        // Create a task for the test logic
-        let test_task = tokio::spawn(test_gantry_homing(gantry));
+        let vel = Velocity::new::<meter_per_second>(0.01);
+        let tau_targets = [
+            (0.1, -0.1, 0.1),
+            (-0.1, 0.1, -0.1),
+            (0.1, -0.1, 0.1),
+            (-0.1, 0.1, -0.1),
+            (0.1, -0.1, 0.1),
+            (-0.1, 0.1, -0.1),
+            (0.1, -0.1, 0.1),
+            (-0.1, 0.1, -0.1),
+        ];
+
+        let mut cmds = vec![
+            // Home first
+            GantryCommand::Home,
+            // Move to save position
+            GantryCommand::Setpoint {
+                x: Some(AxisSetpoint::AbsolutePosition(PositionSetpoint {
+                    target: Length::new::<millimeter>(10.0),
+                    velocity: vel,
+                })),
+                y: Some(AxisSetpoint::AbsolutePosition(PositionSetpoint {
+                    target: Length::new::<millimeter>(10.0),
+                    velocity: vel,
+                })),
+                z: Some(AxisSetpoint::AbsolutePosition(PositionSetpoint {
+                    target: Length::new::<millimeter>(10.0),
+                    velocity: vel,
+                })),
+            },
+        ];
+
+        // Cycle through torques
+        for i in 0..tau_targets.len() {
+            cmds.push(GantryCommand::Setpoint {
+                x: Some(AxisSetpoint::Torque(TorqueSetpoint {
+                    target: Torque::new::<newton_meter>(tau_targets[i].0),
+                })),
+                y: Some(AxisSetpoint::Torque(TorqueSetpoint {
+                    target: Torque::new::<newton_meter>(tau_targets[i].0),
+                })),
+                z: Some(AxisSetpoint::Torque(TorqueSetpoint {
+                    target: Torque::new::<newton_meter>(tau_targets[i].0),
+                })),
+            });
+        }
 
         // Wait for either Ctrl-C or test completion
         tokio::select! {
-            res = test_task => {
-                res??;
+            res = test_gantry_cmds(gantry, &cmds, "Torque") => {
+                res?;
             }
             _ = signal::ctrl_c() => {
                 info!("Ctrl-C received — aborting test");
             }
-        }
-
-        Ok(())
-    }
-
-    async fn test_gantry_homing(gantry: Gantry) -> anyhow::Result<()> {
-        gantry.send_command(GantryCommand::Home).await?;
-
-        wait_for_target_reached(
-            gantry.get_event_rx(),
-            gantry_axis::event::util::TargetQuantity::Home(true),
-            Axis::X,
-            TIMEOUT,
-        )
-        .await?;
-
-        let torque_x = Torque::new::<newton_meter>(0.1);
-        let torque_z = Torque::new::<newton_meter>(0.1);
-
-        for num in 1..10 {
-            let setpoint = GantryCommand::Setpoint {
-                x: Some(AxisSetpoint::Torque(
-                    gantry_axis::axis::setpoint::TorqueSetpoint { target: torque_x },
-                )),
-                y: None,
-                z: Some(AxisSetpoint::Torque(
-                    gantry_axis::axis::setpoint::TorqueSetpoint { target: torque_z },
-                )),
-            };
-
-            gantry.send_command(setpoint).await?;
-
-            tokio::try_join!(
-                wait_for_target_reached(
-                    gantry.get_event_rx(),
-                    gantry_axis::event::util::TargetQuantity::Torque(
-                        torque_z.get::<newton_meter>(),
-                    ),
-                    Axis::Z,
-                    TIMEOUT,
-                ),
-                wait_for_target_reached(
-                    gantry.get_event_rx(),
-                    gantry_axis::event::util::TargetQuantity::Torque(
-                        torque_x.get::<newton_meter>(),
-                    ),
-                    Axis::X,
-                    TIMEOUT,
-                ),
-            )?;
-
-            let setpoint = GantryCommand::Setpoint {
-                x: Some(AxisSetpoint::Torque(
-                    gantry_axis::axis::setpoint::TorqueSetpoint { target: -torque_x },
-                )),
-                y: None,
-                z: Some(AxisSetpoint::Torque(
-                    gantry_axis::axis::setpoint::TorqueSetpoint { target: -torque_z },
-                )),
-            };
-
-            gantry.send_command(setpoint).await?;
-
-            tokio::try_join!(
-                wait_for_target_reached(
-                    gantry.get_event_rx(),
-                    gantry_axis::event::util::TargetQuantity::Position(
-                        -torque_z.get::<newton_meter>(),
-                    ),
-                    Axis::Z,
-                    TIMEOUT,
-                ),
-                wait_for_target_reached(
-                    gantry.get_event_rx(),
-                    gantry_axis::event::util::TargetQuantity::Position(
-                        torque_x.get::<newton_meter>(),
-                    ),
-                    Axis::X,
-                    TIMEOUT,
-                ),
-            )?;
         }
 
         Ok(())
