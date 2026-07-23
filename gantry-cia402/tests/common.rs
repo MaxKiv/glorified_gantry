@@ -7,7 +7,7 @@ use gantry_cia402::{
     },
     driver::{
         event::MotorEvent, identifier::Cia402Identifier, nmt::NmtState,
-        receiver::subscriber::handle_feedback, spawn_logged, startup,
+        receiver::subscriber::handle_feedback, startup,
     },
     error::DriveError,
 };
@@ -22,7 +22,7 @@ use tokio::{
         mpsc::error::SendError,
     },
     task::{self, JoinHandle},
-    time::{self, Instant, error::Elapsed},
+    time::error::Elapsed,
 };
 use tracing::*;
 

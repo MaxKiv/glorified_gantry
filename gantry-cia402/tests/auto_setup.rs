@@ -2,7 +2,6 @@ pub mod common;
 
 use std::sync::Arc;
 use std::time::Duration;
-use tokio::task::{self};
 use tracing::*;
 
 #[cfg(test)]
@@ -27,13 +26,13 @@ mod tests {
         gantry_demo::setup_tracing();
 
         pub const NODE_ID: u8 = 1;
-        let node_id = NODE_ID;
+        let _node_id = NODE_ID;
 
         info!("Starting can interface");
         let (canopen, _) = oze_canopen::canopen::start(String::from("can0"), Some(1000000));
 
         let sync_master = SyncMaster::init(canopen.clone());
-        let sync_rx = sync_master.get_sync_receiver();
+        let _sync_rx = sync_master.get_sync_receiver();
 
         // Motor boots into NMT::PreOperational -> Set motor to NMT::Operational
         canopen

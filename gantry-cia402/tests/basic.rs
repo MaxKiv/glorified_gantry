@@ -3,10 +3,7 @@ mod common;
 use std::time::Duration;
 
 use gantry_cia402::{driver::receiver::StatusWord, od::STATUS_WORD};
-use oze_canopen::{
-    error::CoError,
-    proto::nmt::{NmtCommand, NmtCommandSpecifier},
-};
+use oze_canopen::proto::nmt::{NmtCommand, NmtCommandSpecifier};
 use tracing::*;
 
 use crate::common::TestError;
@@ -91,7 +88,7 @@ async fn test_oze_canopen() -> Result<(), TestError> {
         .map_err(TestError::CANOpenError)?;
 
     let sw =
-        u16::from_le_bytes(dat[..2].try_into().map_err(|e| {
+        u16::from_le_bytes(dat[..2].try_into().map_err(|_e| {
             TestError::ConversionError(format!("Unable to convert {dat:?} into u16"))
         })?);
     let sw = StatusWord::from_bits(sw).ok_or(TestError::ConversionError(format!(

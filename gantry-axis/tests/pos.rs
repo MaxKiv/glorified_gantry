@@ -4,6 +4,7 @@ use tracing::*;
 
 #[cfg(test)]
 mod tests {
+
     use std::time::Duration;
 
     use gantry_axis::{
@@ -11,17 +12,17 @@ mod tests {
         command::GantryCommand,
         gantry::Gantry,
     };
-    use gantry_cia402::driver::receiver::subscriber::wait_for_homing_completed;
-    use tokio::{signal, time::sleep};
+
+    use tokio::signal;
     use uom::si::{
         f64::{Length, Velocity},
         length::millimeter,
         velocity::meter_per_second,
     };
 
-    use gantry_demo::config::{TEST_CONFIG, TEST_X_CONFIG, TEST_Y_CONFIG, TEST_Z_CONFIG};
+    use gantry_demo::config::TEST_CONFIG;
 
-    use crate::common::{TIMEOUT, test_gantry_cmds};
+    use crate::common::test_gantry_cmds;
 
     use super::*;
 
@@ -61,15 +62,8 @@ mod tests {
             });
         }
 
-        // Wait for either Ctrl-C or test completion
-        tokio::select! {
-            res = test_gantry_cmds(gantry, &cmds, "Position") => {
-                res?;
-            }
-            _ = signal::ctrl_c() => {
-                info!("Ctrl-C received — aborting test");
-            }
-        }
+        let timeout = Duration::from_secs(10);
+        test_gantry_cmds(gantry, &cmds, "Position", timeout).await?;
 
         Ok(())
     }

@@ -93,7 +93,7 @@ pub async fn handle_feedback(
 async fn handle_message(
     message: &MessageType,
     event_tx: &broadcast::Sender<MotorEvent>,
-    tpdo_mapping: &&'static [PdoMapping],
+    _tpdo_mapping: &&'static [PdoMapping],
 ) -> Result<(), ReceiverError> {
     match message {
         MessageType::NmtControl(_) => {

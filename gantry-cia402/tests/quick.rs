@@ -2,9 +2,8 @@ mod common;
 
 use std::time::Duration;
 
-use gantry_cia402::od::{MAX_CURRENT, STATUS_WORD, TORQUE_SLOPE, *};
+use gantry_cia402::od::{MAX_CURRENT, TORQUE_SLOPE, *};
 use oze_canopen::proto::nmt::{NmtCommand, NmtCommandSpecifier};
-use tokio::time::sleep;
 use tracing::*;
 
 use crate::common::TestError;
@@ -173,7 +172,7 @@ async fn quick_test_logic() -> Result<(), TestError> {
         .map_err(TestError::CANOpenError)?;
 
     let data = (-1i16).to_le_bytes(); // forgetting limit switch val = -2, but device doesnt agree :(
-    let dat = s
+    let _dat = s
         .lock()
         .await
         .download(
@@ -209,7 +208,7 @@ async fn quick_test_logic() -> Result<(), TestError> {
     info!("Limit switch option code: {}={:#x}", val, val);
 
     let data = (0b000_0000_0000_0001u32).to_le_bytes();
-    let dat = s
+    let _dat = s
         .lock()
         .await
         .download(
@@ -233,7 +232,7 @@ async fn quick_test_logic() -> Result<(), TestError> {
     info!("Limit switch option code: {}={:#x}", val, val);
 
     let data = (0b000_0000_0000_0011u32).to_le_bytes();
-    let dat = s
+    let _dat = s
         .lock()
         .await
         .download(
@@ -249,7 +248,7 @@ async fn quick_test_logic() -> Result<(), TestError> {
     );
 
     let data = (0b000_0000_0000_0001u32).to_le_bytes();
-    let dat = s
+    let _dat = s
         .lock()
         .await
         .download(
@@ -262,7 +261,7 @@ async fn quick_test_logic() -> Result<(), TestError> {
     info!("Enabled DI routing");
 
     let data = (1u8).to_le_bytes();
-    let dat = s
+    let _dat = s
         .lock()
         .await
         .download(
@@ -283,7 +282,7 @@ async fn quick_test_logic() -> Result<(), TestError> {
     let val: u8 = dat[0];
     info!("Polarity: {}={:#x}", val, val);
 
-    for num in 1..=1000 {
+    for _num in 1..=1000 {
         let dat = s
             .lock()
             .await

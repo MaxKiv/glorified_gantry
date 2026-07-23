@@ -1,6 +1,5 @@
 pub mod common;
 
-use tokio::task::{self};
 use tracing::*;
 
 #[cfg(test)]
@@ -9,7 +8,7 @@ mod tests {
     use gantry_axis::sync::SyncMaster;
     use gantry_cia402::{
         driver::{
-            Cia402Driver, builder::Cia402DriverBuilder, command::MotorCommand, event::MotorEvent,
+            builder::Cia402DriverBuilder, command::MotorCommand, event::MotorEvent,
             receiver::subscriber::wait_for_event, state::Cia402State,
         },
         error::DriveError,

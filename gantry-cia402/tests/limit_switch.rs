@@ -10,10 +10,7 @@ use tracing::*;
 mod tests {
 
     use gantry_cia402::{
-        comms::pdo::mapping::{
-            custom::{CUSTOM_PDOS, CUSTOM_TPDOS},
-            test::{TEST_PDOS, TEST_TPDOS},
-        },
+        comms::pdo::mapping::test::TEST_PDOS,
         driver::{
             nmt::nmt_task,
             receiver::subscriber::wait_for_event,

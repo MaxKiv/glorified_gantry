@@ -1,3 +1,5 @@
+#![feature(never_type)]
+
 use tokio::task::JoinHandle;
 use tracing::error;
 

@@ -6,9 +6,7 @@ use tokio::{
     time::{self, Duration, Instant},
 };
 use tracing::*;
-use uom::si::{
-    length::millimeter, torque::newton_meter, velocity::meter_per_second,
-};
+use uom::si::{length::millimeter, torque::newton_meter, velocity::meter_per_second};
 
 use crate::{
     axis::{
@@ -131,14 +129,28 @@ where
     }
 }
 
-pub async fn wait_until_gantry_command_completed(
+pub async fn send_cmd_and_wait_until_gantry_command_completed(
     cmd: GantryCommand,
     event_rx: broadcast::Receiver<GantryMotorEvent>,
     gantry: &Gantry,
     timeout: Duration,
 ) -> anyhow::Result<()> {
-    let cfg = &gantry.cfg;
+    info!("xxx Sending gantry command: {cmd:?}");
+    gantry.send_command(cmd.clone()).await?;
 
+    info!("xxx Waiting until command: {cmd:?} is completed");
+    wait_until_cmd_completed(cmd.clone(), event_rx, gantry, timeout).await?;
+
+    info!("xxx Gantry command completed: {cmd:?}");
+    Ok(())
+}
+
+pub async fn wait_until_cmd_completed(
+    cmd: GantryCommand,
+    event_rx: broadcast::Receiver<GantryMotorEvent>,
+    gantry: &Gantry,
+    timeout: Duration,
+) -> anyhow::Result<()> {
     // Determine per-axis target quantity based on the given command
     let target_quantity = match &cmd {
         GantryCommand::Home => Some(TargetQuantity::Home(true)),
@@ -149,6 +161,8 @@ pub async fn wait_until_gantry_command_completed(
             first.map(axis_setpoint_to_target_quantity)
         }
     };
+
+    let cfg = &gantry.cfg;
 
     // Build master and slave futures if target quantity is defined
     let mut futures = Vec::with_capacity(6);
@@ -212,15 +226,8 @@ pub async fn wait_until_gantry_command_completed(
         };
     };
 
-    info!("xxx Sending gantry command: {cmd:?}");
-    gantry.send_command(cmd.clone()).await?;
-    info!("xxx Waiting until command: {cmd:?} is completed");
-
     // Await all futures, meaning all master and slave nodes must have their appropriate target reached
-    let futures = futures.into_iter().flatten();
-    join_all(futures).await;
-
-    info!("xxx Gantry command completed: {cmd:?}");
+    join_all(futures.into_iter().flatten()).await;
 
     Ok(())
 }

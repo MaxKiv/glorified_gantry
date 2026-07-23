@@ -1,6 +1,5 @@
 pub mod common;
 
-use tokio::task::{self};
 use tracing::*;
 
 #[cfg(test)]
@@ -9,7 +8,6 @@ mod tests {
     use gantry_axis::{event::util::HOME_TIMEOUT, sync::SyncMaster};
     use gantry_cia402::{
         driver::{
-            Cia402Driver,
             builder::Cia402DriverBuilder,
             command::MotorCommand,
             event::MotorEvent,
@@ -17,7 +15,6 @@ mod tests {
             state::Cia402State,
         },
         error::DriveError,
-        log::log_events,
     };
 
     use crate::common::{COMMS_TIMEOUT, PARAMS, TEST_MOTOR};

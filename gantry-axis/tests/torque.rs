@@ -13,8 +13,7 @@ mod tests {
         },
         command::GantryCommand,
         event::util::{
-            HOME_TIMEOUT, wait_for_target_reached, wait_until_gantry_command_completed,
-            wait_until_gantry_homed,
+            HOME_TIMEOUT, send_cmd_and_wait_until_gantry_command_completed, wait_for_target_reached,
         },
         gantry::Gantry,
         setpoint::translator::scaling::DeviceScaling,
@@ -90,15 +89,8 @@ mod tests {
             });
         }
 
-        // Wait for either Ctrl-C or test completion
-        tokio::select! {
-            res = test_gantry_cmds(gantry, &cmds, "Torque") => {
-                res?;
-            }
-            _ = signal::ctrl_c() => {
-                info!("Ctrl-C received — aborting test");
-            }
-        }
+        let timeout = Duration::from_secs(10);
+        test_gantry_cmds(gantry, &cmds, "Torque", timeout).await?;
 
         Ok(())
     }

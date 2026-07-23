@@ -4,33 +4,14 @@ use tracing::*;
 
 #[cfg(test)]
 mod tests {
-
     use std::time::Duration;
 
-    use gantry_axis::{
-        axis::{
-            Axis,
-            setpoint::{AxisSetpoint, PositionSetpoint},
-        },
-        cfg::GantryConfig,
-        command::GantryCommand,
-        event::util::{HOME_TIMEOUT, wait_for_target_reached, wait_until_gantry_homed},
-        gantry::Gantry,
-        setpoint::translator::scaling::DeviceScaling,
-    };
-    use tokio::{signal, time::sleep};
+    use gantry_axis::{command::GantryCommand, gantry::Gantry};
+    use gantry_cia402::driver::receiver::subscriber::wait_for_homing_completed;
+    use gantry_demo::config::TEST_CONFIG;
+    use tokio::signal;
 
-    use uom::si::{
-        f64::{Length, Velocity},
-        length::millimeter,
-        velocity::meter_per_second,
-    };
-
-    use gantry_demo::config::{
-        TEST_CONFIG, TEST_X_CONFIG, TEST_Y_CONFIG, TEST_Z_CONFIG, X_DISABLED, Y_DISABLED,
-    };
-
-    use crate::common::{TIMEOUT, test_gantry_cmds};
+    use crate::common::test_gantry_cmds;
 
     use super::*;
 
@@ -49,15 +30,9 @@ mod tests {
             GantryCommand::Home,
         ];
 
-        // Wait for either Ctrl-C or test completion
-        tokio::select! {
-            res = test_gantry_cmds(gantry, &cmds, "Homing") => {
-                res?;
-            }
-            _ = signal::ctrl_c() => {
-                info!("Ctrl-C received — aborting test");
-            }
-        }
+        let timeout = Duration::from_secs(10);
+        gantry.send_command(GantryCommand::Home).await?;
+        test_gantry_cmds(gantry, &cmds, "Homing", timeout).await?;
 
         Ok(())
     }

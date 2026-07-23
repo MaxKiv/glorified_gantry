@@ -2,15 +2,8 @@ pub mod common;
 
 use std::time::Duration;
 
-use gantry_cia402::{
-    comms::pdo::mapping::PdoMapping,
-    driver::{event::MotorEvent, receiver::subscriber::handle_feedback},
-};
-use oze_canopen::interface::CanOpenInterface;
-use tokio::{
-    sync::broadcast,
-    task::{self, JoinHandle},
-};
+use gantry_cia402::driver::event::MotorEvent;
+use tokio::task::{self};
 use tracing::*;
 
 #[cfg(test)]

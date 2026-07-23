@@ -21,14 +21,14 @@ mod tests {
                 wait_for_event, wait_for_homing_completed, wait_for_setpoint_acknowledge,
                 wait_for_target_reached,
             },
-            startup::params::{TEST_PARAMS, default::DEMO_PARAMS},
+            startup::params::TEST_PARAMS,
             state::Cia402State,
         },
         error::DriveError,
     };
     use tokio::signal;
 
-    use crate::common::{COMMS_TIMEOUT, PARAMS, POS_TIMEOUT};
+    use crate::common::COMMS_TIMEOUT;
 
     use super::*;
 

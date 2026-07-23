@@ -20,14 +20,14 @@ mod tests {
             command::MotorCommand,
             event::MotorEvent,
             receiver::subscriber::{wait_for_event, wait_for_homing_completed},
-            startup::{self, params::default::DEMO_PARAMS},
+            startup::params::default::DEMO_PARAMS,
             state::Cia402State,
         },
         error::DriveError,
     };
     use tokio::signal;
 
-    use crate::common::{COMMS_TIMEOUT, HOMING_TIMEOUT, PARAMS};
+    use crate::common::COMMS_TIMEOUT;
 
     use super::*;
 

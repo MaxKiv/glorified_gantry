@@ -14,7 +14,6 @@ mod tests {
 
     use gantry_axis::sync::SyncMaster;
     use gantry_cia402::{
-        comms::pdo::mapping::{custom::CUSTOM_PDOS, minimal::MINIMAL_CYCLIC_SYNCHRONOUS_PDO_SET},
         driver::{
             Cia402Driver, builder::Cia402DriverBuilder, command::MotorCommand, event::MotorEvent,
             receiver::subscriber::wait_for_event, state::Cia402State,
@@ -114,7 +113,7 @@ mod tests {
         )
         .await?;
 
-        for outer in 1..=300 {
+        for _outer in 1..=300 {
             // 3 cycles per mode
             for num in 1..=3 {
                 info!("#{num} Setting {TEST_TORQUE} torque target");

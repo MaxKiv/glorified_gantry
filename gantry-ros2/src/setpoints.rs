@@ -21,7 +21,7 @@ pub async fn bridge_gantry_setpoints(
     vel_sub: impl Stream<Item = Vector3> + Unpin,
     torque_sub: impl Stream<Item = Vector3> + Unpin,
 ) -> anyhow::Result<()> {
-    tokio::join! {
+    let _ = tokio::join! {
         bridge_pos_setpoints(tx.clone(), pos_sub),
         bridge_vel_setpoints(tx.clone(), vel_sub),
         bridge_torque_setpoints(tx.clone(), torque_sub),

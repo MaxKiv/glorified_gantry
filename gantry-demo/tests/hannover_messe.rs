@@ -14,8 +14,8 @@ mod tests {
         event::{
             GantryMotorEventContent,
             util::{
-                TargetQuantity, wait_for_position_target_reached, wait_for_target_reached,
-                wait_until_event_matches, wait_until_gantry_command_completed,
+                TargetQuantity, send_cmd_and_wait_until_gantry_command_completed,
+                wait_for_target_reached, wait_until_event_matches,
             },
         },
         gantry::Gantry,
@@ -56,18 +56,19 @@ mod tests {
         let cfg = YZ_CONFIG;
         let gantry = Gantry::start(canopen, cfg).await?;
 
-        // Create a task for the test logic
-        let test_task = tokio::spawn(test_gantry_hannover_messe(gantry));
+        // Home gantry
+        send_cmd_and_wait_until_gantry_command_completed(
+            GantryCommand::Home,
+            gantry.get_event_rx(),
+            &gantry,
+            HOME_TIMEOUT,
+        )
+        .await?;
+        info!("TEST: Gantry homed!");
 
-        // Wait for either Ctrl-C or test completion
-        tokio::select! {
-            res = test_task => {
-                res??;
-            }
-            _ = signal::ctrl_c() => {
-                info!("Ctrl-C received — aborting test");
-            }
-        }
+        sleep(Duration::from_millis(2000)).await;
+
+        test_gantry_hannover_messe(gantry).await?;
 
         Ok(())
     }
@@ -78,7 +79,7 @@ mod tests {
         gantry.send_command(GantryCommand::Home).await?;
 
         info!("TEST: wait on gantry homed");
-        wait_until_gantry_command_completed(
+        send_cmd_and_wait_until_gantry_command_completed(
             GantryCommand::Home,
             gantry.get_event_rx(),
             &gantry,
@@ -146,7 +147,7 @@ mod tests {
                     })),
                 };
 
-                wait_until_gantry_command_completed(
+                send_cmd_and_wait_until_gantry_command_completed(
                     setpoint,
                     gantry.get_event_rx(),
                     &gantry,

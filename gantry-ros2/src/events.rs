@@ -16,7 +16,7 @@ pub async fn bridge_gantry_events(
             Ok(event) => {
                 let GantryMotorEvent {
                     motor,
-                    axis,
+                    axis: _,
                     content,
                 } = event;
 
