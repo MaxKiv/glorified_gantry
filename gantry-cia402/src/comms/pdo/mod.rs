@@ -468,7 +468,7 @@ impl Pdo {
         // Send RPDO1
         self.send_rpdo(RPDO_CONTROL_OPMODE).await?;
 
-        trace!("RPDO1 sent succesfully to effect homing setpoint");
+        info!("RPDO1 sent succesfully to effect homing setpoint");
 
         Ok(())
     }

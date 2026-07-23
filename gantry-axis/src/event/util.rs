@@ -227,7 +227,13 @@ pub async fn wait_until_cmd_completed(
     };
 
     // Await all futures, meaning all master and slave nodes must have their appropriate target reached
-    join_all(futures.into_iter().flatten()).await;
+    let x = join_all(futures.into_iter().flatten()).await;
+
+    for r in x {
+        if r.is_err() {
+            return r;
+        }
+    }
 
     Ok(())
 }

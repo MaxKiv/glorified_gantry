@@ -25,7 +25,10 @@ pub async fn parametrise_motor(
     sdo: Arc<Mutex<SdoClient>>,
 ) -> Result<(), InitialisationError> {
     // First check if the motor we are talking to is the one we expect
-    check_device_type_is_as_expected(&identifier, sdo.clone()).await?;
+    if let Err(err) = check_identfier_is_correct(&identifier, sdo.clone()).await {
+        error!("Wrong device identifier => {err}");
+        panic!("Wrong device identifier => {err}");
+    }
 
     trace!(
         "starting parametrisation of Motor with node id {}",
@@ -67,7 +70,7 @@ pub async fn parametrise_motor(
     Ok(())
 }
 
-async fn check_device_type_is_as_expected(
+async fn check_identfier_is_correct(
     identifier: &Cia402Identifier,
     sdo: Arc<Mutex<SdoClient>>,
 ) -> Result<(), InitialisationError> {
