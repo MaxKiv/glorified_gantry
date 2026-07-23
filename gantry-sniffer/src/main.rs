@@ -11,7 +11,7 @@ async fn main() {
     setup_tracing();
 
     info!("Starting can interface");
-    let (canopen, handles) = canopen::start(String::from("can0"), Some(1_000_000));
+    let (canopen, _handles) = canopen::start(String::from("can0"), Some(1_000_000));
 
     let _ = log_canopen_pretty(canopen).await;
 }

@@ -1,5 +1,4 @@
 use gantry_cia402::driver::{event::MotorEvent, identifier::Cia402Identifier};
-use oze_canopen::canopen::NodeId;
 use tokio::sync::broadcast;
 
 use crate::axis::Axis;

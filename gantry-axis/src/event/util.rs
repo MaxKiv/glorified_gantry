@@ -1,5 +1,5 @@
 use anyhow::bail;
-use futures::future::{TryFutureExt, join_all, try_join_all};
+use futures::future::join_all;
 use oze_canopen::canopen::NodeId;
 use tokio::{
     sync::broadcast,
@@ -7,15 +7,14 @@ use tokio::{
 };
 use tracing::*;
 use uom::si::{
-    f32::Velocity, length::millimeter, torque::newton_meter, velocity::meter_per_second,
+    length::millimeter, torque::newton_meter, velocity::meter_per_second,
 };
 
 use crate::{
     axis::{
-        Axis, AxisConfig,
+        Axis,
         setpoint::{AxisSetpoint, PositionSetpoint, TorqueSetpoint, VelocitySetpoint},
     },
-    cfg::GantryConfig,
     command::GantryCommand,
     event::{GantryMotorEvent, GantryMotorEventContent},
     gantry::Gantry,

@@ -13,7 +13,7 @@ use crate::{
         handler::{CommandHandle, CommandHandler},
     },
     event::{
-        GantryMotorEvent, GantryMotorEventContent,
+        GantryMotorEvent,
         handler::{FeedbackHandle, FeedbackHandler},
     },
     setpoint::translator::SetpointTranslator,

@@ -118,7 +118,7 @@ where
 {
     fn format_event(
         &self,
-        ctx: &FmtContext<'_, S, N>,
+        _ctx: &FmtContext<'_, S, N>,
         mut writer: Writer<'_>,
         event: &Event<'_>,
     ) -> core::fmt::Result {
@@ -137,12 +137,12 @@ where
 
         let frame = ex.frame.unwrap_or_else(|| "UNKNOWN".to_string());
         let node = ex.node.unwrap_or(0);
-        let num = ex.num.unwrap_or(0);
+        let _num = ex.num.unwrap_or(0);
         let message = ex.message.unwrap_or_default();
         let data = ex.data.unwrap_or_default();
         let parsed = ex.parsed.unwrap_or_default();
-        let index = ex.index.unwrap_or_default();
-        let sub_index = ex.sub_index.unwrap_or_default();
+        let _index = ex.index.unwrap_or_default();
+        let _sub_index = ex.sub_index.unwrap_or_default();
         let header = ex.header.unwrap_or_default();
 
         write!(writer, "NODE {}  ", node.white().bold())?;

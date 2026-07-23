@@ -7,17 +7,9 @@ mod tests {
     use std::time::Duration;
 
     use gantry_axis::{
-        axis::{
-            Axis,
-            setpoint::{AxisSetpoint, PositionSetpoint},
-        },
+        axis::setpoint::{AxisSetpoint, PositionSetpoint},
         command::GantryCommand,
-        event::util::{
-            HOME_TIMEOUT, wait_for_target_reached, wait_until_gantry_command_completed,
-            wait_until_gantry_homed,
-        },
         gantry::Gantry,
-        setpoint::translator::scaling::DeviceScaling,
     };
     use gantry_cia402::driver::receiver::subscriber::wait_for_homing_completed;
     use tokio::{signal, time::sleep};

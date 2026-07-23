@@ -8,7 +8,7 @@ use uom::si::f64::{Length, Torque};
 
 use crate::axis::setpoint::*;
 use crate::setpoint::translator::event::TranslatedMotorEvent;
-use crate::{event::GantryMotorEventContent, setpoint::translator::scaling::DeviceScaling};
+use crate::setpoint::translator::scaling::DeviceScaling;
 
 #[derive(Debug, Clone)]
 pub struct SetpointTranslator {

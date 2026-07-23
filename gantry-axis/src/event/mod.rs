@@ -1,4 +1,4 @@
-use gantry_cia402::driver::{event::MotorEvent, receiver::parse::EMCY};
+use gantry_cia402::driver::receiver::parse::EMCY;
 use oze_canopen::canopen::NodeId;
 
 use crate::{
