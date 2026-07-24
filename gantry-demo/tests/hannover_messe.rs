@@ -15,7 +15,7 @@ mod tests {
             GantryMotorEventContent,
             util::{
                 TargetQuantity, send_cmd_and_wait_until_gantry_command_completed,
-                wait_for_target_reached, wait_until_event_matches,
+                wait_for_axis_setpoint_complete, wait_until_event_matches,
             },
         },
         gantry::Gantry,

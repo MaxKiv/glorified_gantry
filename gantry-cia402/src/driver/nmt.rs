@@ -89,7 +89,7 @@ pub async fn set_to_nmt_state(
     mut event_rx: broadcast::Receiver<MotorEvent>,
 ) -> Result<(), DriveError> {
     const NMT_SWITCH_TIMEOUT: Duration = Duration::from_secs(1);
-    const NMT_SWITCH_ATTEMPTS: usize = 10;
+    const NMT_SWITCH_ATTEMPTS: usize = 3;
 
     let mut attempt = 0;
 

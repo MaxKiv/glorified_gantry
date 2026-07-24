@@ -93,10 +93,9 @@ impl AxisMotors {
 
     /// Send given motorcommand to the master and slave motors of this axis
     pub fn send_command_to_motors(&self, command: &MotorCommand) {
-        info!("Axis {:?} sending command: {command:?}", self.axis);
+        warn!("xxx Axis {:?} sending command: {command:?}", self.axis);
 
         // Send command to all Cia402Drivers that make up this axis
-        // NOTE:
         if let Err(e) = self.master.cmd_tx.send(command.clone()) {
             error!(
                 "Axis {:?} unable to send command to Master: {command:?} - {e}",

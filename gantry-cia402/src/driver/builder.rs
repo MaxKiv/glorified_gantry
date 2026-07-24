@@ -191,7 +191,7 @@ impl<C, M, S> Cia402DriverBuilder<C, M, S, Standalone> {
 
     /// Configure the Cia402Driver as master device in a mechanically linked system
     pub fn as_master(self) -> Cia402DriverBuilder<C, M, S, AxisMaster> {
-        let (cmd_tx, cmd_rx) = tokio::sync::broadcast::channel(1);
+        let (cmd_tx, cmd_rx) = tokio::sync::broadcast::channel(10);
 
         Cia402DriverBuilder {
             identifier: self.identifier,

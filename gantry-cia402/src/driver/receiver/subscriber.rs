@@ -408,7 +408,7 @@ pub async fn wait_for_homing_completed(
 pub fn pos_within_epsilon(target: i32, current: i32) -> bool {
     const TARGET_POS_EPSILON: u32 = 3;
 
-    error!(
+    debug!(
         "pos_within_epsilon(target: {target}, current: {current}) -> diff: {}",
         target.abs_diff(current)
     );

@@ -1,6 +1,6 @@
 use std::{sync::Arc, time::Duration};
 
-use oze_canopen::sdo_client::SdoClient;
+use oze_canopen::{canopen::NodeId, sdo_client::SdoClient};
 use tokio::{
     sync::{Mutex, broadcast, mpsc, watch},
     task::JoinHandle,
@@ -37,6 +37,7 @@ pub enum SetpointManagerModeTypes {
 /// Default mode and continously on every SYNC cycle for CyclicSynchronous Modes
 /// Also manages the handshake procedure for profile position setpoints
 pub struct SetpointManager {
+    node_id: NodeId,
     handshake: HandshakeState,
     new_setpoint_rx: mpsc::Receiver<Setpoint>,
     cs_mode_rx: watch::Receiver<SetpointManagerModeTypes>,
@@ -50,6 +51,7 @@ pub struct SetpointManager {
 
 impl SetpointManager {
     pub fn init(
+        node_id: NodeId,
         event_rx: broadcast::Receiver<MotorEvent>,
         pdo_tx: mpsc::Sender<PdoCommand>,
         sync_rx: broadcast::Receiver<Instant>,
@@ -72,6 +74,7 @@ impl SetpointManager {
             cs_mode_rx,
             current_setpoint: None,
             last_sync: None,
+            node_id,
         };
 
         // Run the setpoint manager task
@@ -102,7 +105,8 @@ impl SetpointManager {
 
                        // Start handshake procedure if required
                        if Self::handshake_required_for_setpoint(&new_setpoint) {
-                           trace!("Setpoint manager requires handshake for new setpoing {new_setpoint:?}");
+                           warn!("xxx {} Setpoint manager requires handshake for new setpoint
+                               {new_setpoint:?}", self.node_id);
                            self.handshake = HandshakeState::WaitingForAck{setpoint: new_setpoint};
                        }
                    }
@@ -114,13 +118,20 @@ impl SetpointManager {
                    setpoint_acknowlegded,
                    ..
                    } = event {
+                       if setpoint_acknowlegded {
+                          warn!(
+                              "xxx {} Setpoint manager observed a handshake",
+                              self.node_id
+                          );
+                       }
 
                       // Are we shaking hands (aka did we previously set a new setpoint)?
                       if let HandshakeState::WaitingForAck { ref mut setpoint } = self.handshake {
                           // Has the new setpoint been acknowledge by the device?
                           if setpoint_acknowlegded {
-                              trace!(
-                                  "Setpoint manager observed handshake / Setpoint Acknowledge for previously sent setpoint {setpoint:?}"
+                              warn!(
+                                  "xxx {} handshake confirmed",
+                                  self.node_id
                               );
 
                               // Clear CW bit 4 indicating setpoint acknowledge
@@ -128,7 +139,8 @@ impl SetpointManager {
 
                               // Complete acknowledge procedure by writing the updated setpoint to the device
                               if let Err(err) = self.pdo_tx.send(PdoCommand::WriteSetpoint(setpoint.clone())).await {
-                                  error!("Setpoint Manager unable to complete setpoint handshake procedure: {err}");
+                                  warn!("xxx {} Setpoint Manager unable to complete setpoint
+                                      handshake procedure: {err}", self.node_id);
                               }
 
                               // Setpoint acknowledged

@@ -35,7 +35,7 @@ use anyhow::Result;
 use oze_canopen::{interface::CanOpenInterface, sdo_client::SdoClient};
 use tokio::{
     sync::{Mutex, broadcast, mpsc},
-    task::JoinHandle,
+    task::{AbortHandle, JoinHandle, JoinSet},
     time::Instant,
 };
 use tracing::*;
@@ -55,7 +55,7 @@ pub struct Cia402Driver<Mode = Standalone> {
     pub nmt_tx: mpsc::Sender<NmtState>,
     pub event_rx: broadcast::Receiver<MotorEvent>,
     canopen: CanOpenInterface,
-    _handles: Vec<JoinHandle<()>>,
+    _handles: JoinSet<()>,
     sdo: Arc<Mutex<SdoClient>>,
     _mode: std::marker::PhantomData<Mode>,
 }
@@ -81,7 +81,7 @@ impl<Mode> Cia402Driver<Mode> {
         cmd_rx: broadcast::Receiver<MotorCommand>,
     ) -> Result<Self, InitialisationError> {
         // Track task handles that we are about to spawn to bind their lifetimes to this object
-        let mut handles: Vec<JoinHandle<()>> = Vec::new();
+        let mut handles = JoinSet::new();
         let node_id = identifier.node_id;
 
         // Initialize output interfaces
@@ -109,14 +109,14 @@ impl<Mode> Cia402Driver<Mode> {
 
         // Initialize the event_logger
         trace!("Starting Event Logger for motor: {}", identifier);
-        handles.push(spawn_logged("EVENT", async move {
+        spawn_logged_joinset(&mut handles, "EVENT", async move {
             log_events(event_rx_logger, node_id).await
-        }));
+        });
 
         // Start the device feedback task responsible for receiving and parsing device feedback,
         // and broadcasting these as events
         trace!("Starting device feedback handler for motor {identifier}");
-        handles.push(spawn_logged("FEEDBACK", async move {
+        spawn_logged_joinset(&mut handles, "FEEDBACK", async move {
             handle_feedback(
                 node_id,
                 canopen_feedback,
@@ -124,7 +124,7 @@ impl<Mode> Cia402Driver<Mode> {
                 event_tx_feedback,
             )
             .await
-        }));
+        });
 
         // Initialize the Cia402 Orchestrator -> State Machine command channel
         let (sm_cmd_tx, sm_cmd_rx) = tokio::sync::mpsc::channel(10);
@@ -139,9 +139,9 @@ impl<Mode> Cia402Driver<Mode> {
 
         // Start the NMT task
         trace!("Starting NMT State Machine task for motor {identifier}");
-        handles.push(spawn_logged("NMT", async move {
+        spawn_logged_joinset(&mut handles, "NMT", async move {
             nmt_task(node_id, canopen_nmt, nmt_rx, event_rx_nmt).await
-        }));
+        });
 
         // Get the SDO client for this node id, we use this to make SDO read/writes
         let Some(sdo) = canopen.clone().get_sdo_client(node_id) else {
@@ -153,18 +153,18 @@ impl<Mode> Cia402Driver<Mode> {
         let (pdo_handle, pdo_tx) =
             Pdo::init(canopen.clone(), node_id, default_pdo_set, minimal_pdo_set)?;
 
-        handles.push(pdo_handle);
+        pdo_handle;
 
         // Start the setpoint manager for this device, handles setpoint writes and OMS specifics
         // like profile position handshaking
         let (setpoint_manager_handle, new_setpoint_tx, cs_mode_tx) =
-            SetpointManager::init(event_rx_setpoint_manager, pdo_tx.clone(), sync_rx);
-        handles.push(setpoint_manager_handle);
+            SetpointManager::init(node_id, event_rx_setpoint_manager, pdo_tx.clone(), sync_rx);
+        setpoint_manager_handle;
 
         // Start the cia402 state machine task, this is responsible for
         // tracking the motors current cia402 state and single transition
         trace!("Starting Cia402 State Machine for motor {identifier}");
-        handles.push(spawn_logged("CIA-SM", async move {
+        spawn_logged_joinset(&mut handles, "CIA-SM", async move {
             cia402_state_machine_task(
                 event_rx_cia402,
                 state_update_tx,
@@ -173,18 +173,18 @@ impl<Mode> Cia402Driver<Mode> {
                 event_tx_cia402_sm,
             )
             .await
-        }));
+        });
 
         trace!("Starting Cia402 Orchestrator for motor {identifier}");
-        handles.push(spawn_logged("CIA-OR", async move {
+        spawn_logged_joinset(&mut handles, "CIA-OR", async move {
             cia402_orchestrator_task(sm_cmd_tx, sm_state_rx, cmd_rx_cia402_orch).await
-        }));
+        });
 
         // Start the publisher task, responsible for update aggregation and device communication
         trace!("Starting update publisher task for motor {identifier}");
         let nmt_tx_updater = nmt_tx.clone();
         let sdo_updater = sdo.clone();
-        handles.push(spawn_logged("UPDATE", async move {
+        spawn_logged_joinset(&mut handles, "UPDATE", async move {
             publish_updates(
                 pdo_tx.clone(),
                 state_update_rx,
@@ -197,7 +197,7 @@ impl<Mode> Cia402Driver<Mode> {
                 node_id,
             )
             .await
-        }));
+        });
 
         // Start the startup task for this motor, this does parametrisation and configures pdo mapping
         trace!("Performing Startup for motor {identifier}");
@@ -230,11 +230,6 @@ impl<Mode> Cia402Driver<Mode> {
     pub async fn shutdown(self) {
         let _ = self.cmd_tx.send(MotorCommand::Halt);
         let _ = self.cmd_tx.send(MotorCommand::Disable);
-
-        warn!("Shutting down motor {}", self.identifier);
-        for handle in self._handles {
-            handle.abort();
-        }
     }
 
     pub fn get_cmd_tx_channel(&self) -> broadcast::Sender<MotorCommand> {
@@ -252,6 +247,18 @@ where
     F: std::future::Future<Output = Result<(), DriveError>> + Send + 'static,
 {
     tokio::spawn(async move {
+        if let Err(e) = fut.await {
+            error!("{name} task failed: {e:?}");
+        }
+    })
+}
+
+/// Helper that spawns a task and logs error if it ever exits
+pub fn spawn_logged_joinset<F>(set: &mut JoinSet<()>, name: &'static str, fut: F) -> AbortHandle
+where
+    F: std::future::Future<Output = Result<(), DriveError>> + Send + 'static,
+{
+    set.spawn(async move {
         if let Err(e) = fut.await {
             error!("{name} task failed: {e:?}");
         }

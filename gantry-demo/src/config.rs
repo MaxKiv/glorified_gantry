@@ -22,7 +22,7 @@ pub const DEMO_SETUP_DEVICE_NAME_Z: DeviceName = "PD4-CB59M024035-E-08";
 pub const Z_ONLY_CONFIG: GantryConfig = GantryConfig {
     x: X_DISABLED,
     y: Y_DISABLED,
-    z: DEMO_Z_CONFIG,
+    z: TEST_Z_CONFIG,
 };
 
 pub const YZ_CONFIG: GantryConfig = GantryConfig {

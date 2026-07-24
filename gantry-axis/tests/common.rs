@@ -16,7 +16,7 @@ pub async fn test_gantry_cmds(
     info!("Starting Gantry test {} with commands: {:?}", name, cmds);
 
     for (num, cmd) in cmds.iter().enumerate() {
-        info!("{} - sending {:?}", num, cmds);
+        info!("{} - sending {:?}", num, cmd);
         if let Err(err) = send_cmd_and_wait_until_gantry_command_completed(
             cmd.clone(),
             gantry.get_event_rx(),
@@ -26,6 +26,7 @@ pub async fn test_gantry_cmds(
         .await
         {
             error!("ERROR in gantry test {} -> {:?}", name, err);
+            return Err(err);
         }
     }
 

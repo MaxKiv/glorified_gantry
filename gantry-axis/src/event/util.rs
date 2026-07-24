@@ -21,19 +21,11 @@ use crate::{
 pub const TIMEOUT: Duration = Duration::from_secs(60);
 pub const HOME_TIMEOUT: Duration = Duration::from_secs(120);
 
-#[derive(Debug, Clone)]
-pub enum TargetQuantity {
-    Home(bool),
-    Position(f64),
-    Velocity(f64),
-    Torque(f64),
-}
-
 /// Waits until a target is reached for the given axis
 /// Note: The accuracy window
-pub async fn wait_for_target_reached(
+pub async fn wait_for_axis_setpoint_complete(
     event_rx: broadcast::Receiver<GantryMotorEvent>,
-    target: TargetQuantity,
+    sp: AxisSetpoint,
     node: NodeId,
     axis: Axis,
     timeout: Duration,
@@ -42,9 +34,9 @@ pub async fn wait_for_target_reached(
     const VEL_WINDOW: f64 = 0.01;
     const TORQUE_WINDOW: f64 = 0.01;
 
-    info!("Waiting until axis: {axis:?} target is reached: {target:?}");
+    info!("Waiting until axis: {axis:?} target is reached: {sp:?}");
 
-    let target_print = target.clone();
+    let target_print = sp.clone();
     let axis_print = axis.clone();
 
     wait_until_event_matches(
@@ -52,28 +44,29 @@ pub async fn wait_for_target_reached(
         move |event| {
             event.axis == axis // Is this event for the right axis?
                 && event.motor == node // Is this event for the right motor?
-                && match (event.content, &target) { // Does this event indicate target quantity is reached?
+                && match (event.content, &sp) { // Does this event indicate target quantity is reached?
+                    // For absolute position mode check if current position is within target
                     (
                         GantryMotorEventContent::Position { value },
-                        TargetQuantity::Position(target_val),
-                    ) => (value - target_val).abs() <= POS_WINDOW,
+                        AxisSetpoint::AbsolutePosition(PositionSetpoint { target, velocity })
+                    ) => (value - target.get::<millimeter>()).abs() <= POS_WINDOW,
+
+                    // TODO: Relative Position moves still wait for motor drives to acknowledge setpoint
+                    (
+                        GantryMotorEventContent::PositionModeFeedback { target_reached,
+                        .. },
+                        AxisSetpoint::RelativePosition(_)
+                    ) => target_reached,
 
                     (
                         GantryMotorEventContent::Velocity { value },
-                        TargetQuantity::Velocity(target_val),
-                    ) => (value - target_val).abs() <= VEL_WINDOW,
+                        AxisSetpoint::Velocity(VelocitySetpoint {target})
+                    ) => (value - target.get::<meter_per_second>()).abs() <= VEL_WINDOW,
 
                     (
                         GantryMotorEventContent::Torque { value },
-                        TargetQuantity::Torque(target_val),
-                    ) => (value - target_val).abs() <= TORQUE_WINDOW,
-
-                    (
-                        GantryMotorEventContent::Homing {
-                            completed, error, ..
-                        },
-                        TargetQuantity::Home(reached),
-                    ) => completed == *reached && !(error),
+                        AxisSetpoint::Torque(TorqueSetpoint { target })
+                    ) => (value - target.get::<newton_meter>()).abs() <= TORQUE_WINDOW,
 
                     // NOTE: defaults to false, meaning any other event type is irrelevant to the current target
                     _ => false,
@@ -81,6 +74,39 @@ pub async fn wait_for_target_reached(
         },
         timeout,
         format!("Target: {:?} - Axis: {:?}", target_print, axis_print),
+    )
+    .await
+}
+
+pub async fn wait_for_axis_homed(
+    event_rx: broadcast::Receiver<GantryMotorEvent>,
+    node: NodeId,
+    axis: Axis,
+    timeout: Duration,
+) -> anyhow::Result<()> {
+    const POS_WINDOW: f64 = 0.01;
+    const VEL_WINDOW: f64 = 0.01;
+    const TORQUE_WINDOW: f64 = 0.01;
+
+    info!("Waiting until axis: {axis:?} is homed");
+
+    let axis_print = axis.clone();
+
+    wait_until_event_matches(
+        event_rx,
+        move |event| {
+            event.axis == axis // Is this event for the right axis?
+                && event.motor == node // Is this event for the right motor?
+                && match event.content { // Does this event indicate target quantity is reached?
+                    GantryMotorEventContent::Homing { completed, error, ..
+                    } => completed && !(error),
+
+                    // NOTE: defaults to false, meaning any other event type is irrelevant to the current target
+                    _ => false,
+                }
+        },
+        timeout,
+        format!("Axis: {:?} - Wait for Homed", axis_print),
     )
     .await
 }
@@ -151,106 +177,79 @@ pub async fn wait_until_cmd_completed(
     gantry: &Gantry,
     timeout: Duration,
 ) -> anyhow::Result<()> {
-    // Determine per-axis target quantity based on the given command
-    let target_quantity = match &cmd {
-        GantryCommand::Home => Some(TargetQuantity::Home(true)),
-
-        GantryCommand::Setpoint { x, y, z } => {
-            // Pick the first non-None axis to infer target quantity
-            let first = x.as_ref().or(y.as_ref()).or(z.as_ref());
-            first.map(axis_setpoint_to_target_quantity)
-        }
-    };
-
-    let cfg = &gantry.cfg;
-
     // Build master and slave futures if target quantity is defined
-    let mut futures = Vec::with_capacity(6);
-    if let Some(target) = &target_quantity {
-        if let Some(cfg) = &cfg.x {
-            futures.push(Some(wait_for_target_reached(
-                event_rx.resubscribe(),
-                target.clone(),
-                cfg.master.node_id,
-                cfg.axis.clone(),
-                timeout,
-            )));
+    // Initialize to 6x None
+    match cmd {
+        // Build future set that waits for each axis (master + optional slave) setpoint target reached
+        GantryCommand::Setpoint { x, y, z } => {
+            let mut futures = Vec::new();
 
-            if let Some(slave) = &cfg.slave {
-                futures.push(Some(wait_for_target_reached(
-                    event_rx.resubscribe(),
-                    target.clone(),
-                    slave.node_id,
-                    cfg.axis.clone(),
-                    timeout,
-                )));
+            for (cfg, sp) in [&gantry.cfg.x, &gantry.cfg.y, &gantry.cfg.z]
+                .iter()
+                .zip([x, y, z])
+            {
+                if let Some(cfg) = cfg
+                    && let Some(sp) = sp
+                {
+                    futures.push(Some(wait_for_axis_setpoint_complete(
+                        event_rx.resubscribe(),
+                        sp.clone(),
+                        cfg.master.node_id,
+                        cfg.axis.clone(),
+                        timeout,
+                    )));
+                    if let Some(slave) = &cfg.slave {
+                        futures.push(Some(wait_for_axis_setpoint_complete(
+                            event_rx.resubscribe(),
+                            sp,
+                            slave.node_id,
+                            cfg.axis.clone(),
+                            timeout,
+                        )));
+                    }
+                }
             }
-        };
-        if let Some(cfg) = &cfg.y {
-            futures.push(Some(wait_for_target_reached(
-                event_rx.resubscribe(),
-                target.clone(),
-                cfg.master.node_id,
-                cfg.axis.clone(),
-                timeout,
-            )));
 
-            if let Some(slave) = &cfg.slave {
-                futures.push(Some(wait_for_target_reached(
-                    event_rx.resubscribe(),
-                    target.clone(),
-                    slave.node_id,
-                    cfg.axis.clone(),
-                    timeout,
-                )));
+            // Await all futures, meaning all master and slave nodes must have their appropriate target reached
+            let x = join_all(futures.into_iter().flatten()).await;
+            for r in x {
+                if r.is_err() {
+                    return r;
+                }
             }
-        };
-        if let Some(cfg) = &cfg.z {
-            futures.push(Some(wait_for_target_reached(
-                event_rx.resubscribe(),
-                target.clone(),
-                cfg.master.node_id,
-                cfg.axis.clone(),
-                timeout,
-            )));
-
-            if let Some(slave) = &cfg.slave {
-                futures.push(Some(wait_for_target_reached(
-                    event_rx.resubscribe(),
-                    target.clone(),
-                    slave.node_id,
-                    cfg.axis.clone(),
-                    timeout,
-                )));
-            }
-        };
-    };
-
-    // Await all futures, meaning all master and slave nodes must have their appropriate target reached
-    let x = join_all(futures.into_iter().flatten()).await;
-
-    for r in x {
-        if r.is_err() {
-            return r;
         }
-    }
+
+        // Build future set that waits for each axis to be homed
+        GantryCommand::Home => {
+            let mut futures = Vec::new();
+            for cfg in [&gantry.cfg.x, &gantry.cfg.y, &gantry.cfg.z] {
+                if let Some(cfg) = cfg {
+                    futures.push(Some(wait_for_axis_homed(
+                        event_rx.resubscribe(),
+                        cfg.master.node_id,
+                        cfg.axis.clone(),
+                        timeout,
+                    )));
+                    if let Some(slave) = &cfg.slave {
+                        futures.push(Some(wait_for_axis_homed(
+                            event_rx.resubscribe(),
+                            slave.node_id,
+                            cfg.axis.clone(),
+                            timeout,
+                        )));
+                    }
+                }
+            }
+
+            // Await all futures, meaning all master and slave nodes must have their appropriate target reached
+            let x = join_all(futures.into_iter().flatten()).await;
+            for r in x {
+                if r.is_err() {
+                    return r;
+                }
+            }
+        }
+    };
 
     Ok(())
-}
-
-fn axis_setpoint_to_target_quantity(sp: &AxisSetpoint) -> TargetQuantity {
-    match sp {
-        AxisSetpoint::RelativePosition(PositionSetpoint { target, .. }) => {
-            TargetQuantity::Position(target.get::<millimeter>())
-        }
-        AxisSetpoint::AbsolutePosition(PositionSetpoint { target, .. }) => {
-            TargetQuantity::Position(target.get::<millimeter>())
-        }
-        AxisSetpoint::Velocity(VelocitySetpoint { target }) => {
-            TargetQuantity::Velocity(target.get::<meter_per_second>())
-        }
-        AxisSetpoint::Torque(TorqueSetpoint { target }) => {
-            TargetQuantity::Torque(target.get::<newton_meter>())
-        }
-    }
 }

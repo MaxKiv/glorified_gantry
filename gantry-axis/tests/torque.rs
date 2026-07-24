@@ -13,7 +13,8 @@ mod tests {
         },
         command::GantryCommand,
         event::util::{
-            HOME_TIMEOUT, send_cmd_and_wait_until_gantry_command_completed, wait_for_target_reached,
+            HOME_TIMEOUT, send_cmd_and_wait_until_gantry_command_completed,
+            wait_for_axis_setpoint_complete,
         },
         gantry::Gantry,
         setpoint::translator::scaling::DeviceScaling,
