@@ -1,17 +1,16 @@
 use gantry_cia402::driver::event::MotorEvent;
 use oze_canopen::canopen::NodeId;
-use tokio::{sync::broadcast, task::JoinHandle};
+use tokio::{sync::broadcast, task::JoinSet};
 use tracing::*;
 
 use crate::{
     axis::{Axis, receiver::AxisEventReceiver},
     event::{GantryMotorEvent, combiner::EventCombiner},
     setpoint::translator::SetpointTranslator,
-    spawn_logged,
 };
 
 pub struct FeedbackHandle {
-    _handles: Vec<Option<JoinHandle<()>>>,
+    pub joinset: JoinSet<()>,
     pub gantry_rx: broadcast::Receiver<GantryMotorEvent>,
 }
 
@@ -26,7 +25,7 @@ impl FeedbackHandler {
         y_translator: Option<SetpointTranslator>,
         z_translator: Option<SetpointTranslator>,
     ) -> FeedbackHandle {
-        let mut handles = Vec::with_capacity(3);
+        let mut joinset = JoinSet::new();
 
         // Construct the gantry event broadcast
         let (gantry_tx, gantry_rx) = broadcast::channel(10);
@@ -38,30 +37,25 @@ impl FeedbackHandler {
 
         // Spawn a axis feedback handler for each configured gantry axis
         // Spawn X Axis handler, if axis is configured
-        handles.push(x.map(|x| {
-            spawn_logged("FEEDBACK_X", async {
+        x.map(|x| {
+            crate::spawn_logged_joinset(&mut joinset, "FEEDBACK_X", async move {
                 FeedbackHandler::handle_axis_feedback(x, gantry_tx_x, x_translator.unwrap()).await
             })
-        }));
+        });
 
-        // Spawn Y Axis handler, if axis is configured
-        handles.push(y.map(|y| {
-            spawn_logged("FEEDBACK_Y", async {
+        y.map(|y| {
+            crate::spawn_logged_joinset(&mut joinset, "FEEDBACK_Y", async move {
                 FeedbackHandler::handle_axis_feedback(y, gantry_tx_y, y_translator.unwrap()).await
             })
-        }));
+        });
 
-        // Spawn Z Axis handler, if axis is configured
-        handles.push(z.map(|z| {
-            spawn_logged("FEEDBACK_Z", async {
+        z.map(|z| {
+            crate::spawn_logged_joinset(&mut joinset, "FEEDBACK_Z", async move {
                 FeedbackHandler::handle_axis_feedback(z, gantry_tx_z, z_translator.unwrap()).await
             })
-        }));
+        });
 
-        FeedbackHandle {
-            _handles: handles,
-            gantry_rx,
-        }
+        FeedbackHandle { joinset, gantry_rx }
     }
 
     pub async fn handle_axis_feedback(

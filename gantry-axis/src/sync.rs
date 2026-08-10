@@ -11,7 +11,7 @@ use tokio::{
 use crate::spawn_logged;
 
 pub struct SyncMasterHandle {
-    handle: JoinHandle<()>,
+    pub handle: JoinHandle<()>,
     sync_rx: broadcast::Receiver<Instant>,
     sync_period_tx: watch::Sender<Duration>,
 }

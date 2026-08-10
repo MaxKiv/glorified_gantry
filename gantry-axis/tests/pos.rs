@@ -64,11 +64,13 @@ mod tests {
         let timeout = Duration::from_secs(5);
 
         let out = tokio::select! {
-            out = test_gantry_cmds(gantry, &cmds, "position", timeout)=> {
+            out = test_gantry_cmds(&gantry, &cmds, "position", timeout)=> {
                 out.context("test failed")
             },
-            _ = tokio::signal::ctrl_c() => Err(anyhow::anyhow!("SIGINT Received")),
-
+            _ = tokio::signal::ctrl_c() => {
+                gantry.wait_for_shutdown().await;
+                Err(anyhow::anyhow!("SIGINT Received"))
+            },
         };
 
         out

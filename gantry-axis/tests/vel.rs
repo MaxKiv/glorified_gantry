@@ -7,6 +7,7 @@ mod tests {
 
     use std::time::Duration;
 
+    use anyhow::Context;
     use gantry_axis::{
         axis::setpoint::{AxisSetpoint, PositionSetpoint},
         command::GantryCommand,
@@ -207,13 +208,13 @@ mod tests {
 
         // Wait for either Ctrl-C or test completion
         tokio::select! {
-            res = test_gantry_cmds(gantry, &cmds, "Velocity", timeout)=> {
-                return res;
-            }
-            _ = signal::ctrl_c() => {
-                info!("Ctrl-C received — aborting test");
-                return Err(anyhow::anyhow!("aborted test"));
-            }
+            out = test_gantry_cmds(&gantry, &cmds, "Velocity", timeout)=> {
+                out.context("test failed")
+            },
+            _ = tokio::signal::ctrl_c() => {
+                gantry.wait_for_shutdown().await;
+                Err(anyhow::anyhow!("SIGINT Received"))
+            },
         }
     }
 }

@@ -10,7 +10,10 @@ pub mod startup;
 pub mod state;
 pub mod update;
 
-use std::sync::Arc;
+use std::{
+    sync::{Arc, atomic::Ordering},
+    time::Duration,
+};
 
 use crate::{
     comms::{
@@ -55,9 +58,24 @@ pub struct Cia402Driver<Mode = Standalone> {
     pub nmt_tx: mpsc::Sender<NmtState>,
     pub event_rx: broadcast::Receiver<MotorEvent>,
     canopen: CanOpenInterface,
-    _handles: JoinSet<()>,
+    joinset: JoinSet<()>,
     sdo: Arc<Mutex<SdoClient>>,
     _mode: std::marker::PhantomData<Mode>,
+}
+
+impl<Mode> Drop for Cia402Driver<Mode> {
+    fn drop(&mut self) {
+        let _ = self.cmd_tx.send(MotorCommand::Disable);
+
+        // TMTM-40: Figure out what a safe state is, and make sure we go there on [`Drop`] before comms tasks are aborted
+        // For instance use an atomic bool or oneshot channel to communicate between drop and Comms task:
+        // while !self.shutdown_ack.as_ref().unwrap().load(Ordering::SeqCst) {
+        //     // Small yield to avoid busy-wait
+        //     std::thread::sleep(Duration::from_micros(10));
+        // }
+
+        self.joinset.abort_all();
+    }
 }
 
 impl<Mode> Cia402Driver<Mode> {
@@ -233,15 +251,10 @@ impl<Mode> Cia402Driver<Mode> {
             nmt_tx,
             event_rx: event_rx.resubscribe(),
             canopen,
-            _handles: handles,
+            joinset: handles,
             sdo,
             _mode: std::marker::PhantomData::<Mode>,
         })
-    }
-
-    pub async fn shutdown(self) {
-        let _ = self.cmd_tx.send(MotorCommand::Halt);
-        let _ = self.cmd_tx.send(MotorCommand::Disable);
     }
 
     pub fn get_cmd_tx_channel(&self) -> broadcast::Sender<MotorCommand> {

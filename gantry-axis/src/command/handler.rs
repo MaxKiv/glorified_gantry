@@ -5,7 +5,7 @@ use tracing::*;
 use crate::{axis::AxisMotors, command::GantryCommand, setpoint::translator::SetpointTranslator};
 
 pub struct CommandHandle {
-    handle: JoinHandle<()>,
+    pub handle: JoinHandle<()>,
     pub cmd_tx: mpsc::Sender<GantryCommand>,
 }
 

@@ -4,9 +4,14 @@ use tokio::{
     time::Instant,
 };
 use tracing::*;
+use uom::si::{f64::Torque, torque::newton_meter};
 
 use crate::{
-    axis::{AxisConfig, AxisMotors, receiver::AxisEventReceiver},
+    axis::{
+        AxisConfig, AxisMotors,
+        receiver::AxisEventReceiver,
+        setpoint::{AxisSetpoint, TorqueSetpoint},
+    },
     cfg::GantryConfig,
     command::{
         GantryCommand,
@@ -24,7 +29,7 @@ pub struct Gantry {
     canopen: CanOpenInterface,
     sync: SyncMasterHandle,
     cmd_handler: CommandHandle,
-    feedback_handler: FeedbackHandle,
+    pub feedback_handler: FeedbackHandle,
     pub cfg: GantryConfig,
 }
 
@@ -145,5 +150,41 @@ impl Gantry {
 
     pub fn get_cmd_tx(&self) -> mpsc::Sender<GantryCommand> {
         self.cmd_handler.cmd_tx.clone()
+    }
+
+    pub async fn into_safe_state(&mut self) -> Result<(), mpsc::error::SendError<GantryCommand>> {
+        let safe_setpoint = AxisSetpoint::Torque(TorqueSetpoint {
+            target: Torque::new::<newton_meter>(0.0),
+        });
+        let safe_cmd = GantryCommand::Setpoint {
+            x: Some(safe_setpoint.clone()),
+            y: Some(safe_setpoint.clone()),
+            z: Some(safe_setpoint.clone()),
+        };
+
+        self.cmd_handler.cmd_tx.send(safe_cmd).await
+    }
+
+    // TMTM-40: Figure out what a safe state is, and make sure we go there on [`Drop`] before comms tasks are aborted
+    pub fn shutdown(&mut self) {
+        self.sync.handle.abort();
+        self.feedback_handler.joinset.abort_all();
+        self.cmd_handler.handle.abort(); // NOTE: aborting the CommandHandler calls [`Cia402Driver::Drop`]
+    }
+
+    // TMTM-40: Figure out what a safe state is, and make sure we go there on [`Drop`] before comms tasks are aborted
+    pub async fn wait_for_shutdown(mut self) {
+        if let Err(err) = self.into_safe_state().await {
+            error!("Gantry SHUTDOWN: Unable to send gantry into safe state! - {err}");
+        }
+        // This sleep here attempts to ensure the safe state setpoint get through before destructors happen
+        // TMTM-40: TODO: change this for proper synchronisation
+        tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+
+        self.sync.handle.abort();
+        let _ = self.sync.handle.await;
+        self.cmd_handler.handle.abort(); // NOTE: aborting the CommandHandler calls [`Cia402Driver::Drop`]
+        let _ = self.cmd_handler.handle.await;
+        let _ = self.feedback_handler.joinset.shutdown().await;
     }
 }
