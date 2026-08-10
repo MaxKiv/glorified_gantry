@@ -6,7 +6,7 @@ use tokio::sync::Mutex;
 use tracing::*;
 
 use crate::{
-    comms::sdo::{SDO_PROCESS_DURATION, SdoAction},
+    comms::sdo::{SDO_PROCESS_DURATION, SdoAction, SdoResult},
     driver::{
         identifier::{Cia402Identifier, CiaProfileNumber, MotorType},
         startup::params::{DEVICE_NAME_ACTION, DEVICE_TYPE_ACTION},
@@ -27,7 +27,9 @@ pub async fn parametrise_motor(
     // First check if the motor we are talking to is the one we expect
     if let Err(err) = check_identfier_is_correct(&identifier, sdo.clone()).await {
         error!("Wrong device identifier => {err}");
-        panic!("Wrong device identifier => {err}");
+        return Err(InitialisationError::InvalidDeviceIdentifier(
+            identifier.clone(),
+        ));
     }
 
     trace!(
@@ -47,7 +49,7 @@ pub async fn parametrise_motor(
             Ok(sdo_transaction) => {
                 info!("SDO result: {:?}", sdo_transaction);
 
-                if let crate::comms::sdo::SdoResult::Error(err) = sdo_transaction.result {
+                if let SdoResult::Error(err) = sdo_transaction.result {
                     error!(
                         "SDO Error {}, during parametrisation of node {} with {action:?}",
                         err, identifier.node_id
@@ -57,10 +59,16 @@ pub async fn parametrise_motor(
                     ));
                 }
             }
-            Err(err) => error!(
-                "Error while parametrizing node id {}: {err}",
-                identifier.node_id
-            ),
+            Err(err) => {
+                error!(
+                    "Error while parametrizing node id {}: {err}",
+                    identifier.node_id
+                );
+
+                return Err(InitialisationError::ParametrisationError(
+                    identifier.clone(),
+                ));
+            }
         };
 
         // Shit synchronisation

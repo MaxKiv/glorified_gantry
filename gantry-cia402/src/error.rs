@@ -57,6 +57,8 @@ pub enum InitialisationError {
     ExternalRXCommandChannelMissing(Cia402Identifier),
     #[error("External Command RX channel provided, but TX missing")]
     ExternalTXCommandChannelMissing(Cia402Identifier),
+    #[error("Invalid Cia402 Device identifier provided {0}")]
+    InvalidDeviceIdentifier(Cia402Identifier),
 }
 
 #[derive(Debug, Error)]

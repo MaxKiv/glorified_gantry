@@ -32,6 +32,7 @@ use std::time::Duration;
 /// PDO based Cia402Transport impl for oze-canopen
 use oze_canopen::{interface::CanOpenInterface, transmitter::TxPacket};
 use tokio::sync::mpsc;
+use tokio::task::AbortHandle;
 use tokio::task::JoinHandle;
 use tracing::*;
 
@@ -66,7 +67,8 @@ impl Pdo {
         node_id: u8,
         default_pdo_set: &'static PDOSet,
         minimal_pdo_set: &'static PDOSet,
-    ) -> Result<(JoinHandle<()>, mpsc::Sender<PdoCommand>), InitialisationError> {
+        set: &mut tokio::task::JoinSet<()>,
+    ) -> Result<(AbortHandle, mpsc::Sender<PdoCommand>), InitialisationError> {
         // Check if all required mappings are present
         Pdo::check_required_rpdo_mappings(default_pdo_set.rpdos)?;
 
@@ -97,7 +99,7 @@ impl Pdo {
         };
 
         // Run the PDO communication task
-        let handle = tokio::spawn(pdo.run());
+        let handle = set.spawn(pdo.run());
 
         Ok((handle, pdo_tx))
     }

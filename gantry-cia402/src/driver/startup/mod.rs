@@ -42,18 +42,12 @@ pub async fn motor_startup_task(
         .map_err(|_| InitialisationError::ParametrisationNMTPreOp(identifier.clone()))?;
 
     // Parametrise this motor
-    loop {
-        trace!("Attempting to parametrise motor {identifier}");
-        if let Err(err) = parametrise_motor(identifier.clone(), parameters, sdo.clone()).await {
-            warn!(
-                "Parametrisation failed of motor {identifier}: {err}, retrying in {}s",
-                RETRY_DURATION.as_secs()
-            );
-            sleep(RETRY_DURATION).await;
-        } else {
-            info!("Succesful parametrisation of motor {identifier}");
-            break;
-        }
+    trace!("Attempting to parametrise motor {identifier}");
+    if let Err(err) = parametrise_motor(identifier.clone(), parameters, sdo.clone()).await {
+        error!("Parametrisation failed of motor {identifier}: {err}, aborting.",);
+        return Err(err);
+    } else {
+        info!("Succesful parametrisation of motor {identifier}");
     }
 
     // Configure RPDO mapping

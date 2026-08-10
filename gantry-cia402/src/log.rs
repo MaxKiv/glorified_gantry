@@ -43,7 +43,15 @@ pub async fn log_canopen_pretty(mut canopen: CanOpenInterface) -> Result<(), Rec
                         parsed.log();
                     }
                     Err(err) => {
-                        error!("Error logging canopen traffic: {err}");
+                        match err {
+                            RecvError::Closed => {
+                                error!("SNIFF: Canopen interface receiver closed, exiting.");
+                                return Err(err);
+                            },
+                            RecvError::Lagged(n) => {
+                                error!("SNIFF: Lagged {} messages, continuing...", n);
+                            },
+                        }
                     }
                 }
             },

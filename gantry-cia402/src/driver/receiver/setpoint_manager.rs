@@ -3,7 +3,7 @@ use std::{sync::Arc, time::Duration};
 use oze_canopen::{canopen::NodeId, sdo_client::SdoClient};
 use tokio::{
     sync::{Mutex, broadcast, mpsc, watch},
-    task::JoinHandle,
+    task::{AbortHandle, JoinHandle},
     time::Instant,
 };
 use tracing::*;
@@ -55,8 +55,9 @@ impl SetpointManager {
         event_rx: broadcast::Receiver<MotorEvent>,
         pdo_tx: mpsc::Sender<PdoCommand>,
         sync_rx: broadcast::Receiver<Instant>,
+        set: &mut tokio::task::JoinSet<()>,
     ) -> (
-        JoinHandle<()>,
+        AbortHandle,
         mpsc::Sender<Setpoint>,
         watch::Sender<SetpointManagerModeTypes>,
     ) {
@@ -78,7 +79,7 @@ impl SetpointManager {
         };
 
         // Run the setpoint manager task
-        let handle = tokio::spawn(mgr.run());
+        let handle = set.spawn(mgr.run());
 
         (handle, new_setpoint_tx, cs_mode_tx)
     }

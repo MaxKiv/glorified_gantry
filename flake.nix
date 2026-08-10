@@ -70,7 +70,7 @@
       toolchain = with fenix.packages.${system};
         fromToolchainFile {
           file = ./rust-toolchain.toml; # alternatively, dir = ./.;
-          sha256 = "sha256-pmqHPwMXDp3dPMH7jcI5Xt2ocrQ7ojnk+go/R5cecoo=";
+          sha256 = "sha256-e14fiRzmCj3BnBx5W7+ooxNj/tq9B6aszY6XyimnssM=";
           # sha256 = pkgs.lib.fakeSha256;
         };
 

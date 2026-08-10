@@ -150,16 +150,23 @@ impl<Mode> Cia402Driver<Mode> {
 
         // Get the PDO client for this node id, we use this to manage R/TPDOs
         trace!("Starting PDO task for motor {identifier}");
-        let (pdo_handle, pdo_tx) =
-            Pdo::init(canopen.clone(), node_id, default_pdo_set, minimal_pdo_set)?;
-
-        pdo_handle;
+        let (_pdo_handle, pdo_tx) = Pdo::init(
+            canopen.clone(),
+            node_id,
+            default_pdo_set,
+            minimal_pdo_set,
+            &mut handles,
+        )?;
 
         // Start the setpoint manager for this device, handles setpoint writes and OMS specifics
         // like profile position handshaking
-        let (setpoint_manager_handle, new_setpoint_tx, cs_mode_tx) =
-            SetpointManager::init(node_id, event_rx_setpoint_manager, pdo_tx.clone(), sync_rx);
-        setpoint_manager_handle;
+        let (_setpoint_manager_handle, new_setpoint_tx, cs_mode_tx) = SetpointManager::init(
+            node_id,
+            event_rx_setpoint_manager,
+            pdo_tx.clone(),
+            sync_rx,
+            &mut handles,
+        );
 
         // Start the cia402 state machine task, this is responsible for
         // tracking the motors current cia402 state and single transition
@@ -201,7 +208,7 @@ impl<Mode> Cia402Driver<Mode> {
 
         // Start the startup task for this motor, this does parametrisation and configures pdo mapping
         trace!("Performing Startup for motor {identifier}");
-        motor_startup_task(
+        if let Err(err) = motor_startup_task(
             identifier.clone(),
             nmt_tx.clone(),
             sdo.clone(),
@@ -209,7 +216,12 @@ impl<Mode> Cia402Driver<Mode> {
             default_pdo_set,
             event_rx_startup,
         )
-        .await?;
+        .await
+        {
+            error!("Startup error: {err}, releasing resources and exiting.");
+            handles.shutdown().await;
+            return Err(err);
+        }
         trace!("Startup done for motor {identifier}");
 
         // Drive is now parametrised, T/RPDO are configured and in NMT::Operational
