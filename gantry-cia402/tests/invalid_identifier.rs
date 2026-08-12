@@ -5,14 +5,12 @@ use tracing::*;
 #[cfg(test)]
 mod tests {
 
-    use gantry_axis::sync::SyncMaster;
+    use gantry_axis::sync::{DEFAULT_SYNC_PERIOD, SyncMaster};
     use gantry_cia402::driver::{
         builder::Cia402DriverBuilder,
         identifier::{Cia402Identifier, CiaProfileNumber},
     };
     use gantry_demo::config::{DeviceName, TEST_SETUP_MOTOR_TYPE};
-
-    
 
     use super::*;
 
@@ -43,7 +41,7 @@ mod tests {
             .with_canopen(canopen.clone())
             .with_default_pdo_mappings()
             .with_default_parameters()
-            .with_sync_receiver(sync_rx)
+            .with_sync_receiver(sync_rx, DEFAULT_SYNC_PERIOD)
             .build()
             .await;
 

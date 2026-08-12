@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use oze_canopen::interface::CanOpenInterface;
 use tokio::{sync::broadcast, time::Instant};
 
@@ -40,6 +42,7 @@ pub struct Cia402DriverBuilder<C, M, S, Mode> {
     default_pdo_set: Option<&'static PDOSet>,
     minimal_pdo_set: Option<&'static PDOSet>,
     sync_rx: Option<broadcast::Receiver<Instant>>,
+    sync_period: Option<Duration>,
     cmd_tx: Option<broadcast::Sender<MotorCommand>>,
     cmd_rx: Option<broadcast::Receiver<MotorCommand>>,
     _canopen: std::marker::PhantomData<C>,
@@ -58,6 +61,7 @@ impl Cia402DriverBuilder<NoCanOpen, NoMapping, NoSyncReceiver, Standalone> {
             default_pdo_set: None,
             minimal_pdo_set: None,
             sync_rx: None,
+            sync_period: None,
             cmd_tx: None,
             cmd_rx: None,
             _canopen: std::marker::PhantomData,
@@ -82,6 +86,7 @@ impl<M, S, Mode> Cia402DriverBuilder<NoCanOpen, M, S, Mode> {
             minimal_pdo_set: self.minimal_pdo_set,
             default_pdo_set: self.default_pdo_set,
             sync_rx: self.sync_rx,
+            sync_period: self.sync_period,
             cmd_tx: self.cmd_tx,
             cmd_rx: self.cmd_rx,
             _canopen: std::marker::PhantomData,
@@ -115,6 +120,7 @@ impl<C, S, Mode> Cia402DriverBuilder<C, NoMapping, S, Mode> {
                 default_pdo_set: Some(default_pdo_set),
                 minimal_pdo_set: Some(minimal_pdo_set),
                 sync_rx: self.sync_rx,
+                sync_period: self.sync_period,
                 cmd_tx: self.cmd_tx,
                 cmd_rx: self.cmd_rx,
                 _canopen: self._canopen,
@@ -137,6 +143,7 @@ impl<C, M, Mode> Cia402DriverBuilder<C, M, NoSyncReceiver, Mode> {
     pub fn with_sync_receiver(
         self,
         sync_rx: broadcast::Receiver<Instant>,
+        sync_period: Duration,
     ) -> Cia402DriverBuilder<C, M, HasSyncReceiver, Mode> {
         Cia402DriverBuilder {
             identifier: self.identifier,
@@ -145,6 +152,7 @@ impl<C, M, Mode> Cia402DriverBuilder<C, M, NoSyncReceiver, Mode> {
             minimal_pdo_set: self.minimal_pdo_set,
             default_pdo_set: self.default_pdo_set,
             sync_rx: Some(sync_rx),
+            sync_period: Some(sync_period),
             cmd_tx: self.cmd_tx,
             cmd_rx: self.cmd_rx,
             _canopen: self._canopen,
@@ -180,6 +188,7 @@ impl<C, M, S> Cia402DriverBuilder<C, M, S, Standalone> {
             minimal_pdo_set: self.minimal_pdo_set,
             default_pdo_set: self.default_pdo_set,
             sync_rx: self.sync_rx,
+            sync_period: self.sync_period,
             cmd_tx: Some(master.get_cmd_tx_channel()),
             cmd_rx: Some(master.get_cmd_rx_channel()),
             _canopen: self._canopen,
@@ -200,6 +209,7 @@ impl<C, M, S> Cia402DriverBuilder<C, M, S, Standalone> {
             minimal_pdo_set: self.minimal_pdo_set,
             default_pdo_set: self.default_pdo_set,
             sync_rx: self.sync_rx,
+            sync_period: self.sync_period,
             cmd_tx: Some(cmd_tx),
             cmd_rx: Some(cmd_rx),
             _canopen: self._canopen,
@@ -218,6 +228,7 @@ impl<Mode> Cia402DriverBuilder<HasCanOpen, HasMapping, HasSyncReceiver, Mode> {
         let minimal_pdo_set = self.minimal_pdo_set.unwrap();
         let default_pdo_set = self.default_pdo_set.unwrap();
         let sync_rx = self.sync_rx.unwrap();
+        let sync_period = self.sync_period.unwrap();
         let params = self.parameters.unwrap_or(&[]);
         let identifier = self.identifier;
 
@@ -245,6 +256,7 @@ impl<Mode> Cia402DriverBuilder<HasCanOpen, HasMapping, HasSyncReceiver, Mode> {
             default_pdo_set,
             minimal_pdo_set,
             sync_rx,
+            sync_period,
             cmd_tx,
             cmd_rx,
         )

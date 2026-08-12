@@ -10,12 +10,18 @@ pub const DEVICE_NAME_ACTION: SdoAction = SdoAction::Upload {
 };
 
 pub const TEST_PARAMS: &[SdoAction] = &[
+    // --- General ---
+    // Drive Heartbeat time
+    SdoAction::Download {
+        entry: &PRODUCER_HEARTBEAT_TIME,
+        data: &1000i32.to_le_bytes(), // 1000ms = 1s
+    },
     // --- Profile Position ---
-    // Set target position = 0 (we start from home or zero)
     SdoAction::Download {
         entry: &POSITION_WINDOW,
         data: &0u32.to_le_bytes(), // Strict target reached check
     },
+    // Set target position = 0 (we start from home or zero)
     SdoAction::Download {
         entry: &SET_TARGET_POSITION,
         data: &0i32.to_le_bytes(),

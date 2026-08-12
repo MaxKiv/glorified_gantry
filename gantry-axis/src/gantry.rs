@@ -22,12 +22,12 @@ use crate::{
         handler::{FeedbackHandle, FeedbackHandler},
     },
     setpoint::translator::SetpointTranslator,
-    sync::{SyncMaster, SyncMasterHandle},
+    sync::{DEFAULT_SYNC_PERIOD, SyncMaster, SyncReceiver},
 };
 
 pub struct Gantry {
     canopen: CanOpenInterface,
-    sync: SyncMasterHandle,
+    sync_master: SyncMaster,
     cmd_handler: CommandHandle,
     pub feedback_handler: FeedbackHandle,
     pub cfg: GantryConfig,
@@ -36,7 +36,11 @@ pub struct Gantry {
 impl Gantry {
     pub async fn start(canopen: CanOpenInterface, cfg: GantryConfig) -> anyhow::Result<Self> {
         info!("Starting SYNC Master");
-        let sync = SyncMaster::init(canopen.clone());
+        let (sync_master, sync_enabler, sync_receiver) =
+            SyncMaster::init(canopen.clone(), DEFAULT_SYNC_PERIOD);
+        // TODO: TMTM-43: Enable sync only after all drives switch to Cyclic mode, disable while
+        // switching and after switching to normal modes
+        sync_enabler.sync_enable_tx.send(false);
 
         info!("Starting X Axis");
         // Initialize X Axis motors and return their handles + device scaling
@@ -44,8 +48,12 @@ impl Gantry {
         let (x_motors, x_recv, x_translator) = if let Some(ref cfg) = cfg.x {
             let translator = SetpointTranslator::new(&cfg.scaling);
 
-            let (motors, recv) =
-                Gantry::start_axis(cfg.clone(), canopen.clone(), sync.get_sync_receiver()).await?;
+            let (motors, recv) = Gantry::start_axis(
+                cfg.clone(),
+                canopen.clone(),
+                sync_receiver.get_sync_receiver(),
+            )
+            .await?;
             (Some(motors), Some(recv), Some(translator))
         } else {
             (None, None, None)
@@ -57,8 +65,12 @@ impl Gantry {
         let (y_motors, y_recv, y_translator) = if let Some(ref cfg) = cfg.y {
             let translator = SetpointTranslator::new(&cfg.scaling);
 
-            let (motors, recv) =
-                Gantry::start_axis(cfg.clone(), canopen.clone(), sync.get_sync_receiver()).await?;
+            let (motors, recv) = Gantry::start_axis(
+                cfg.clone(),
+                canopen.clone(),
+                sync_receiver.get_sync_receiver(),
+            )
+            .await?;
             (Some(motors), Some(recv), Some(translator))
         } else {
             (None, None, None)
@@ -70,8 +82,12 @@ impl Gantry {
         let (z_motors, z_recv, z_translator) = if let Some(ref cfg) = cfg.z {
             let translator = SetpointTranslator::new(&cfg.scaling);
 
-            let (motors, recv) =
-                Gantry::start_axis(cfg.clone(), canopen.clone(), sync.get_sync_receiver()).await?;
+            let (motors, recv) = Gantry::start_axis(
+                cfg.clone(),
+                canopen.clone(),
+                sync_receiver.get_sync_receiver(),
+            )
+            .await?;
             (Some(motors), Some(recv), Some(translator))
         } else {
             (None, None, None)
@@ -100,7 +116,7 @@ impl Gantry {
         info!("Gantry Initialized!");
         Ok(Self {
             canopen,
-            sync,
+            sync_master: sync,
             cmd_handler,
             feedback_handler,
             cfg,
@@ -167,7 +183,7 @@ impl Gantry {
 
     // TMTM-40: Figure out what a safe state is, and make sure we go there on [`Drop`] before comms tasks are aborted
     pub fn shutdown(&mut self) {
-        self.sync.handle.abort();
+        self.sync_master.handle.abort();
         self.feedback_handler.joinset.abort_all();
         self.cmd_handler.handle.abort(); // NOTE: aborting the CommandHandler calls [`Cia402Driver::Drop`]
     }
@@ -183,8 +199,8 @@ impl Gantry {
 
         self.cmd_handler.handle.abort(); // NOTE: aborting the CommandHandler calls [`Cia402Driver::Drop`]
         let _ = self.cmd_handler.handle.await;
-        self.sync.handle.abort();
-        let _ = self.sync.handle.await;
+        self.sync_master.handle.abort();
+        let _ = self.sync_master.handle.await;
         let _ = self.feedback_handler.joinset.shutdown().await;
     }
 }

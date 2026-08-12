@@ -40,7 +40,6 @@ pub const COMMS_TIMEOUT: Duration = Duration::from_secs(5);
 pub const POS_TIMEOUT: Duration = Duration::from_secs(30);
 pub const HOMING_TIMEOUT: Duration = Duration::from_secs(60);
 pub const CYCLIC_PDOS: PDOSet = MINIMAL_CYCLIC_SYNCHRONOUS_PDO_SET;
-pub const SYNC_PERIOD: Duration = Duration::from_millis(1000);
 
 #[derive(Debug, Error)]
 pub enum TestError {

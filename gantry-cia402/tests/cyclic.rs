@@ -7,15 +7,20 @@ mod tests {
 
     const TEST_SPEED: u32 = 100;
     const TEST_TORQUE: i16 = 69;
-    const TORQUE_TIMEOUT: Duration = Duration::from_millis(10_000);
+    const TEST_TIMEOUT: Duration = Duration::from_millis(1_000);
 
     use std::time::Duration;
 
-    use gantry_axis::sync::SyncMaster;
+    use gantry_axis::sync::{DEFAULT_SYNC_PERIOD, SyncMaster};
     use gantry_cia402::{
         driver::{
-            Cia402Driver, builder::Cia402DriverBuilder, command::MotorCommand, event::MotorEvent,
-            receiver::subscriber::wait_for_event, state::Cia402State,
+            Cia402Driver,
+            builder::Cia402DriverBuilder,
+            command::MotorCommand,
+            cyclic::CyclicSynchronousMode,
+            event::MotorEvent,
+            receiver::subscriber::{wait_for_event, wait_for_target_reached},
+            state::Cia402State,
         },
         error::DriveError,
     };
@@ -35,6 +40,7 @@ mod tests {
         let (canopen, _) = oze_canopen::canopen::start(String::from("can0"), Some(1000000));
 
         let sync_master = SyncMaster::init(canopen.clone());
+        sync_master.set_sync_period(DEFAULT_SYNC_PERIOD)?;
         let sync_rx = sync_master.get_sync_receiver();
 
         info!("Initializing Cia402Driver for motor {identifier}");
@@ -42,7 +48,7 @@ mod tests {
             .with_canopen(canopen.clone())
             .with_default_pdo_mappings()
             .with_parameters(PARAMS)
-            .with_sync_receiver(sync_rx)
+            .with_sync_receiver(sync_rx, DEFAULT_SYNC_PERIOD)
             .build()
             .await?;
 
@@ -111,80 +117,48 @@ mod tests {
         )
         .await?;
 
+        info!("Starting Cyclic Synchronous Torque test");
+        drive
+            .cmd_tx
+            .send(MotorCommand::EnterCyclicSynchronousMode {
+                mode: CyclicSynchronousMode::Position,
+            })
+            .map_err(DriveError::CommandError)?;
+
+        info!("Wait for Homing completed event");
+        wait_for_event(
+            drive.event_rx.resubscribe(),
+            MotorEvent::OperationModeUpdate(
+                gantry_cia402::driver::oms::OperationMode::CyclicSynchronousPosition,
+            ),
+            COMMS_TIMEOUT,
+        )
+        .await?;
+
         for num in 1..=100 {
-            info!("#{num} Setting {TEST_TORQUE} torque target");
+            let test_position = 20;
+            info!("#{num} Setting {test_position}");
             drive
                 .cmd_tx
-                .send(MotorCommand::CyclicSynchronousPosition { abs_target: num })
-                .map_err(DriveError::CommandError)?;
-
-            info!("#{num} Wait for Torque Setpoint Reached event");
-            wait_for_event(
-                drive.event_rx.resubscribe(),
-                MotorEvent::TorqueModeFeedback {
-                    axis_braked: false,
-                    setpoint_reached: true,
-                    limit_exceeded: false,
-                },
-                TORQUE_TIMEOUT,
-            )
-            .await?;
-
-            info!("#{num} Setting 0 torque");
-            drive
-                .cmd_tx
-                .send(MotorCommand::SetTorque { target_torque: 0 })
-                .map_err(DriveError::CommandError)?;
-
-            info!("#{num} Wait for Torque Setpoint Reached event");
-            wait_for_event(
-                drive.event_rx.resubscribe(),
-                MotorEvent::TorqueModeFeedback {
-                    axis_braked: false,
-                    setpoint_reached: true,
-                    limit_exceeded: false,
-                },
-                TORQUE_TIMEOUT,
-            )
-            .await?;
-
-            info!("#{num} Setting -{TEST_TORQUE} torque target");
-            drive
-                .cmd_tx
-                .send(MotorCommand::SetTorque {
-                    target_torque: -TEST_TORQUE,
+                .send(MotorCommand::CyclicSynchronousPosition {
+                    abs_target: test_position,
                 })
                 .map_err(DriveError::CommandError)?;
 
-            info!("#{num} Wait for Torque Setpoint Reached event");
-            wait_for_event(
-                drive.event_rx.resubscribe(),
-                MotorEvent::TorqueModeFeedback {
-                    axis_braked: false,
-                    setpoint_reached: true,
-                    limit_exceeded: false,
-                },
-                TORQUE_TIMEOUT,
-            )
-            .await?;
+            info!("#{num} Wait for target reached");
+            wait_for_target_reached(drive.event_rx.resubscribe(), COMMS_TIMEOUT, test_position)
+                .await?;
 
-            info!("#{num} Setting 0 torque");
+            let test_position = 10;
+            info!("#{num} Setting {test_position}");
             drive
                 .cmd_tx
-                .send(MotorCommand::SetTorque { target_torque: 0 })
+                .send(MotorCommand::CyclicSynchronousTorque { target: 0 })
                 .map_err(DriveError::CommandError)?;
 
-            info!("#{num} Wait for Torque Setpoint Reached event");
-            wait_for_event(
-                drive.event_rx.resubscribe(),
-                MotorEvent::TorqueModeFeedback {
-                    axis_braked: false,
-                    setpoint_reached: true,
-                    limit_exceeded: false,
-                },
-                TORQUE_TIMEOUT,
-            )
-            .await?;
+            info!("#{num} Wait for target reached");
+            wait_for_target_reached(drive.event_rx.resubscribe(), COMMS_TIMEOUT, test_position)
+                .await?;
         }
 
         Ok(())

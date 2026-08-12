@@ -12,7 +12,7 @@ use oze_canopen::interface::CanOpenInterface;
 use tokio::{sync::broadcast, time::Instant};
 use tracing::*;
 
-use crate::setpoint::translator::scaling::DeviceScaling;
+use crate::{setpoint::translator::scaling::DeviceScaling, sync::DEFAULT_SYNC_PERIOD};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Axis {
@@ -62,7 +62,7 @@ impl AxisMotors {
             .with_canopen(canopen.clone())
             .with_default_pdo_mappings()
             .with_parameters(params)
-            .with_sync_receiver(sync_rx.resubscribe())
+            .with_sync_receiver(sync_rx.resubscribe(), DEFAULT_SYNC_PERIOD)
             .as_master()
             .build()
             .await?;
@@ -74,7 +74,7 @@ impl AxisMotors {
                     .with_canopen(canopen.clone())
                     .with_default_pdo_mappings()
                     .with_parameters(params)
-                    .with_sync_receiver(sync_rx.resubscribe())
+                    .with_sync_receiver(sync_rx.resubscribe(), DEFAULT_SYNC_PERIOD)
                     .as_slave_with_master(&master)
                     .build()
                     .await?,
@@ -93,9 +93,11 @@ impl AxisMotors {
 
     /// Send given motorcommand to the master and slave motors of this axis
     pub fn send_command_to_motors(&self, command: &MotorCommand) {
-        warn!("xxx Axis {:?} sending command: {command:?}", self.axis);
+        info!("Axis {:?} sending command: {command:?}", self.axis);
 
         // Send command to all Cia402Drivers that make up this axis
+        // NOTE: slaves get their commands through the master cmd_tx by virtue of being configured
+        // as slaves in [`Cia402DriverBuilder::as_slave_with_master(&master)`]
         if let Err(e) = self.master.cmd_tx.send(command.clone()) {
             error!(
                 "Axis {:?} unable to send command to Master: {command:?} - {e}",

@@ -1,16 +1,15 @@
 pub mod common;
 
-
 use tracing::*;
 
 #[cfg(test)]
 mod tests {
 
-    use gantry_axis::sync::SyncMaster;
+    use gantry_axis::sync::{DEFAULT_SYNC_PERIOD, SyncMaster};
     use gantry_cia402::driver::{
-            builder::Cia402DriverBuilder, event::MotorEvent,
-            receiver::subscriber::wait_for_event, state::Cia402State,
-        };
+        builder::Cia402DriverBuilder, event::MotorEvent, receiver::subscriber::wait_for_event,
+        state::Cia402State,
+    };
 
     use crate::common::{COMMS_TIMEOUT, PARAMS};
 
@@ -35,7 +34,7 @@ mod tests {
             .with_canopen(canopen.clone())
             .with_default_pdo_mappings()
             .with_parameters(PARAMS)
-            .with_sync_receiver(sync_rx)
+            .with_sync_receiver(sync_rx, DEFAULT_SYNC_PERIOD)
             .build()
             .await?;
 

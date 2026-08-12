@@ -20,7 +20,7 @@ use crate::{
     error::DriveError,
 };
 
-pub const SYNC_CYCLE_ERROR_WINDOW: Duration = Duration::from_millis(10);
+pub const SYNC_PERIOD_ALLOWED_EPSILON: Duration = Duration::from_micros(1);
 
 enum HandshakeState {
     Idle,
@@ -44,6 +44,7 @@ pub struct SetpointManager {
     event_rx: broadcast::Receiver<MotorEvent>,
     pdo_tx: mpsc::Sender<PdoCommand>,
     sync_rx: broadcast::Receiver<Instant>,
+    sync_period: Duration,
     current_setpoint: Option<Setpoint>,
     mode: SetpointManagerModeTypes,
     last_sync: Option<Instant>,
@@ -55,6 +56,7 @@ impl SetpointManager {
         event_rx: broadcast::Receiver<MotorEvent>,
         pdo_tx: mpsc::Sender<PdoCommand>,
         sync_rx: broadcast::Receiver<Instant>,
+        sync_period: Duration,
         set: &mut tokio::task::JoinSet<()>,
     ) -> (
         AbortHandle,
@@ -76,6 +78,7 @@ impl SetpointManager {
             current_setpoint: None,
             last_sync: None,
             node_id,
+            sync_period,
         };
 
         // Run the setpoint manager task
@@ -99,6 +102,7 @@ impl SetpointManager {
                     self.current_setpoint = Some(new_setpoint.clone());
 
                     // Write new setpoints to the device in default mode
+                    // NOTE: cyclic mode setpoints are send after SYNC arrives
                     if let SetpointManagerModeTypes::Default = self.mode {
                         if let Err(err) = self.pdo_tx.send(PdoCommand::WriteSetpoint(new_setpoint.clone())).await {
                             error!("Setpoint manager unable send new setpoint to device: {err}");
@@ -187,20 +191,25 @@ impl SetpointManager {
                         // Send the current setpoint to the device
                         if let Some(setpoint) = &self.current_setpoint {
                             if setpoint.is_cyclic_synchronous() {
+                                if let Err(err) = self.pdo_tx.send(PdoCommand::WriteSetpoint(setpoint.clone())).await {
+                                    error!("Setpoint manager unable send new setpoint to device: {err}");
+                                }
+                            } else {
                                 error!("Setpoint manager attempts to write non-cyclic setpoint: {setpoint:?} on SYNC for Mode: {:?}", self.mode);
-                            } else if let Err(err) = self.pdo_tx.send(PdoCommand::WriteSetpoint(setpoint.clone())).await {
-                                error!("Setpoint manager unable send new setpoint to device: {err}");
                             }
                         }
                     }
 
                     // Check if SYNC cycle timing is adequate
                     if let Some(last_sync) = self.last_sync {
-                        if this_sync - last_sync > SYNC_CYCLE_ERROR_WINDOW {
-                            error!("this sync: {this_sync:?}, last sync {last_sync:?} -> SYNC Cycle time is too slow!");
-                        }
-                        self.last_sync = Some(this_sync);
+                        // let curr_sync_period = this_sync - last_sync;
+                        // let curr_jitter = curr_sync_period - self.sync_period;
+                        // error!("SYNC: period: {curr_sync_period:?} - jitter: {curr_jitter:?}");
+                        // if (curr_sync_period > self.sync_period + SYNC_PERIOD_ALLOWED_EPSILON) || (curr_sync_period < self.sync_period - SYNC_PERIOD_ALLOWED_EPSILON){
+                        //     error!("SYNC Period: {curr_sync_period:?} outside allowed epsilon of {SYNC_PERIOD_ALLOWED_EPSILON:?} -> SYNC Cycle time is too slow!");
+                        // }
                     }
+                    self.last_sync = Some(this_sync);
                 }
 
             }

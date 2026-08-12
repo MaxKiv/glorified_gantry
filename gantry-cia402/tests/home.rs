@@ -5,7 +5,10 @@ use tracing::*;
 #[cfg(test)]
 mod tests {
 
-    use gantry_axis::{event::util::HOME_TIMEOUT, sync::SyncMaster};
+    use gantry_axis::{
+        event::util::HOME_TIMEOUT,
+        sync::{DEFAULT_SYNC_PERIOD, SyncMaster},
+    };
     use gantry_cia402::{
         driver::{
             builder::Cia402DriverBuilder,
@@ -39,7 +42,7 @@ mod tests {
             .with_canopen(canopen.clone())
             .with_default_pdo_mappings()
             .with_parameters(PARAMS)
-            .with_sync_receiver(sync_rx)
+            .with_sync_receiver(sync_rx, DEFAULT_SYNC_PERIOD)
             .build()
             .await?;
 
