@@ -186,7 +186,7 @@ where
                     format!("Node {}", node).cyan(),
                     parsed.cyan(),
                 )?,
-                "SYNC" => write!(writer, "{}", "SYNC".white().bold())?,
+                "SYNC" => write!(writer, "{}", "SYNC".white().bold().reversed())?,
                 "NmtControl" => write!(
                     writer,
                     "{} -> {} request {}",

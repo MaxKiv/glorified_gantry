@@ -371,7 +371,7 @@ impl Pdo {
         // 2. Write controlword with bit 4 = 0
         // 3. Write controlword with bit 4 = 1 (this edge triggers the move)
         //
-        // -> It is extremely important to send out RPDO2 FIRST!
+        // -> It is extremely important to send out 607Ah (mapped in RPDO2) FIRST!
 
         // 1. Construct RPDO2: Set position and velocity target
         // TODO: hardcoded offsets

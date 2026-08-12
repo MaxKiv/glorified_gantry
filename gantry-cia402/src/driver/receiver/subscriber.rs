@@ -309,6 +309,7 @@ pub async fn wait_until_event_matches<F>(
     mut event_rx: broadcast::Receiver<MotorEvent>,
     predicate: F,
     timeout: Duration,
+    name: &str,
 ) -> Result<(), DriveError>
 where
     F: Fn(&MotorEvent) -> bool,
@@ -331,15 +332,15 @@ where
                 }
             }
             Ok(Err(err @ broadcast::error::RecvError::Lagged(_))) => {
-                error!("Lagged in wait_for_event, indicates serious issue");
+                error!("Lagged in wait_for_event {name}, indicates serious issue");
                 return Err(DriveError::BroadcastLagged(None, err));
             }
             Ok(Err(err @ broadcast::error::RecvError::Closed)) => {
-                error!("Event channel closed in wait_for_event");
+                error!("Event channel closed in wait_for_event: {name}");
                 return Err(DriveError::BroadcastClosed(None, err));
             }
             Err(_) => {
-                warn!("Timeout when waiting for event");
+                warn!("Timeout when waiting for event: {name}");
                 return Err(DriveError::EventMatchesTimeout);
             }
         }
@@ -362,6 +363,7 @@ pub async fn wait_for_setpoint_acknowledge(
             )
         },
         timeout,
+        "wait_for_setpoint_acknowledge",
     )
     .await
 }
@@ -380,6 +382,7 @@ pub async fn wait_for_target_reached(
             _ => false,
         },
         timeout,
+        "wait_for_target_reached",
     )
     .await
 }
@@ -401,6 +404,7 @@ pub async fn wait_for_homing_completed(
             )
         },
         timeout,
+        "wait_for_homing_completed",
     )
     .await
 }

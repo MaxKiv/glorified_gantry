@@ -5,14 +5,12 @@ use tracing::*;
 #[cfg(test)]
 mod tests {
 
-    use gantry_axis::sync::SyncMaster;
+    use gantry_axis::sync::{DEFAULT_SYNC_PERIOD, SyncMaster};
     use gantry_cia402::{
         comms::sdo::SdoAction,
         driver::builder::Cia402DriverBuilder,
         od::{access::AccessType, entry::ODEntry, mappable::MappableType, value::ODValue},
     };
-
-    
 
     use super::*;
 
@@ -53,7 +51,7 @@ mod tests {
             .with_canopen(canopen.clone())
             .with_default_pdo_mappings()
             .with_parameters(INVALID_PARAMS)
-            .with_sync_receiver(sync_rx)
+            .with_sync_receiver(sync_rx, DEFAULT_SYNC_PERIOD)
             .build()
             .await;
 

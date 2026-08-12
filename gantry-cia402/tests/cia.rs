@@ -36,7 +36,7 @@ mod tests {
             .with_canopen(canopen.clone())
             .with_default_pdo_mappings()
             .with_parameters(PARAMS)
-            .with_sync_receiver(sync_rx)
+            .with_sync_receiver(sync_rx, gantry_axis::sync::DEFAULT_SYNC_PERIOD)
             .build()
             .await?;
 

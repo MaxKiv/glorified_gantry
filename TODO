@@ -1,0 +1,39 @@
+
+# gantry-axis Cyclic Synchronous mode flow:
+
+## Startup
+1. No SYNC on startup
+2. If switch to Cyclic mode:
+  1. If (cyclic mode different than previous mode) {
+    1. For Each drive:
+      1. Set NMT to PRE-OP
+      2. Configure required params for this new cyclic mode (see below)
+      // This is optional? Would require PDO parsing to know current mode
+      3. Configure minimal PDO mapping specific to this cyclic mode 
+      4. Set NMT to OP
+      5. Start SYNC producer, Send cyclic mode target (eg 6071h for torque) every cycle
+      6. Set Cia402 to OPERATION ENABLED
+  }
+  2. loop:
+    1. Send SYNC
+    // Note: in cyclic torque (and vel? pos?) mode we could do X axis Synchronosation here
+    2. Send new cyclic target to all drives
+
+## Switch to non-cyclic mode
+1. If switch to non-cyclic mode:
+  1. For Each Drive:
+    1. Switch back to default PDO mapping
+    2. Switch into new mode
+    3. Stop SYNC generation
+
+  loop:
+  2. Start passing new setpoints to each drive
+
+# Required params per cyclic mode
+## Position
+datasheet 6.7.2
+## Velocity
+datasheet 6.8.2
+## Torque
+datasheet 6.9.2
+  

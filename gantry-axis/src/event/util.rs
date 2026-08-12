@@ -161,13 +161,13 @@ pub async fn send_cmd_and_wait_until_gantry_command_completed(
     gantry: &Gantry,
     timeout: Duration,
 ) -> anyhow::Result<()> {
-    info!("xxx Sending gantry command: {cmd:?}");
+    info!("Sending gantry command: {cmd:?}");
     gantry.send_command(cmd.clone()).await?;
 
-    info!("xxx Waiting until command: {cmd:?} is completed");
+    info!("Waiting until command: {cmd:?} is completed");
     wait_until_cmd_completed(cmd.clone(), event_rx, gantry, timeout).await?;
 
-    info!("xxx Gantry command completed: {cmd:?}");
+    info!("Gantry command completed: {cmd:?}");
     Ok(())
 }
 

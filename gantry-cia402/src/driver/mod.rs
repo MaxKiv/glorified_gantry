@@ -10,7 +10,7 @@ pub mod startup;
 pub mod state;
 pub mod update;
 
-use std::sync::Arc;
+use std::{sync::Arc, time::Duration};
 
 use crate::{
     comms::{
@@ -92,6 +92,7 @@ impl<Mode> Cia402Driver<Mode> {
         default_pdo_set: &'static PDOSet,
         minimal_pdo_set: &'static PDOSet,
         sync_rx: broadcast::Receiver<Instant>,
+        sync_period: Duration,
         cmd_tx: broadcast::Sender<MotorCommand>,
         cmd_rx: broadcast::Receiver<MotorCommand>,
     ) -> Result<Self, InitialisationError> {
@@ -180,6 +181,7 @@ impl<Mode> Cia402Driver<Mode> {
             event_rx_setpoint_manager,
             pdo_tx.clone(),
             sync_rx,
+            sync_period,
             &mut handles,
         );
 
