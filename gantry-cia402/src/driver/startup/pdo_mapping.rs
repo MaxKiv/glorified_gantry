@@ -126,7 +126,7 @@ async fn set_pdo_mapping(
     {
         // NOTE: this is a critical communication parameter to tune in order to obtain maximum CAN
         // bus bandwidth, see datasheet page 122 & 202
-        const SYNCHRONISATION_PERIOD_MS: u16 = 10;
+        const SYNCHRONISATION_PERIOD_MS: u16 = 1;
         const SYNCHRONISATION_SUB_IDX: u8 = 0x05;
 
         trace!(
@@ -155,7 +155,7 @@ async fn set_pdo_mapping(
     {
         // NOTE: this is a critical communication parameter to tune in order to obtain maximum CAN
         // bus bandwidth, see datasheet page 122 & 202
-        const INHIBIT_TIME: u16 = 5000; // = 50ms, this is in 100us blocks
+        const INHIBIT_TIME: u16 = 500; // = 50ms, this is in 100us blocks
         const INHIBIT_TIME_SUB_IDX: u8 = 0x03;
 
         trace!(

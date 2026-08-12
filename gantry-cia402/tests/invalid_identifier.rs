@@ -8,14 +8,11 @@ mod tests {
     use gantry_axis::sync::SyncMaster;
     use gantry_cia402::driver::{
         builder::Cia402DriverBuilder,
-        event::MotorEvent,
         identifier::{Cia402Identifier, CiaProfileNumber},
-        receiver::subscriber::wait_for_event,
-        state::Cia402State,
     };
     use gantry_demo::config::{DeviceName, TEST_SETUP_MOTOR_TYPE};
 
-    use crate::common::COMMS_TIMEOUT;
+    
 
     use super::*;
 

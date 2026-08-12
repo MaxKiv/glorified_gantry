@@ -13,7 +13,7 @@ mod tests {
         command::GantryCommand,
         gantry::Gantry,
     };
-    use tokio::signal;
+    
     use uom::si::{
         f64::{Length, Velocity},
         length::millimeter,

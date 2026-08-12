@@ -1,5 +1,4 @@
 use gantry_axis::{
-    axis::setpoint::{AxisSetpoint, PositionSetpoint},
     command::GantryCommand,
     event::util::send_cmd_and_wait_until_gantry_command_completed,
     gantry::Gantry,

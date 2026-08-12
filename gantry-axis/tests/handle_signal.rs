@@ -4,12 +4,12 @@ use tracing::*;
 
 #[cfg(test)]
 mod tests {
-    use anyhow::{Context, bail};
+    
     use gantry_demo::config::TEST_CONFIG;
     use std::time::Duration;
-    use tokio::{signal, time};
+    use tokio::time;
 
-    use gantry_axis::{command::GantryCommand, gantry::Gantry};
+    use gantry_axis::gantry::Gantry;
 
     use crate::common::SHUTDOWN_TIMEOUT;
 

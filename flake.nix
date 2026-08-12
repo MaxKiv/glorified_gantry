@@ -118,6 +118,8 @@
               toolchain
               # rust-analyzer
 
+              can-utils
+
               # ros crap
               colcon
 

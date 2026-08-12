@@ -8,19 +8,11 @@ mod tests {
 
     use anyhow::Context;
     use gantry_axis::{
-        axis::{
-            Axis,
-            setpoint::{AxisSetpoint, PositionSetpoint, TorqueSetpoint},
-        },
+        axis::setpoint::{AxisSetpoint, PositionSetpoint, TorqueSetpoint},
         command::GantryCommand,
-        event::util::{
-            HOME_TIMEOUT, send_cmd_and_wait_until_gantry_command_completed,
-            wait_for_axis_setpoint_complete,
-        },
         gantry::Gantry,
-        setpoint::translator::scaling::DeviceScaling,
     };
-    use tokio::{signal, time::sleep};
+    
     use uom::si::{
         f64::{Length, Torque, Velocity},
         length::millimeter,
@@ -28,9 +20,9 @@ mod tests {
         velocity::meter_per_second,
     };
 
-    use gantry_demo::config::{TEST_CONFIG, TEST_X_CONFIG, TEST_Y_CONFIG, TEST_Z_CONFIG};
+    use gantry_demo::config::TEST_CONFIG;
 
-    use crate::common::{TIMEOUT, test_gantry_cmds};
+    use crate::common::test_gantry_cmds;
 
     use super::*;
 

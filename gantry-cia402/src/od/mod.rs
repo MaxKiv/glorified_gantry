@@ -106,6 +106,18 @@ pub const GET_OPERATION_MODE: ODEntry = ODEntry::new(
     ODValue::I8(1),
 );
 
+/// Position Window
+/// Determines when TARGET_REACHED is emitted by drive together with 0x6068
+/// 0 = strictest, no deviation allowed before emitting TARGET_REACHED
+/// 0xFFFFFFFF = disable TARGET_REACHED emission altogether
+pub const POSITION_WINDOW: ODEntry = ODEntry::new(
+    0x6067,
+    0x00,
+    AccessType::ReadWrite,
+    MappableType::TPDO,
+    ODValue::U32(0),
+);
+
 /// Target position [counts] (default 3600 counts = 1 rev)
 pub const SET_TARGET_POSITION: ODEntry = ODEntry::new(
     0x607A,

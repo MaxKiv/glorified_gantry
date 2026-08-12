@@ -33,7 +33,6 @@ use std::time::Duration;
 use oze_canopen::{interface::CanOpenInterface, transmitter::TxPacket};
 use tokio::sync::mpsc;
 use tokio::task::AbortHandle;
-use tokio::task::JoinHandle;
 use tracing::*;
 
 use crate::{
@@ -148,6 +147,18 @@ impl Pdo {
                         }
                         ExitCyclicSynchronousMode => {
                             if let Err(err) = self.disable_cyclic_synchronous_mode().await {
+                                error!("Unable to disable cyclic synchronous mode: {err}");
+                            }
+                        }
+                        UpdatePositionSetpointFlags(position_flags_cw) => {
+                            if let Err(err) =
+                                self.update_position_setpoint(&position_flags_cw).await
+                            {
+                                error!("Unable to disable cyclic synchronous mode: {err}");
+                            }
+                        }
+                        UpdateHomingSetpointFlags(home_flags_cw) => {
+                            if let Err(err) = self.update_homing_setpoint(&home_flags_cw).await {
                                 error!("Unable to disable cyclic synchronous mode: {err}");
                             }
                         }
@@ -355,8 +366,28 @@ impl Pdo {
             profile_velocity,
         }: &PositionSetpoint,
     ) -> Result<(), DriveError> {
-        // 1. Construct RPDO1: Set opmode to position and toggle control_word OMS bits
+        // NOTE: Steps to write a new Profile Position setpoint:
+        // 1. Write new target to 607Ah (and velocity/accel if changing)
+        // 2. Write controlword with bit 4 = 0
+        // 3. Write controlword with bit 4 = 1 (this edge triggers the move)
+        //
+        // -> It is extremely important to send out RPDO2 FIRST!
 
+        // 1. Construct RPDO2: Set position and velocity target
+        // TODO: hardcoded offsets
+        self.rpdo_frames[RPDO_IDX_TARGET_POS].set(
+            (RPDO_TARGET_POS.sources[0].bit_range.start / 8) as usize,
+            &(*target as u32).to_le_bytes(),
+        );
+        self.rpdo_frames[RPDO_IDX_TARGET_POS].set(
+            (RPDO_TARGET_POS.sources[1].bit_range.start / 8) as usize,
+            &(profile_velocity.to_le_bytes()),
+        );
+
+        // Send RPDO2
+        self.send_rpdo(RPDO_TARGET_POS).await?;
+
+        // 2. Construct RPDO1: Set opmode to position and toggle control_word OMS bits
         trace!(
             "Writing position setpoint - target: {target} - profile_velocity: {profile_velocity} = flags: {flags:?}"
         );
@@ -375,19 +406,35 @@ impl Pdo {
         // Send RPDO1
         self.send_rpdo(RPDO_CONTROL_OPMODE).await?;
 
-        // 2. Construct RPDO2: Set position and velocity target
-        // TODO: hardcoded offsets
-        self.rpdo_frames[RPDO_IDX_TARGET_POS].set(
-            (RPDO_TARGET_POS.sources[0].bit_range.start / 8) as usize,
-            &(*target as u32).to_le_bytes(),
-        );
-        self.rpdo_frames[RPDO_IDX_TARGET_POS].set(
-            (RPDO_TARGET_POS.sources[1].bit_range.start / 8) as usize,
-            &(profile_velocity.to_le_bytes()),
+        // NOTE: Step 3 Handshake is done through [`SetpointManager`] triggering
+        // pdo::update_position_setpoint()
+
+        Ok(())
+    }
+
+    // Updates the position setpoint OMS flags in the Controlword to indicate succesful handshake
+    // This completes the steps required to send a new Profile Position Setpoint
+    pub async fn update_position_setpoint(
+        &mut self,
+        flags: &PositionFlagsCW,
+    ) -> Result<(), DriveError> {
+        trace!(
+            "Update Position setpoint after handshake with flags {:?}",
+            flags
         );
 
-        // Send RPDO2
-        self.send_rpdo(RPDO_TARGET_POS).await?;
+        // Update Controlword with new position flags
+        let mut cw = self.get_current_controlword();
+        trace!("Updating position setpoint - current Controlword: {cw:?}");
+        cw = cw.with_position_flags(flags);
+        trace!("Updating position setpoint - with position flags: {cw:?}");
+        self.set_controlword_rpdo(cw);
+
+        // Set Position Mode
+        self.set_operational_mode(OperationMode::ProfilePosition);
+
+        // Send RPDO1 to complete handshake
+        self.send_rpdo(RPDO_CONTROL_OPMODE).await?;
 
         Ok(())
     }
@@ -471,6 +518,29 @@ impl Pdo {
         self.send_rpdo(RPDO_CONTROL_OPMODE).await?;
 
         info!("RPDO1 sent succesfully to effect homing setpoint");
+
+        Ok(())
+    }
+
+    // Updates the homing setpoint OMS flags in the Controlword to indicate succesful handshake
+    pub async fn update_homing_setpoint(&mut self, flags: &HomeFlagsCW) -> Result<(), DriveError> {
+        trace!(
+            "Update Homing setpoint after handshake with flags {:?}",
+            flags
+        );
+
+        // Update Controlword with new homing flags
+        let mut cw = self.get_current_controlword();
+        trace!("Updating homing setpoint - current Controlword: {cw:?}");
+        cw = cw.with_home_flags(flags);
+        trace!("Updating homing setpoint - with position flags: {cw:?}");
+        self.set_controlword_rpdo(cw);
+
+        // Set Homing Mode
+        self.set_operational_mode(OperationMode::Homing);
+
+        // Send RPDO1 to complete handshake
+        self.send_rpdo(RPDO_CONTROL_OPMODE).await?;
 
         Ok(())
     }

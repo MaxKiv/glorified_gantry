@@ -13,6 +13,10 @@ pub const TEST_PARAMS: &[SdoAction] = &[
     // --- Profile Position ---
     // Set target position = 0 (we start from home or zero)
     SdoAction::Download {
+        entry: &POSITION_WINDOW,
+        data: &0u32.to_le_bytes(), // Strict target reached check
+    },
+    SdoAction::Download {
         entry: &SET_TARGET_POSITION,
         data: &0i32.to_le_bytes(),
     },

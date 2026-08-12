@@ -145,7 +145,8 @@ where
         let _sub_index = ex.sub_index.unwrap_or_default();
         let header = ex.header.unwrap_or_default();
 
-        write!(writer, "NODE {}  ", node.white().bold())?;
+        // write!(writer, "NODE {}  ", node.white().bold())?;
+        write!(writer, "NODE {}  ", node)?;
 
         if supports_color {
             match frame.as_str() {

@@ -10,10 +10,7 @@ pub mod startup;
 pub mod state;
 pub mod update;
 
-use std::{
-    sync::{Arc, atomic::Ordering},
-    time::Duration,
-};
+use std::sync::Arc;
 
 use crate::{
     comms::{

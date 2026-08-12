@@ -4,18 +4,17 @@ use tracing::*;
 
 #[cfg(test)]
 mod tests {
-    use anyhow::Context;
+    
     use gantry_cia402::driver::{identifier::Cia402Identifier, startup::params::TEST_PARAMS};
     use gantry_demo::config::{
-        DEMO_SETUP_DEVICE_NAME, TEST_SETUP_DEVICE_NAME, TEST_SETUP_MOTOR_TYPE,
+        DEMO_SETUP_DEVICE_NAME, TEST_SETUP_MOTOR_TYPE,
         TEST_SETUP_PROFILE_NUMBER,
     };
-    use std::time::Duration;
+    
 
     use gantry_axis::{
         axis::{Axis, AxisConfig},
         cfg::GantryConfig,
-        command::GantryCommand,
         gantry::Gantry,
         setpoint::translator::scaling::DeviceScaling,
     };

@@ -181,10 +181,10 @@ impl Gantry {
         // TMTM-40: TODO: change this for proper synchronisation
         tokio::time::sleep(std::time::Duration::from_millis(500)).await;
 
-        self.sync.handle.abort();
-        let _ = self.sync.handle.await;
         self.cmd_handler.handle.abort(); // NOTE: aborting the CommandHandler calls [`Cia402Driver::Drop`]
         let _ = self.cmd_handler.handle.await;
+        self.sync.handle.abort();
+        let _ = self.sync.handle.await;
         let _ = self.feedback_handler.joinset.shutdown().await;
     }
 }

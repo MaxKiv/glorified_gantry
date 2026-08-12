@@ -8,14 +8,11 @@ mod tests {
     use gantry_axis::sync::SyncMaster;
     use gantry_cia402::{
         comms::sdo::SdoAction,
-        driver::{
-            builder::Cia402DriverBuilder, event::MotorEvent, receiver::subscriber::wait_for_event,
-            state::Cia402State,
-        },
+        driver::builder::Cia402DriverBuilder,
         od::{access::AccessType, entry::ODEntry, mappable::MappableType, value::ODValue},
     };
 
-    use crate::common::{COMMS_TIMEOUT, PARAMS};
+    
 
     use super::*;
 

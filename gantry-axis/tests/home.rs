@@ -21,7 +21,7 @@ mod tests {
         let cfg = gantry_demo::config::TEST_CONFIG;
         let gantry = Gantry::start(canopen, cfg).await?;
 
-        let cmds = vec![
+        let _cmds = vec![
             // Home first
             GantryCommand::Home,
         ];

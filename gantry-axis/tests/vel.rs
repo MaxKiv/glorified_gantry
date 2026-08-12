@@ -7,21 +7,11 @@ mod tests {
 
     use std::time::Duration;
 
-    use anyhow::Context;
-    use gantry_axis::{
-        axis::setpoint::{AxisSetpoint, PositionSetpoint},
-        command::GantryCommand,
-        gantry::Gantry,
-    };
+    use gantry_axis::{axis::setpoint::AxisSetpoint, command::GantryCommand, gantry::Gantry};
 
-    use tokio::signal;
-    use uom::si::{
-        f64::{Length, Velocity},
-        length::millimeter,
-        velocity::meter_per_second,
-    };
+    use uom::si::f64::Velocity;
 
-    use gantry_demo::config::{TEST_CONFIG, Z_ONLY_CONFIG};
+    use gantry_demo::config::TEST_CONFIG;
 
     use crate::common::test_gantry_cmds;
 
@@ -34,121 +24,8 @@ mod tests {
         info!("Starting can interface");
         let (canopen, _) = oze_canopen::canopen::start(String::from("can0"), Some(1_000_000));
 
-        let cfg = TEST_CONFIG;
-        let gantry = Gantry::start(canopen, cfg).await?;
-
-        let vel = Velocity::new::<meter_per_second>(0.01);
-
-        // let targets = [
-        //     (10.0, 5.0, 10.0),
-        //     (12.0, 0.0, 08.0),
-        //     (14.0, 0.0, 06.0),
-        //     (16.0, 0.0, 04.0),
-        //     (18.0, 0.0, 02.0),
-        //     (10.0, 5.0, 10.0),
-        //     (12.0, 0.0, 08.0),
-        //     (14.0, 0.0, 06.0),
-        //     (16.0, 0.0, 04.0),
-        //     (18.0, 0.0, 02.0),
-        //     (10.0, 5.0, 10.0),
-        //     (12.0, 0.0, 08.0),
-        //     (14.0, 0.0, 06.0),
-        //     (16.0, 0.0, 04.0),
-        //     (18.0, 0.0, 02.0),
-        //     (10.0, 5.0, 10.0),
-        //     (12.0, 0.0, 08.0),
-        //     (14.0, 0.0, 06.0),
-        //     (16.0, 0.0, 04.0),
-        //     (18.0, 0.0, 02.0),
-        // ];
-
         let targets = [
-            (1.0, 0.0, 1.0),
-            (-1.0, 0.0, -1.0),
-            (1.0, 0.0, 1.0),
-            (-1.0, 0.0, -1.0),
-            (1.0, 0.0, 1.0),
-            (-1.0, 0.0, -1.0),
-            (1.0, 0.0, 1.0),
-            (-1.0, 0.0, -1.0),
-            (1.0, 0.0, 1.0),
-            (-1.0, 0.0, -1.0),
-            (1.0, 0.0, 1.0),
-            (-1.0, 0.0, -1.0),
-            (1.0, 0.0, 1.0),
-            (-1.0, 0.0, -1.0),
-            (1.0, 0.0, 1.0),
-            (-1.0, 0.0, -1.0),
-            (1.0, 0.0, 1.0),
-            (-1.0, 0.0, -1.0),
-            (1.0, 0.0, 1.0),
-            (-1.0, 0.0, -1.0),
-            (1.0, 0.0, 1.0),
-            (-1.0, 0.0, -1.0),
-            (1.0, 0.0, 1.0),
-            (-1.0, 0.0, -1.0),
-            (1.0, 0.0, 1.0),
-            (-1.0, 0.0, -1.0),
-            (1.0, 0.0, 1.0),
-            (-1.0, 0.0, -1.0),
-            (1.0, 0.0, 1.0),
-            (-1.0, 0.0, -1.0),
-            (1.0, 0.0, 1.0),
-            (-1.0, 0.0, -1.0),
-            (1.0, 0.0, 1.0),
-            (-1.0, 0.0, -1.0),
-            (1.0, 0.0, 1.0),
-            (-1.0, 0.0, -1.0),
-            (1.0, 0.0, 1.0),
-            (-1.0, 0.0, -1.0),
-            (1.0, 0.0, 1.0),
-            (-1.0, 0.0, -1.0),
-            (1.0, 0.0, 1.0),
-            (-1.0, 0.0, -1.0),
-            (1.0, 0.0, 1.0),
-            (-1.0, 0.0, -1.0),
-            (1.0, 0.0, 1.0),
-            (-1.0, 0.0, -1.0),
-            (1.0, 0.0, 1.0),
-            (-1.0, 0.0, -1.0),
-            (1.0, 0.0, 1.0),
-            (-1.0, 0.0, -1.0),
-            (1.0, 0.0, 1.0),
-            (-1.0, 0.0, -1.0),
-            (1.0, 0.0, 1.0),
-            (-1.0, 0.0, -1.0),
-            (1.0, 0.0, 1.0),
-            (-1.0, 0.0, -1.0),
-            (1.0, 0.0, 1.0),
-            (-1.0, 0.0, -1.0),
-            (1.0, 0.0, 1.0),
-            (-1.0, 0.0, -1.0),
-            (1.0, 0.0, 1.0),
-            (-1.0, 0.0, -1.0),
-            (1.0, 0.0, 1.0),
-            (-1.0, 0.0, -1.0),
-            (1.0, 0.0, 1.0),
-            (-1.0, 0.0, -1.0),
-            (1.0, 0.0, 1.0),
-            (-1.0, 0.0, -1.0),
-            (1.0, 0.0, 1.0),
-            (-1.0, 0.0, -1.0),
-            (1.0, 0.0, 1.0),
-            (-1.0, 0.0, -1.0),
-            (1.0, 0.0, 1.0),
-            (-1.0, 0.0, -1.0),
-            (1.0, 0.0, 1.0),
-            (-1.0, 0.0, -1.0),
-            (1.0, 0.0, 1.0),
-            (-1.0, 0.0, -1.0),
-            (1.0, 0.0, 1.0),
-            (-1.0, 0.0, -1.0),
-            (1.0, 0.0, 1.0),
-            (-1.0, 0.0, -1.0),
-            (1.0, 0.0, 1.0),
-            (-1.0, 0.0, -1.0),
-            (1.0, 0.0, 1.0),
-            (-1.0, 0.0, -1.0),
+            (3.0, 0.0, 3.0),
             (1.0, 0.0, 1.0),
             (-1.0, 0.0, -1.0),
             (1.0, 0.0, 1.0),
@@ -189,32 +66,25 @@ mod tests {
                         ),
                     },
                 )),
-                // x: Some(AxisSetpoint::AbsolutePosition(PositionSetpoint {
-                //     target: Length::new::<millimeter>(targets[i].0),
-                //     velocity: vel,
-                // })),
-                // y: Some(AxisSetpoint::AbsolutePosition(PositionSetpoint {
-                //     target: Length::new::<millimeter>(targets[i].1),
-                //     velocity: vel,
-                // })),
-                // z: Some(AxisSetpoint::AbsolutePosition(PositionSetpoint {
-                //     target: Length::new::<millimeter>(targets[i].2),
-                //     velocity: vel,
-                // })),
             });
         }
 
-        let timeout = Duration::from_secs(5);
+        let timeout = Duration::from_secs(4);
+        let cfg = TEST_CONFIG;
+        let gantry = Gantry::start(canopen, cfg).await?;
 
         // Wait for either Ctrl-C or test completion
-        tokio::select! {
+        let out = tokio::select! {
             out = test_gantry_cmds(&gantry, &cmds, "Velocity", timeout)=> {
-                out.context("test failed")
+                out
             },
             _ = tokio::signal::ctrl_c() => {
-                gantry.wait_for_shutdown().await;
-                Err(anyhow::anyhow!("SIGINT Received"))
+                return Err(anyhow::anyhow!("SIGINT Received"))
             },
-        }
+        };
+
+        gantry.wait_for_shutdown().await;
+
+        out
     }
 }

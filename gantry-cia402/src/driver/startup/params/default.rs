@@ -15,6 +15,10 @@ pub const DEMO_PARAMS: &[SdoAction] = &[
         entry: &SET_TARGET_POSITION,
         data: &0i32.to_le_bytes(),
     },
+    SdoAction::Download {
+        entry: &POSITION_WINDOW,
+        data: &0u32.to_le_bytes(), // Strict target reached check
+    },
     // Software position limits (disable by using min > max or wide range)
     SdoAction::Download {
         entry: &SOFTWARE_POSITION_RANGE_LIMIT_MIN,

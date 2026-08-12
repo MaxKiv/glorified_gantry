@@ -48,7 +48,7 @@ pub async fn wait_for_axis_setpoint_complete(
                     // For absolute position mode check if current position is within target
                     (
                         GantryMotorEventContent::Position { value },
-                        AxisSetpoint::AbsolutePosition(PositionSetpoint { target, velocity })
+                        AxisSetpoint::AbsolutePosition(PositionSetpoint { target, velocity: _ })
                     ) => (value - target.get::<millimeter>()).abs() <= POS_WINDOW,
 
                     // TODO: Relative Position moves still wait for motor drives to acknowledge setpoint

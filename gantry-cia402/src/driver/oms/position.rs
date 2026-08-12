@@ -58,7 +58,7 @@ bitflags::bitflags! {
     pub struct PositionFlagsSW: u16 {
         const TARGET_REACHED          = 1 << 10;
         const LIMIT_EXCEEDED          = 1 << 11;
-        const SETPOINT_ACKNOWLEGDE    = 1 << 12;
+        const SETPOINT_ACKNOWLEDGE    = 1 << 12;
         const FOLLOWING_ERROR         = 1 << 13;
     }
 }
@@ -73,7 +73,7 @@ impl PositionFlagsSW {
         MotorEvent::PositionModeFeedback {
             target_reached: self.intersects(Self::TARGET_REACHED),
             limit_exceeded: self.intersects(Self::LIMIT_EXCEEDED),
-            setpoint_acknowlegded: self.intersects(Self::SETPOINT_ACKNOWLEGDE),
+            setpoint_acknowlegded: self.intersects(Self::SETPOINT_ACKNOWLEDGE),
             following_error: self.intersects(Self::FOLLOWING_ERROR),
         }
     }
