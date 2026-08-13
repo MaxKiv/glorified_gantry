@@ -7,17 +7,14 @@ use tokio::{
 };
 use tracing::*;
 
-use crate::{
-    driver::{command::MotorCommand, state::Cia402State},
-    error::DriveError,
-};
+use crate::{driver::state::Cia402State, error::DriveError};
 
 const CIA402_TRANSITION_TIMEOUT: Duration = Duration::from_millis(1000);
 
 pub async fn cia402_orchestrator_task(
-    sm_cmd_tx: mpsc::Sender<Cia402State>,
-    mut sm_state_rx: broadcast::Receiver<Cia402State>,
-    mut cmd_rx: broadcast::Receiver<MotorCommand>,
+    mut motor_cmd_cia402_rx: mpsc::Receiver<Cia402State>, // Receive Cia402 transition request from [`MotorCommand`]
+    sm_cmd_tx: mpsc::Sender<Cia402State>,                 // Sends Cia402 transitions to drive
+    mut sm_state_rx: broadcast::Receiver<Cia402State>,    // Cia402 State updates from drive
 ) -> Result<(), DriveError> {
     trace!("Orchestrator task started; waiting for initial state from SM task");
 
@@ -32,7 +29,7 @@ pub async fn cia402_orchestrator_task(
         current_state
     );
 
-    // Track the current target state, this is changed by the user through cmd_rx
+    // Track the current target state, this is changed by the user through motor_cmd_cia402_rx
     let mut target_state: Option<Cia402State> = None;
 
     // Keep track of the currently running state transition, so we can cancel it when the current_state gets stale
@@ -67,16 +64,9 @@ pub async fn cia402_orchestrator_task(
                 }
             }
 
-            Ok(cmd) = cmd_rx.recv() => {
-                trace!("Orchestrator received command: {:?}", cmd);
+            Some(new_target) = motor_cmd_cia402_rx.recv() => {
+                trace!("Orchestrator received command: {:?}", new_target);
 
-                // Determine new target state
-                let new_target = match cmd {
-                    MotorCommand::Enable => Cia402State::OperationEnabled,
-                    MotorCommand::Disable => Cia402State::ReadyToSwitchOn,
-                    MotorCommand::Cia402TransitionTo { target_state } => target_state,
-                    _ => continue,
-                };
                 target_state = Some(new_target);
 
                 // New target cia402 state requested; Cancel current transition

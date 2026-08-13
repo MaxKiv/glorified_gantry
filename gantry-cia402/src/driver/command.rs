@@ -54,6 +54,7 @@ pub enum MotorCommand {
     ExitCyclicSynchronousMode,
 
     /// Cyclic synchronous position mode update
+    /// Note: Only valid when in Cyclic Synchronous Position mode AND the drive is "InSync"
     CyclicSynchronousPosition {
         abs_target: i32,
         // target_velocity: Option<i32>,

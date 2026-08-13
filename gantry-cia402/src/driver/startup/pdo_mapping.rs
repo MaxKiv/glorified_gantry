@@ -18,16 +18,32 @@ use crate::{
 };
 
 #[derive(Debug, PartialEq, Eq)]
+pub struct OnSyncTransmissionN(u8);
+
+impl OnSyncTransmissionN {
+    pub fn from_n(from: u8) -> Option<Self> {
+        // Datasheet 8.2.2 & page 120 says maximum of 240, 0 is reserved for RPDO
+        if from <= 240 && from > 0 {
+            Some(Self(from))
+        } else {
+            None
+        }
+    }
+}
+
+#[derive(Debug, PartialEq, Eq)]
 pub enum TransmissionType {
-    OnSync,
+    OnSyncRPDO,
+    OnEveryNthSync(OnSyncTransmissionN),
     OnChange,
 }
 
 impl TransmissionType {
     pub fn od_value(&self) -> u8 {
         match self {
-            TransmissionType::OnSync => 0x1,
+            TransmissionType::OnSyncRPDO => 0x0,
             TransmissionType::OnChange => 0xFF,
+            TransmissionType::OnEveryNthSync(n) => n.0,
         }
     }
 }
@@ -37,10 +53,12 @@ pub async fn configure_pdo_mappings(
     node_id: u8,
     sdo: Arc<Mutex<SdoClient>>,
     pdo_mapping: &'static [PdoMapping],
-) -> Result<()> {
+) -> Result<(), DriveError> {
     trace!("configure_pdo_mappings for nodeId {}", node_id);
     for mapping in pdo_mapping.iter() {
-        set_pdo_mapping(node_id, sdo.clone(), mapping).await?;
+        set_pdo_mapping(node_id, sdo.clone(), mapping)
+            .await
+            .map_err(|_| DriveError::UnableToRemapPDO(format!("{:?}", mapping)))?;
 
         tokio::time::sleep(SDO_PROCESS_DURATION).await;
     }

@@ -1,7 +1,7 @@
 use crate::driver::{event::MotorEvent, receiver::StatusWord};
 
 /// A Homing mode setpoint
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct HomingSetpoint {
     pub flags: HomeFlagsCW,
 }

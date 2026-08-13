@@ -7,12 +7,13 @@ pub struct CyclicPositionSetpoint {
 
 bitflags::bitflags! {
 #[derive(Clone, Copy, Debug)]
-    /// Statusword OMS flags for Homing mode
+    /// Statusword OMS flags for Cyclic Synchronous Position mode
     /// See datasheet page 80
     pub struct CyclicPosFlagsSW: u16 {
-        const DEVICE_IN_SYNC         = 1 << 8;
+        const DEVICE_IN_SYNC         = 1 << 8; // Is drive in sync with fieldbus?
         const RESERVED               = 1 << 10;
-        const IS_FOLLOWING_TARGET    = 1 << 12;
+        const IS_FOLLOWING_TARGET    = 1 << 12; // Is drive using 0x607A (target position) as
+                                                // setpoint?
         const HAS_FOLLOWING_ERROR    = 1 << 13;
     }
 }

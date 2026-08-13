@@ -40,7 +40,7 @@ impl Gantry {
             SyncMaster::init(canopen.clone(), DEFAULT_SYNC_PERIOD);
         // TODO: TMTM-43: Enable sync only after all drives switch to Cyclic mode, disable while
         // switching and after switching to normal modes
-        sync_enabler.sync_enable_tx.send(false);
+        sync_enabler.sync_enable_tx.send(false)?;
 
         info!("Starting X Axis");
         // Initialize X Axis motors and return their handles + device scaling
@@ -116,7 +116,7 @@ impl Gantry {
         info!("Gantry Initialized!");
         Ok(Self {
             canopen,
-            sync_master: sync,
+            sync_master,
             cmd_handler,
             feedback_handler,
             cfg,
