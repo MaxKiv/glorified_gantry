@@ -84,21 +84,12 @@ pub async fn cia402_state_machine_task(
             }
 
             Ok(event) = event_rx.recv() => {
-                // trace!(
-                //     "Cia402 received event: {event:?}",
-                // );
                 if let MotorEvent::StatusWord(sw) = event {
                     match sw.try_into() {
                         Ok(new_state) => {
                             info!(
                                 "Cia402 decoded {sw:?} into new state: {new_state:?} - Informing subsystems",
                             );
-
-                            // Notify the PDO system of a new device state
-                            // let updated_flags: Cia402Flags = sw.into();
-                            // if let Err(err) = update_tx.send(Cia402Command::Update(updated_flags)).await {
-                            //     error!("Unable to send cia402 state update to PDO: {err}" );
-                            // }
 
                             // Notify the cia402 orchestrator
                             if let Err(err) = sm_state_tx.send(new_state){

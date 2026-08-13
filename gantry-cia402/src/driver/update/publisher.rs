@@ -1,8 +1,5 @@
-use std::sync::Arc;
-
-use oze_canopen::sdo_client::SdoClient;
 use tokio::sync::{
-    Mutex, broadcast,
+    broadcast,
     mpsc::{self},
     watch,
 };
@@ -12,9 +9,8 @@ use crate::{
     comms::pdo::cmd::PdoCommand,
     driver::{
         command::MotorCommand,
-        event::MotorEvent,
-        nmt::NmtState,
         oms::{
+            OperationMode,
             cyclic_pos::CyclicPositionSetpoint,
             cyclic_torque::CyclicTorqueSetpoint,
             cyclic_vel::CyclicVelocitySetpoint,
@@ -24,8 +20,8 @@ use crate::{
             torque::TorqueSetpoint,
             velocity::VelocitySetpoint,
         },
-        receiver::setpoint_manager::{SetpointManager, SetpointManagerModeTypes},
-        state::state_machine::Cia402Command,
+        receiver::setpoint_manager::SetpointManager,
+        state::{Cia402State, state_machine::Cia402Command},
     },
     error::DriveError,
 };
@@ -39,10 +35,8 @@ pub async fn publish_updates(
     mut state_update_rx: mpsc::Receiver<Cia402Command>,
     mut cmd_rx: broadcast::Receiver<MotorCommand>,
     new_setpoint_tx: mpsc::Sender<Setpoint>,
-    cs_mode_tx: watch::Sender<SetpointManagerModeTypes>,
-    nmt_tx: mpsc::Sender<NmtState>,
-    event_rx: broadcast::Receiver<MotorEvent>,
-    sdo: Arc<Mutex<SdoClient>>,
+    cs_mode_tx: watch::Sender<OperationMode>,
+    cia402_tx: mpsc::Sender<Cia402State>,
     node_id: u8,
 ) -> Result<(), DriveError> {
     loop {
@@ -83,6 +77,15 @@ pub async fn publish_updates(
                 trace!("update publisher received command: {cmd:?}");
 
                 if let Err(err) = match cmd.clone() {
+                    MotorCommand::Enable => {
+                        cia402_tx.send(Cia402State::OperationEnabled).await.map_err(|e| DriveError::Cia402SendError(e))
+                    }
+                    MotorCommand::Disable => {
+                        cia402_tx.send(Cia402State::ReadyToSwitchOn).await.map_err(|e| DriveError::Cia402SendError(e))
+                    }
+                    MotorCommand::Cia402TransitionTo { target_state }  => {
+                        cia402_tx.send(target_state).await.map_err(|e| DriveError::Cia402SendError(e))
+                    }
                     MotorCommand::Halt => {
                         let setpoint = PositionSetpoint {
                             flags: PositionFlagsCW::halt(),
@@ -133,18 +136,12 @@ pub async fn publish_updates(
                         SetpointManager::enable_cyclic_synchronous_mode(
                                 &cs_mode_tx,
                                 mode,
-                                &nmt_tx,
-                                event_rx.resubscribe(),
-                                sdo.clone(),
                                 node_id
                             ).await
                     },
                     MotorCommand::ExitCyclicSynchronousMode => {
                         SetpointManager::disable_cyclic_synchronous_mode(
                                 &cs_mode_tx,
-                                &nmt_tx,
-                                event_rx.resubscribe(),
-                                sdo.clone(),
                                 node_id
                             ).await
                     },
@@ -162,7 +159,7 @@ pub async fn publish_updates(
                         let setpoint = CyclicTorqueSetpoint { target };
                         SetpointManager::write_new_setpoint(&new_setpoint_tx, Setpoint::CyclicTorque(setpoint)).await
                     },
-                    _ => {
+                    MotorCommand::ResetFault => {
                         trace!("update publisher ignoring command: {cmd:?}");
                         Ok(())
                     },

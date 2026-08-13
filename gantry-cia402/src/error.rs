@@ -13,7 +13,7 @@ use tokio::{
 };
 
 use crate::{
-    comms::pdo::mapping::PdoMapping,
+    comms::pdo::{cmd::PdoCommand, mapping::PdoMapping},
     driver::{
         command::MotorCommand,
         event::MotorEvent,
@@ -106,9 +106,13 @@ pub enum DriveError {
     #[error("Error in inter-task communication: {0}")]
     InterTaskCommunicationError(String),
     #[error("Error switching to mode {0:?}")]
-    ModeSwitchError(watch::error::SendError<SetpointManagerModeTypes>),
+    ModeSwitchError(watch::error::SendError<OperationMode>),
     #[error("Attempting to write setpoint: {0:?} in wrong OperationMode: {1:?}")]
     PdoWrongSetpoint(Setpoint, OperationMode),
     #[error("Invalid mapping: {0:?}")]
     PdoWrongMapping(PdoMapping),
+    #[error("Unable to remap pdo to: {0:?}")]
+    UnableToRemapPDO(String),
+    #[error("Unable to run Pdo Command: {0:?}")]
+    PdoCommandError(PdoCommand),
 }

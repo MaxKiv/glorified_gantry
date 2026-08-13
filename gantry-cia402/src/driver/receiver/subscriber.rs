@@ -206,6 +206,7 @@ async fn handle_parsed_tpdo1(
             Some(cyclic_torque_flags_sw.into_event())
         }
     };
+
     // Send anything interesting along
     if let Some(event) = event {
         trace!("Sending OMS event: {event:?}");

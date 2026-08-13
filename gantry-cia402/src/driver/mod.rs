@@ -113,11 +113,9 @@ impl<Mode> Cia402Driver<Mode> {
         let event_rx_startup = event_rx.resubscribe();
         let event_rx_cia402 = event_rx.resubscribe();
         let event_rx_setpoint_manager = event_rx.resubscribe();
-        let event_rx_updater = event_rx.resubscribe();
         let event_tx_feedback = event_tx.clone();
         let event_tx_cia402_sm = event_tx.clone();
 
-        let cmd_rx_cia402_orch = cmd_rx.resubscribe();
         let cmd_rx_publisher = cmd_rx.resubscribe();
 
         let canopen_feedback = canopen.clone();
@@ -153,6 +151,8 @@ impl<Mode> Cia402Driver<Mode> {
         // Initialize the NMT Task channel
         let (nmt_tx, nmt_rx) = tokio::sync::mpsc::channel(10);
 
+        let (cia402_tx, cia402_rx) = tokio::sync::mpsc::channel(10);
+
         // Start the NMT task
         trace!("Starting NMT State Machine task for motor {identifier}");
         spawn_logged_joinset(&mut handles, "NMT", async move {
@@ -176,6 +176,8 @@ impl<Mode> Cia402Driver<Mode> {
 
         // Start the setpoint manager for this device, handles setpoint writes and OMS specifics
         // like profile position handshaking
+        let nmt_tx_updater = nmt_tx.clone();
+        let sdo_updater = sdo.clone();
         let (_setpoint_manager_handle, new_setpoint_tx, cs_mode_tx) = SetpointManager::init(
             node_id,
             event_rx_setpoint_manager,
@@ -183,6 +185,8 @@ impl<Mode> Cia402Driver<Mode> {
             sync_rx,
             sync_period,
             &mut handles,
+            nmt_tx_updater,
+            sdo_updater,
         );
 
         // Start the cia402 state machine task, this is responsible for
@@ -201,13 +205,11 @@ impl<Mode> Cia402Driver<Mode> {
 
         trace!("Starting Cia402 Orchestrator for motor {identifier}");
         spawn_logged_joinset(&mut handles, "CIA-OR", async move {
-            cia402_orchestrator_task(sm_cmd_tx, sm_state_rx, cmd_rx_cia402_orch).await
+            cia402_orchestrator_task(cia402_rx, sm_cmd_tx, sm_state_rx).await
         });
 
         // Start the publisher task, responsible for update aggregation and device communication
         trace!("Starting update publisher task for motor {identifier}");
-        let nmt_tx_updater = nmt_tx.clone();
-        let sdo_updater = sdo.clone();
         spawn_logged_joinset(&mut handles, "UPDATE", async move {
             publish_updates(
                 pdo_tx.clone(),
@@ -215,9 +217,7 @@ impl<Mode> Cia402Driver<Mode> {
                 cmd_rx_publisher,
                 new_setpoint_tx,
                 cs_mode_tx,
-                nmt_tx_updater,
-                event_rx_updater,
-                sdo_updater,
+                cia402_tx,
                 node_id,
             )
             .await

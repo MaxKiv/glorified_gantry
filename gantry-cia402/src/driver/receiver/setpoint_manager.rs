@@ -14,13 +14,18 @@ use crate::{
         cyclic::CyclicSynchronousMode,
         event::MotorEvent,
         nmt::{NmtState, set_to_nmt_state},
-        oms::setpoint::Setpoint,
+        oms::{OperationMode, setpoint::Setpoint, torque::TorqueSetpoint},
         startup::pdo_mapping::configure_pdo_mappings,
     },
     error::DriveError,
 };
 
 pub const SYNC_PERIOD_ALLOWED_EPSILON: Duration = Duration::from_micros(1);
+
+enum SyncState {
+    Desynchronised,
+    Synchronised,
+}
 
 enum HandshakeState {
     Idle,
@@ -29,7 +34,7 @@ enum HandshakeState {
 
 #[derive(Clone, Debug)]
 pub enum SetpointManagerModeTypes {
-    Default,
+    NonCyclic,
     CyclicSynchronous(CyclicSynchronousMode),
 }
 
@@ -40,14 +45,17 @@ pub struct SetpointManager {
     node_id: NodeId,
     handshake: HandshakeState,
     new_setpoint_rx: mpsc::Receiver<Setpoint>,
-    cs_mode_rx: watch::Receiver<SetpointManagerModeTypes>,
     event_rx: broadcast::Receiver<MotorEvent>,
     pdo_tx: mpsc::Sender<PdoCommand>,
+    current_setpoint: Option<Setpoint>,
+    cs_mode_rx: watch::Receiver<OperationMode>,
+    mode: OperationMode,
+    last_sync: Option<Instant>,
     sync_rx: broadcast::Receiver<Instant>,
     sync_period: Duration,
-    current_setpoint: Option<Setpoint>,
-    mode: SetpointManagerModeTypes,
-    last_sync: Option<Instant>,
+    sync_state: SyncState,
+    nmt_tx: mpsc::Sender<NmtState>,
+    sdo: Arc<Mutex<SdoClient>>,
 }
 
 impl SetpointManager {
@@ -58,17 +66,20 @@ impl SetpointManager {
         sync_rx: broadcast::Receiver<Instant>,
         sync_period: Duration,
         set: &mut tokio::task::JoinSet<()>,
+        nmt_tx: mpsc::Sender<NmtState>,
+        sdo: Arc<Mutex<SdoClient>>,
     ) -> (
         AbortHandle,
         mpsc::Sender<Setpoint>,
-        watch::Sender<SetpointManagerModeTypes>,
+        watch::Sender<OperationMode>,
     ) {
         let (new_setpoint_tx, new_setpoint_rx) = mpsc::channel(16);
-        let (cs_mode_tx, mut cs_mode_rx) = watch::channel(SetpointManagerModeTypes::Default);
+        let (cs_mode_tx, mut cs_mode_rx) = watch::channel(OperationMode::Homing);
         let mode = cs_mode_rx.borrow_and_update().clone();
 
         let mgr = SetpointManager {
             handshake: HandshakeState::Idle,
+            sync_state: SyncState::Desynchronised,
             new_setpoint_rx,
             event_rx,
             pdo_tx,
@@ -79,6 +90,8 @@ impl SetpointManager {
             last_sync: None,
             node_id,
             sync_period,
+            nmt_tx,
+            sdo,
         };
 
         // Run the setpoint manager task
@@ -101,9 +114,9 @@ impl SetpointManager {
                     // Track current setpoint
                     self.current_setpoint = Some(new_setpoint.clone());
 
-                    // Write new setpoints to the device in default mode
-                    // NOTE: cyclic mode setpoints are send after SYNC arrives
-                    if let SetpointManagerModeTypes::Default = self.mode {
+                    // Write new setpoints to the device in noncyclic mode
+                    // NOTE: cyclic mode setpoints are send after SYNC arrives, see below
+                    if self.in_non_cyclic_mode() {
                         if let Err(err) = self.pdo_tx.send(PdoCommand::WriteSetpoint(new_setpoint.clone())).await {
                             error!("Setpoint manager unable send new setpoint to device: {err}");
                         }
@@ -118,93 +131,135 @@ impl SetpointManager {
 
                 // Check for handshake events indicating setpoint acknowledge
                 Ok(event) = self.event_rx.recv() => {
-                    if let MotorEvent::PositionModeFeedback{
-                        setpoint_acknowlegded,
-                        ..
-                    } = event {
-                        if setpoint_acknowlegded {
-                            trace!(
-                                "Setpoint manager for node {} observed a handshake",
-                                self.node_id
-                            );
-                        }
-
-                        // Are we shaking hands (aka did we previously set a new setpoint)?
-                        if let HandshakeState::WaitingForAck { ref mut setpoint } = self.handshake {
-                            // Has the new setpoint been acknowledge by the device?
+                    match event {
+                        MotorEvent::PositionModeFeedback {
+                            setpoint_acknowlegded,
+                            ..
+                        } => {
                             if setpoint_acknowlegded {
                                 trace!(
-                                    "Setpoint Manager for motor {} handshake confirmed",
+                                    "Setpoint manager for node {} observed a handshake",
                                     self.node_id
                                 );
+                            }
 
-                                // Clear CW bit 4 indicating setpoint acknowledge
-                                setpoint.acknowledge_setpoint_received();
+                            // Are we shaking hands (aka did we just set a new Profile Position or Homing setpoint)?
+                            if let HandshakeState::WaitingForAck { ref mut setpoint } = self.handshake {
+                                // Has the new setpoint been acknowledge by the device?
+                                if setpoint_acknowlegded {
+                                    trace!(
+                                        "Setpoint Manager for motor {} handshake confirmed",
+                                        self.node_id
+                                    );
 
-                                let flag_update_cmd = match setpoint {
-                                    Setpoint::ProfilePosition(position_setpoint) => {
-                                        Some(PdoCommand::UpdatePositionSetpointFlags(position_setpoint.flags))
-                                    },
-                                    Setpoint::Home(homing_setpoint) => {
-                                        Some(PdoCommand::UpdateHomingSetpointFlags(homing_setpoint.flags))
-                                    },
-                                    _ => {
-                                        None
+                                    // Clear CW bit 4 indicating setpoint acknowledge
+                                    setpoint.acknowledge_setpoint_received();
+
+                                    let flag_update_cmd = match setpoint {
+                                        Setpoint::ProfilePosition(position_setpoint) => {
+                                            Some(PdoCommand::UpdatePositionSetpointFlags(position_setpoint.flags))
+                                        },
+                                        Setpoint::Home(homing_setpoint) => {
+                                            Some(PdoCommand::UpdateHomingSetpointFlags(homing_setpoint.flags))
+                                        },
+                                        _ => {
+                                            None
+                                        }
+                                    };
+
+                                    if let Some(cmd) = flag_update_cmd {
+                                        if let Err(err) =
+                                            self.pdo_tx.send(cmd).await {
+                                                warn!("
+                                                    Setpoint Manager for motor {} is unable to complete setpoint handshake procedure: {err}"
+                                                    , self.node_id
+                                                );
+                                        }
                                     }
-                                };
 
-                                if let Some(cmd) = flag_update_cmd {
-                                    if let Err(err) =
-                                        self.pdo_tx.send(cmd).await {
-                                            warn!("
-                                                Setpoint Manager for motor {} is unable to complete setpoint handshake procedure: {err}"
-                                                , self.node_id
-                                            );
-                                    }
+                                    // Setpoint acknowledged
+                                    self.handshake = HandshakeState::Idle;
                                 }
+                            }
+                        },
 
-                                // Setpoint acknowledged
-                                self.handshake = HandshakeState::Idle;
+                        // Update Sync State if drive tells us it is in sync
+                        MotorEvent::CyclicPositionModeFeedback { device_in_sync, is_following_target, .. } => {
+                            if device_in_sync && is_following_target {
+                                if self.mode == OperationMode::CyclicSynchronousPosition {
+                                    self.sync_state = SyncState::Synchronised;
+                                }
                             }
                         }
+                        MotorEvent::CyclicVelocityModeFeedback { device_in_sync, is_following_target } => {
+                            if device_in_sync && is_following_target {
+                                if self.mode == OperationMode::CyclicSynchronousVelocity {
+                                    self.sync_state = SyncState::Synchronised;
+                                }
+                            }
+                        },
+                        MotorEvent::CyclicTorqueModeFeedback { device_in_sync, is_following_target } => {
+                            if device_in_sync && is_following_target {
+                                if self.mode == OperationMode::CyclicSynchronousTorque {
+                                    self.sync_state = SyncState::Synchronised;
+                                }
+                            }
+                        },
+                        _ => {},
                     }
                 }
 
                 // A mode change arrived
                 Ok(_) = self.cs_mode_rx.changed() => {
-                    // Update our current mode to the one requested
-                    {
-                        self.mode = self.cs_mode_rx.borrow_and_update().clone();
-                    }
-                    // Seperate Mode switch is required for CyclicSynchronous Modes
-                    if let SetpointManagerModeTypes::CyclicSynchronous(ref mode) = self.mode
-                        && let Err(err) =
-                            self.pdo_tx.send(PdoCommand::SwitchToCyclicSynchronousMode(mode.clone())).await {
-                                error!("Setpoint Manager unable to switch to CyclicSynchronousMode: {mode:?} - {err}");
+                    let mode = {
+                        self.cs_mode_rx.borrow_and_update().clone()
+                    };
+
+                    if let Err(err) = self.switch_to_new_operating_mode(mode).await {
+                        error!("Setpoint manager unable to switch to new {mode:?} - {err}");
                     }
                 }
 
                 // A SYNC Master notifies us that it has just posted a SYNC on the bus
                 Ok(this_sync) = self.sync_rx.recv() => {
-                    // We only care about SYNC stuff if we are in a Cycic Synchronous mode
-                    if let SetpointManagerModeTypes::CyclicSynchronous(_) = self.mode {
-                        // Send the current setpoint to the device
-                        if let Some(setpoint) = &self.current_setpoint {
-                            if setpoint.is_cyclic_synchronous() {
-                                if let Err(err) = self.pdo_tx.send(PdoCommand::WriteSetpoint(setpoint.clone())).await {
-                                    error!("Setpoint manager unable send new setpoint to device: {err}");
-                                }
-                            } else {
-                                error!("Setpoint manager attempts to write non-cyclic setpoint: {setpoint:?} on SYNC for Mode: {:?}", self.mode);
+                    // We only care about SYNC stuff if we are in a Cyclic Synchronous mode
+                    if self.in_cyclic_mode() {
+                        // What is our current synchronisation state?
+                        match self.sync_state {
+                            SyncState::Desynchronised => {
+                                // Send default/safe cyclic mode setpoints while waiting for drive
+                                // synchronisation
+                                // => Wait for SW bit 8 & 12
+                                self.current_setpoint =
+                                    Some(Setpoint::get_safe_setpoint_for_mode(self.mode));
+                                self.send_current_setpoint().await;
                             }
-                        }
+                            SyncState::Synchronised => {
+                                // drive synchronised, pass on user setpoint for this cycle to drive
+                                // Check if the current setpoint is a valid cyclic setpoint
+                                // Set to safe setpoint if not
+                                match &self.current_setpoint {
+                                    Some(sp) => {
+                                        if !sp.is_cyclic_synchronous(){
+                                            self.current_setpoint = Some(Setpoint::get_safe_setpoint_for_mode(self.mode));
+                                        }
+                                    },
+                                    None => {
+                                        self.current_setpoint = Some(Setpoint::get_safe_setpoint_for_mode(self.mode));
+                                    },
+                                }
+
+                                // Send current setpoint to drive
+                                self.send_current_setpoint().await;
+                            }
+                        };
                     }
 
                     // Check if SYNC cycle timing is adequate
                     if let Some(last_sync) = self.last_sync {
-                        // let curr_sync_period = this_sync - last_sync;
-                        // let curr_jitter = curr_sync_period - self.sync_period;
-                        // error!("SYNC: period: {curr_sync_period:?} - jitter: {curr_jitter:?}");
+                        let curr_sync_period = this_sync - last_sync;
+                        let curr_jitter = curr_sync_period - self.sync_period;
+                        error!("SYNC: period: {curr_sync_period:?} - jitter: {curr_jitter:?}");
                         // if (curr_sync_period > self.sync_period + SYNC_PERIOD_ALLOWED_EPSILON) || (curr_sync_period < self.sync_period - SYNC_PERIOD_ALLOWED_EPSILON){
                         //     error!("SYNC Period: {curr_sync_period:?} outside allowed epsilon of {SYNC_PERIOD_ALLOWED_EPSILON:?} -> SYNC Cycle time is too slow!");
                         // }
@@ -221,71 +276,85 @@ impl SetpointManager {
         matches!(setpoint, Setpoint::ProfilePosition(_))
     }
 
+    /// Send current setpoint to drive
+    async fn send_current_setpoint(&self) -> Result<(), DriveError> {
+        let setpoint = if let Some(setpoint) = &self.current_setpoint {
+            setpoint.clone()
+        } else {
+            Setpoint::get_safe_setpoint_for_mode(self.mode)
+        };
+
+        let pdo_cmd = PdoCommand::WriteSetpoint(setpoint);
+        let out = self
+            .pdo_tx
+            .send(pdo_cmd.clone())
+            .await
+            .map_err(|_| DriveError::PdoCommandError(pdo_cmd));
+        if let Err(err) = &out {
+            error!("Setpoint manager unable send new setpoint to device: {err}");
+        }
+
+        out
+    }
+
+    /// Is the setpoint manager in a Cyclic Synchronous mode?
+    fn in_cyclic_mode(&self) -> bool {
+        self.mode.is_cyclic_synchronous()
+    }
+    fn in_non_cyclic_mode(&self) -> bool {
+        !self.in_cyclic_mode()
+    }
+
+    async fn switch_to_new_operating_mode(
+        &mut self,
+        mode: OperationMode,
+    ) -> Result<(), DriveError> {
+        if self.in_non_cyclic_mode() && mode.is_cyclic_synchronous() {
+            let new_mode = mode;
+            self.switch_to_cyclic_mode(new_mode).await?;
+        } else if self.in_cyclic_mode() && !mode.is_cyclic_synchronous() {
+            // Setpoint manager is in cyclic mode, mode switch to non-cyclic requested
+            self.switch_to_noncyclic_mode(mode).await?;
+        }
+
+        // Update setpoint manager mode
+        self.mode = mode;
+
+        Ok(())
+    }
+
     /// Switch to Cyclic Synchronous Mode
     /// In this mode Setpoint Manager expects a bus master to produce a regular SYNC
     /// On every SYNC the current setpoint is written to the device
     pub async fn enable_cyclic_synchronous_mode(
-        cs_mode_tx: &watch::Sender<SetpointManagerModeTypes>,
+        cs_mode_tx: &watch::Sender<OperationMode>,
         mode: CyclicSynchronousMode,
-        nmt_tx: &mpsc::Sender<NmtState>,
-        event_rx: broadcast::Receiver<MotorEvent>,
-        sdo: Arc<Mutex<SdoClient>>,
         node_id: u8,
     ) -> Result<(), DriveError> {
-        trace!("Enabling Cyclic Synchronous Mode for device {node_id} - NMT PRE-OP");
-        // Put the drive in NMT PreOperational, required for parametrisation & pdo mapping
-        set_to_nmt_state(NmtState::PreOperational, &nmt_tx, event_rx.resubscribe()).await?;
-
-        // Reconfigure pdo mappings
-        trace!("Enabling Cyclic Synchronous Mode for device {node_id} - Reconfiguring RPDOS");
-        configure_pdo_mappings(node_id, sdo.clone(), CUSTOM_PDOS.rpdos).await;
-        trace!("Enabling Cyclic Synchronous Mode for device {node_id} - Reconfiguring TPDOS");
-        configure_pdo_mappings(node_id, sdo.clone(), CUSTOM_PDOS.tpdos).await;
-
-        // Set the drive into NMT Operational again
-        trace!("Enabling Cyclic Synchronous Mode for device {node_id} - NMT Operational");
-        set_to_nmt_state(NmtState::Operational, &nmt_tx, event_rx.resubscribe()).await?;
-
         trace!(
             "Enabling Cyclic Synchronous Mode for device {node_id} - Setting Setpoint Manager mode to {:?}",
             mode
         );
 
+        let mode = mode.try_into().unwrap();
         // Initiate setpoing manager CyclicSynchronous Mode operation
-        cs_mode_tx
-            .send(SetpointManagerModeTypes::CyclicSynchronous(mode))
-            .map_err(DriveError::ModeSwitchError)
+        cs_mode_tx.send(mode).map_err(DriveError::ModeSwitchError)
     }
 
     /// Disable Cyclic Synchronous Mode
     /// The setpoint manager will stop writing the current setpoint to the device on SYNC
     pub async fn disable_cyclic_synchronous_mode(
-        cs_mode_tx: &watch::Sender<SetpointManagerModeTypes>,
-        nmt_tx: &mpsc::Sender<NmtState>,
-        event_rx: broadcast::Receiver<MotorEvent>,
-        sdo: Arc<Mutex<SdoClient>>,
+        cs_mode_tx: &watch::Sender<OperationMode>,
         node_id: u8,
     ) -> Result<(), DriveError> {
-        trace!("Disabling Cyclic Synchronous Mode for device {node_id} - NMT PRE-OP");
-        // Put the drive in NMT PreOperational, required for parametrisation & pdo mapping
-        set_to_nmt_state(NmtState::PreOperational, &nmt_tx, event_rx.resubscribe()).await?;
-
-        // Reconfigure pdo mappings
-        trace!("Disabling Cyclic Synchronous Mode for device {node_id} - Reconfiguring RPDOS");
-        configure_pdo_mappings(node_id, sdo.clone(), CUSTOM_PDOS.rpdos).await;
-        trace!("Disabling Cyclic Synchronous Mode for device {node_id} - Reconfiguring TPDOS");
-        configure_pdo_mappings(node_id, sdo.clone(), CUSTOM_PDOS.tpdos).await;
-
-        // Set the drive into NMT Operational again
-        trace!("Disabling Cyclic Synchronous Mode for device {node_id} - NMT Operational");
-        set_to_nmt_state(NmtState::Operational, &nmt_tx, event_rx.resubscribe()).await?;
-
-        // Initiate setpoint manager default mode operation
+        // Initiate setpoint manager noncyclic mode operation
         trace!(
-            "Disabling Cyclic Synchronous Mode for device {node_id} - Setting Setpoint Manager mode to Default"
+            "Disabling Cyclic Synchronous Mode for device {node_id} - Setting Setpoint Manager mode
+            to noncyclic - Profile Torque"
         );
+        const DEFAULT_MODE: OperationMode = OperationMode::ProfileTorque;
         cs_mode_tx
-            .send(SetpointManagerModeTypes::Default)
+            .send(DEFAULT_MODE)
             .map_err(DriveError::ModeSwitchError)
     }
 
@@ -301,5 +370,112 @@ impl SetpointManager {
             .send(setpoint.clone())
             .await
             .map_err(|e| DriveError::NewSetpointSendError(setpoint, e))
+    }
+
+    async fn switch_to_cyclic_mode(&self, new_mode: OperationMode) -> Result<(), DriveError> {
+        // TODO: gracefully drop cia402 sm into ReadyToSwitchOn before NMT pre-op?
+
+        // Setpoint manager in default mode, mode switch to cyclic requested
+        trace!(
+            "Enabling Cyclic Synchronous Mode for device {} - NMT PRE-OP",
+            self.node_id
+        );
+        // Put the drive in NMT PreOperational, required for parametrisation & pdo mapping
+        set_to_nmt_state(
+            NmtState::PreOperational,
+            &self.nmt_tx,
+            self.event_rx.resubscribe(),
+        )
+        .await?;
+
+        // Reconfigure pdo mappings
+        // TODO: are the CUSTOM_PDOS correct?
+        trace!(
+            "Enabling Cyclic Synchronous Mode for device {} - Reconfiguring RPDOS",
+            self.node_id
+        );
+        let rpdos = CUSTOM_PDOS.rpdos;
+        configure_pdo_mappings(self.node_id, self.sdo.clone(), rpdos).await?;
+        trace!(
+            "Enabling Cyclic Synchronous Mode for device {} - Reconfiguring TPDOS",
+            self.node_id
+        );
+        let tpdos = CUSTOM_PDOS.tpdos;
+        configure_pdo_mappings(self.node_id, self.sdo.clone(), tpdos).await?;
+
+        // Master should start SYNC around here
+
+        // Set the drive into NMT Operational again
+        trace!(
+            "Enabling Cyclic Synchronous Mode for device {} - NMT Operational",
+            self.node_id
+        );
+        set_to_nmt_state(
+            NmtState::Operational,
+            &self.nmt_tx,
+            self.event_rx.resubscribe(),
+        )
+        .await?;
+
+        let pdo_cmd = PdoCommand::SwitchToCyclicSynchronousMode(self.mode.try_into().unwrap());
+        self.pdo_tx
+            .send(pdo_cmd.clone())
+            .await
+            .map_err(|_| DriveError::PdoCommandError(pdo_cmd))?;
+
+        Ok(())
+    }
+
+    async fn switch_to_noncyclic_mode(
+        &self,
+        default_mode: OperationMode,
+    ) -> Result<(), DriveError> {
+        // TODO: gracefully drop cia402 sm into ReadyToSwitchOn before NMT pre-op?
+        let node_id = self.node_id;
+
+        trace!("Disabling Cyclic Synchronous Mode for device {node_id} - NMT PRE-OP");
+        // Put the drive in NMT PreOperational, required for parametrisation & pdo mapping
+        set_to_nmt_state(
+            NmtState::PreOperational,
+            &self.nmt_tx,
+            self.event_rx.resubscribe(),
+        )
+        .await?;
+
+        // Reconfigure pdo mappings
+        trace!("Disabling Cyclic Synchronous Mode for device {node_id} - Reconfiguring RPDOS");
+        configure_pdo_mappings(node_id, self.sdo.clone(), CUSTOM_PDOS.rpdos).await?;
+        trace!("Disabling Cyclic Synchronous Mode for device {node_id} - Reconfiguring TPDOS");
+        configure_pdo_mappings(node_id, self.sdo.clone(), CUSTOM_PDOS.tpdos).await?;
+
+        // Set the drive into NMT Operational again
+        trace!("Disabling Cyclic Synchronous Mode for device {node_id} - NMT Operational");
+        set_to_nmt_state(
+            NmtState::Operational,
+            &self.nmt_tx,
+            self.event_rx.resubscribe(),
+        )
+        .await?;
+
+        let sp = match default_mode {
+            OperationMode::ProfileTorque => {
+                Setpoint::ProfileTorque(TorqueSetpoint { target_torque: 0 })
+            }
+            _ => {
+                error!("When switching away from cyclic mode only ProfileTorque is allowed");
+                return Err(DriveError::ViolatedInvariant(
+                    "When switching away from cyclic mode only ProfileTorque is allowed"
+                        .to_string(),
+                ));
+            }
+        };
+
+        let pdo_cmd = PdoCommand::WriteSetpoint(sp);
+        self.pdo_tx
+            .send(pdo_cmd.clone())
+            .await
+            .map_err(|_| DriveError::PdoCommandError(pdo_cmd))?;
+
+        Ok(())
     }
 }
