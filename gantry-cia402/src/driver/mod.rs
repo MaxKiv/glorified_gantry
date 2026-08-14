@@ -14,7 +14,7 @@ use std::{sync::Arc, time::Duration};
 
 use crate::{
     comms::{
-        pdo::{Pdo, mapping::PDOSet},
+        pdo::{Pdo, mapping::table::PdoTable},
         sdo::SdoAction,
     },
     driver::{
@@ -89,15 +89,14 @@ impl<Mode> Cia402Driver<Mode> {
         identifier: Cia402Identifier,
         canopen: CanOpenInterface,
         parameters: &'static [SdoAction<'_>],
-        default_pdo_set: &'static PDOSet,
-        minimal_pdo_set: &'static PDOSet,
+        pdo_table: &'static PdoTable,
         sync_rx: broadcast::Receiver<Instant>,
         sync_period: Duration,
         cmd_tx: broadcast::Sender<MotorCommand>,
         cmd_rx: broadcast::Receiver<MotorCommand>,
     ) -> Result<Self, InitialisationError> {
         // Track task handles that we are about to spawn to bind their lifetimes to this object
-        let mut handles = JoinSet::new();
+        let mut joinset = JoinSet::new();
         let node_id = identifier.node_id;
 
         // Initialize output interfaces
@@ -121,20 +120,24 @@ impl<Mode> Cia402Driver<Mode> {
         let canopen_feedback = canopen.clone();
         let canopen_nmt = canopen.clone();
 
+        let (current_pdo_set_tx, current_pdo_set_rx) =
+            tokio::sync::watch::channel(pdo_table.get_default_pdoset());
+
         // Initialize the event_logger
         trace!("Starting Event Logger for motor: {}", identifier);
-        spawn_logged_joinset(&mut handles, "EVENT", async move {
+        spawn_logged_joinset(&mut joinset, "EVENT", async move {
             log_events(event_rx_logger, node_id).await
         });
 
         // Start the device feedback task responsible for receiving and parsing device feedback,
         // and broadcasting these as events
         trace!("Starting device feedback handler for motor {identifier}");
-        spawn_logged_joinset(&mut handles, "FEEDBACK", async move {
+        let fb_current_pdo_set_rx = current_pdo_set_rx.clone();
+        spawn_logged_joinset(&mut joinset, "FEEDBACK", async move {
             handle_feedback(
                 node_id,
                 canopen_feedback,
-                default_pdo_set.tpdos,
+                fb_current_pdo_set_rx,
                 event_tx_feedback,
             )
             .await
@@ -155,7 +158,7 @@ impl<Mode> Cia402Driver<Mode> {
 
         // Start the NMT task
         trace!("Starting NMT State Machine task for motor {identifier}");
-        spawn_logged_joinset(&mut handles, "NMT", async move {
+        spawn_logged_joinset(&mut joinset, "NMT", async move {
             nmt_task(node_id, canopen_nmt, nmt_rx, event_rx_nmt).await
         });
 
@@ -169,30 +172,31 @@ impl<Mode> Cia402Driver<Mode> {
         let (_pdo_handle, pdo_tx) = Pdo::init(
             canopen.clone(),
             node_id,
-            default_pdo_set,
-            minimal_pdo_set,
-            &mut handles,
+            pdo_table,
+            current_pdo_set_rx.clone(), // Only used on startup
+            &mut joinset,
         )?;
 
         // Start the setpoint manager for this device, handles setpoint writes and OMS specifics
         // like profile position handshaking
         let nmt_tx_updater = nmt_tx.clone();
         let sdo_updater = sdo.clone();
-        let (_setpoint_manager_handle, new_setpoint_tx, cs_mode_tx) = SetpointManager::init(
+        let (_setpoint_manager_handle, new_setpoint_tx, mode_transition_tx) = SetpointManager::init(
             node_id,
             event_rx_setpoint_manager,
             pdo_tx.clone(),
             sync_rx,
             sync_period,
-            &mut handles,
+            &mut joinset,
             nmt_tx_updater,
             sdo_updater,
+            current_pdo_set_tx,
         );
 
         // Start the cia402 state machine task, this is responsible for
         // tracking the motors current cia402 state and single transition
         trace!("Starting Cia402 State Machine for motor {identifier}");
-        spawn_logged_joinset(&mut handles, "CIA-SM", async move {
+        spawn_logged_joinset(&mut joinset, "CIA-SM", async move {
             cia402_state_machine_task(
                 event_rx_cia402,
                 state_update_tx,
@@ -204,19 +208,19 @@ impl<Mode> Cia402Driver<Mode> {
         });
 
         trace!("Starting Cia402 Orchestrator for motor {identifier}");
-        spawn_logged_joinset(&mut handles, "CIA-OR", async move {
+        spawn_logged_joinset(&mut joinset, "CIA-OR", async move {
             cia402_orchestrator_task(cia402_rx, sm_cmd_tx, sm_state_rx).await
         });
 
         // Start the publisher task, responsible for update aggregation and device communication
         trace!("Starting update publisher task for motor {identifier}");
-        spawn_logged_joinset(&mut handles, "UPDATE", async move {
+        spawn_logged_joinset(&mut joinset, "UPDATE", async move {
             publish_updates(
                 pdo_tx.clone(),
                 state_update_rx,
                 cmd_rx_publisher,
                 new_setpoint_tx,
-                cs_mode_tx,
+                mode_transition_tx,
                 cia402_tx,
                 node_id,
             )
@@ -225,6 +229,7 @@ impl<Mode> Cia402Driver<Mode> {
 
         // Start the startup task for this motor, this does parametrisation and configures pdo mapping
         trace!("Performing Startup for motor {identifier}");
+        let default_pdo_set = { current_pdo_set_rx.borrow().clone() };
         if let Err(err) = motor_startup_task(
             identifier.clone(),
             nmt_tx.clone(),
@@ -236,7 +241,7 @@ impl<Mode> Cia402Driver<Mode> {
         .await
         {
             error!("Startup error: {err}, releasing resources and exiting.");
-            handles.shutdown().await;
+            joinset.shutdown().await;
             return Err(err);
         }
         trace!("Startup done for motor {identifier}");
@@ -250,7 +255,7 @@ impl<Mode> Cia402Driver<Mode> {
             nmt_tx,
             event_rx: event_rx.resubscribe(),
             canopen,
-            joinset: handles,
+            joinset,
             sdo,
             _mode: std::marker::PhantomData::<Mode>,
         })

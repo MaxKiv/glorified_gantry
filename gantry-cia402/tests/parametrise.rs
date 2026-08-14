@@ -10,7 +10,7 @@ use tracing::*;
 mod tests {
 
     use gantry_cia402::{
-        comms::pdo::mapping::custom::CUSTOM_TPDOS,
+        comms::pdo::mapping::default::DEFAULT_TPDOS,
         driver::{
             nmt::{NmtState, nmt_task},
             receiver::subscriber::wait_for_event,
@@ -36,7 +36,7 @@ mod tests {
         info!("Starting CANOpen sniffer");
         task::spawn(log_canopen_pretty(canopen.clone()));
 
-        let tpdo_mapping_set = CUSTOM_TPDOS;
+        let tpdo_mapping_set = DEFAULT_TPDOS;
 
         info!("Starting CANOpen event logger");
         let (_, event_rx) = start_feedback_task(canopen.clone(), node_id, tpdo_mapping_set);

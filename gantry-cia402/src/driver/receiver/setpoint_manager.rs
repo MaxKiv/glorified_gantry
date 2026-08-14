@@ -9,7 +9,10 @@ use tokio::{
 use tracing::*;
 
 use crate::{
-    comms::pdo::{cmd::PdoCommand, mapping::custom::CUSTOM_PDOS},
+    comms::pdo::{
+        cmd::PdoCommand,
+        mapping::{PdoSet, default::DEFAULT_PDOS, table::DEFAULT_PDO_TABLE},
+    },
     driver::{
         cyclic::CyclicSynchronousMode,
         event::MotorEvent,
@@ -48,7 +51,7 @@ pub struct SetpointManager {
     event_rx: broadcast::Receiver<MotorEvent>,
     pdo_tx: mpsc::Sender<PdoCommand>,
     current_setpoint: Option<Setpoint>,
-    cs_mode_rx: watch::Receiver<OperationMode>,
+    mode_transition_rx: watch::Receiver<OperationMode>,
     mode: OperationMode,
     last_sync: Option<Instant>,
     sync_rx: broadcast::Receiver<Instant>,
@@ -56,6 +59,7 @@ pub struct SetpointManager {
     sync_state: SyncState,
     nmt_tx: mpsc::Sender<NmtState>,
     sdo: Arc<Mutex<SdoClient>>,
+    current_pdo_set_tx: watch::Sender<&'static PdoSet>,
 }
 
 impl SetpointManager {
@@ -68,14 +72,15 @@ impl SetpointManager {
         set: &mut tokio::task::JoinSet<()>,
         nmt_tx: mpsc::Sender<NmtState>,
         sdo: Arc<Mutex<SdoClient>>,
+        current_pdo_set_tx: watch::Sender<&'static PdoSet>,
     ) -> (
         AbortHandle,
         mpsc::Sender<Setpoint>,
         watch::Sender<OperationMode>,
     ) {
         let (new_setpoint_tx, new_setpoint_rx) = mpsc::channel(16);
-        let (cs_mode_tx, mut cs_mode_rx) = watch::channel(OperationMode::Homing);
-        let mode = cs_mode_rx.borrow_and_update().clone();
+        let (mode_transition_tx, mut mode_transition_rx) = watch::channel(OperationMode::Homing);
+        let mode = mode_transition_rx.borrow_and_update().clone();
 
         let mgr = SetpointManager {
             handshake: HandshakeState::Idle,
@@ -85,19 +90,20 @@ impl SetpointManager {
             pdo_tx,
             sync_rx,
             mode,
-            cs_mode_rx,
+            mode_transition_rx,
             current_setpoint: None,
             last_sync: None,
             node_id,
             sync_period,
             nmt_tx,
             sdo,
+            current_pdo_set_tx,
         };
 
         // Run the setpoint manager task
         let handle = set.spawn(mgr.run());
 
-        (handle, new_setpoint_tx, cs_mode_tx)
+        (handle, new_setpoint_tx, mode_transition_tx)
     }
 
     /// Sends new setpoints to the device using [`Pdo`] as transport layer
@@ -210,9 +216,9 @@ impl SetpointManager {
                 }
 
                 // A mode change arrived
-                Ok(_) = self.cs_mode_rx.changed() => {
+                Ok(_) = self.mode_transition_rx.changed() => {
                     let mode = {
-                        self.cs_mode_rx.borrow_and_update().clone()
+                        self.mode_transition_rx.borrow_and_update().clone()
                     };
 
                     if let Err(err) = self.switch_to_new_operating_mode(mode).await {
@@ -307,18 +313,20 @@ impl SetpointManager {
 
     async fn switch_to_new_operating_mode(
         &mut self,
-        mode: OperationMode,
+        new_mode: OperationMode,
     ) -> Result<(), DriveError> {
-        if self.in_non_cyclic_mode() && mode.is_cyclic_synchronous() {
-            let new_mode = mode;
-            self.switch_to_cyclic_mode(new_mode).await?;
-        } else if self.in_cyclic_mode() && !mode.is_cyclic_synchronous() {
-            // Setpoint manager is in cyclic mode, mode switch to non-cyclic requested
-            self.switch_to_noncyclic_mode(mode).await?;
+        if self.in_non_cyclic_mode() && new_mode.is_cyclic_synchronous() {
+            // Switching from cyclic -> non cyclic requires PDO mapping change
+            self.remap_drive_pdoset_for_new_operationmode(new_mode)
+                .await?;
+        } else if self.in_cyclic_mode() && new_mode != self.mode {
+            // Switching between cyclic modes requries PDO mapping change
+            self.remap_drive_pdoset_for_new_operationmode(new_mode)
+                .await?;
         }
 
         // Update setpoint manager mode
-        self.mode = mode;
+        self.mode = new_mode;
 
         Ok(())
     }
@@ -327,7 +335,7 @@ impl SetpointManager {
     /// In this mode Setpoint Manager expects a bus master to produce a regular SYNC
     /// On every SYNC the current setpoint is written to the device
     pub async fn enable_cyclic_synchronous_mode(
-        cs_mode_tx: &watch::Sender<OperationMode>,
+        mode_transition_tx: &watch::Sender<OperationMode>,
         mode: CyclicSynchronousMode,
         node_id: u8,
     ) -> Result<(), DriveError> {
@@ -338,7 +346,9 @@ impl SetpointManager {
 
         let mode = mode.try_into().unwrap();
         // Initiate setpoing manager CyclicSynchronous Mode operation
-        cs_mode_tx.send(mode).map_err(DriveError::ModeSwitchError)
+        mode_transition_tx
+            .send(mode)
+            .map_err(DriveError::ModeSwitchError)
     }
 
     /// Disable Cyclic Synchronous Mode
@@ -372,7 +382,10 @@ impl SetpointManager {
             .map_err(|e| DriveError::NewSetpointSendError(setpoint, e))
     }
 
-    async fn switch_to_cyclic_mode(&self, new_mode: OperationMode) -> Result<(), DriveError> {
+    async fn remap_drive_pdoset_for_new_operationmode(
+        &self,
+        new_mode: OperationMode,
+    ) -> Result<(), DriveError> {
         // TODO: gracefully drop cia402 sm into ReadyToSwitchOn before NMT pre-op?
 
         // Setpoint manager in default mode, mode switch to cyclic requested
@@ -388,22 +401,27 @@ impl SetpointManager {
         )
         .await?;
 
+        let new_pdoset = DEFAULT_PDO_TABLE.get_pdoset_for_operationmode(new_mode);
+
         // Reconfigure pdo mappings
-        // TODO: are the CUSTOM_PDOS correct?
         trace!(
             "Enabling Cyclic Synchronous Mode for device {} - Reconfiguring RPDOS",
             self.node_id
         );
-        let rpdos = CUSTOM_PDOS.rpdos;
+        let rpdos = new_pdoset.rpdos;
         configure_pdo_mappings(self.node_id, self.sdo.clone(), rpdos).await?;
+
         trace!(
             "Enabling Cyclic Synchronous Mode for device {} - Reconfiguring TPDOS",
             self.node_id
         );
-        let tpdos = CUSTOM_PDOS.tpdos;
+        let tpdos = new_pdoset.tpdos;
         configure_pdo_mappings(self.node_id, self.sdo.clone(), tpdos).await?;
 
-        // Master should start SYNC around here
+        // Indicate succesful PdoSet switch
+        self.current_pdo_set_tx.send_replace(new_pdoset);
+
+        // Master should have started SYNC around here
 
         // Set the drive into NMT Operational again
         trace!(
@@ -444,9 +462,9 @@ impl SetpointManager {
 
         // Reconfigure pdo mappings
         trace!("Disabling Cyclic Synchronous Mode for device {node_id} - Reconfiguring RPDOS");
-        configure_pdo_mappings(node_id, self.sdo.clone(), CUSTOM_PDOS.rpdos).await?;
+        configure_pdo_mappings(node_id, self.sdo.clone(), DEFAULT_PDOS.rpdos).await?;
         trace!("Disabling Cyclic Synchronous Mode for device {node_id} - Reconfiguring TPDOS");
-        configure_pdo_mappings(node_id, self.sdo.clone(), CUSTOM_PDOS.tpdos).await?;
+        configure_pdo_mappings(node_id, self.sdo.clone(), DEFAULT_PDOS.tpdos).await?;
 
         // Set the drive into NMT Operational again
         trace!("Disabling Cyclic Synchronous Mode for device {node_id} - NMT Operational");

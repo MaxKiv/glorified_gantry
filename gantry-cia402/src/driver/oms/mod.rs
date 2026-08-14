@@ -96,6 +96,11 @@ impl OperationMode {
                 | Self::CyclicSynchronousTorque
         )
     }
+
+    /// Convert enum to array index (0-based)
+    pub const fn as_index(&self) -> usize {
+        (*self as isize - (Self::AutoSetup as isize)) as usize
+    }
 }
 
 #[derive(Clone, Debug)]

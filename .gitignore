@@ -51,3 +51,5 @@ Thumbs.db
 result
 .direnv/*
 .cache
+
+rustc-ice*

@@ -2,7 +2,7 @@ use std::time::Duration;
 
 use gantry_cia402::{
     comms::{
-        pdo::mapping::{PDOSet, PdoMapping, minimal::MINIMAL_CYCLIC_SYNCHRONOUS_PDO_SET},
+        pdo::mapping::{PdoMapping, PdoSet, minimal::MINIMAL_CYCLIC_SYNCHRONOUS_PDO_SET},
         sdo::SdoAction,
     },
     driver::{
@@ -39,7 +39,7 @@ pub const PARAMS: &[SdoAction] = startup::params::TEST_PARAMS;
 pub const COMMS_TIMEOUT: Duration = Duration::from_secs(5);
 pub const POS_TIMEOUT: Duration = Duration::from_secs(30);
 pub const HOMING_TIMEOUT: Duration = Duration::from_secs(60);
-pub const CYCLIC_PDOS: PDOSet = MINIMAL_CYCLIC_SYNCHRONOUS_PDO_SET;
+pub const CYCLIC_PDOS: PdoSet = MINIMAL_CYCLIC_SYNCHRONOUS_PDO_SET;
 
 #[derive(Debug, Error)]
 pub enum TestError {

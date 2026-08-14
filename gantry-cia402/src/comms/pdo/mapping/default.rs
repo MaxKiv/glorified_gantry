@@ -1,13 +1,42 @@
 use crate::{
-    comms::pdo::mapping::{BitRange, PdoMapping, PdoMappingSource, PdoType},
+    comms::pdo::mapping::{BitRange, PdoMapping, PdoMappingSource, PdoSet, PdoType, empty::*},
     driver::startup::pdo_mapping::TransmissionType,
     od,
 };
 
-pub const DEFAULT_RPDOS: &[PdoMapping] = &[RPDO_DEFAULT_1, RPDO_DEFAULT_2];
-pub const DEFAULT_TPDOS: &[PdoMapping] = &[TPDO_DEFAULT_1, TPDO_DEFAULT_2];
+// TODO: Making T/RPDO mapping generic + encoding into type system
+// I didn't know of a better const method to do this, seems rust const fn are lacking compared
+// to c++ templates, this never changes anyway
+pub const RPDO_IDX_CONTROL_WORD: usize = 0;
+pub const RPDO_IDX_OPMODE: usize = 0;
+pub const RPDO_IDX_TARGET_POS: usize = 1;
+pub const RPDO_IDX_TARGET_VEL: usize = 2;
+pub const RPDO_IDX_TARGET_TORQUE: usize = 3;
 
-pub const RPDO_DEFAULT_1: PdoMapping = PdoMapping {
+pub const DEFAULT_PDOS: PdoSet = PdoSet {
+    rpdos: DEFAULT_RPDOS,
+    tpdos: DEFAULT_TPDOS,
+};
+
+pub const DEFAULT_RPDOS: &[PdoMapping; 4] = &[
+    RPDO_CONTROL_OPMODE, // NOTE: CONTROL_OPMODE should be the first entry in any RPDO set
+    RPDO_TARGET_POS,
+    RPDO_TARGET_VEL,
+    RPDO_TARGET_TORQUE,
+];
+
+pub const DEFAULT_TPDOS: &[PdoMapping; 4] = &[
+    TPDO_STATUS_OPMODE,
+    TPDO_POS_VEL_ACTUAL,
+    TPDO_TORQUE_ACTUAL, // Causes a lot of bus spam if transmission_type = OnChange, reduced by inhibit time
+    TPDO_EMPTY_4, // Required to avoid default TPDO4 generating warnings, TODO: remove this when
+                  // adding invalidate all PDO step in configure_pdo_mappings
+];
+
+/// RPDO mapping ControlWord and OperationMode
+/// Note: This should be in any PDOSet, an invariant [`Pdo`] heavily depends on
+/// TODO: Make T/RPDO mapping sets more flexible by generalising de/ser in [`Pdo`]
+pub const RPDO_CONTROL_OPMODE: PdoMapping = PdoMapping {
     pdo: PdoType::RPDO(1),
     sources: &[
         PdoMappingSource {
@@ -22,7 +51,7 @@ pub const RPDO_DEFAULT_1: PdoMapping = PdoMapping {
     transmission_type: TransmissionType::OnChange,
 };
 
-pub const RPDO_DEFAULT_2: PdoMapping = PdoMapping {
+pub const RPDO_TARGET_POS: PdoMapping = PdoMapping {
     pdo: PdoType::RPDO(2),
     sources: &[
         PdoMappingSource {
@@ -37,7 +66,25 @@ pub const RPDO_DEFAULT_2: PdoMapping = PdoMapping {
     transmission_type: TransmissionType::OnChange,
 };
 
-pub const TPDO_DEFAULT_1: PdoMapping = PdoMapping {
+pub const RPDO_TARGET_VEL: PdoMapping = PdoMapping {
+    pdo: PdoType::RPDO(3),
+    sources: &[PdoMappingSource {
+        entry: &od::SET_TARGET_VELOCITY,
+        bit_range: BitRange { start: 0, len: 32 },
+    }],
+    transmission_type: TransmissionType::OnChange,
+};
+
+pub const RPDO_TARGET_TORQUE: PdoMapping = PdoMapping {
+    pdo: PdoType::RPDO(4),
+    sources: &[PdoMappingSource {
+        entry: &od::SET_TARGET_TORQUE,
+        bit_range: BitRange { start: 0, len: 16 },
+    }],
+    transmission_type: TransmissionType::OnChange,
+};
+
+pub const TPDO_STATUS_OPMODE: PdoMapping = PdoMapping {
     pdo: PdoType::TPDO(1),
     sources: &[
         PdoMappingSource {
@@ -52,11 +99,26 @@ pub const TPDO_DEFAULT_1: PdoMapping = PdoMapping {
     transmission_type: TransmissionType::OnChange,
 };
 
-pub const TPDO_DEFAULT_2: PdoMapping = PdoMapping {
+pub const TPDO_POS_VEL_ACTUAL: PdoMapping = PdoMapping {
     pdo: PdoType::TPDO(2),
+    sources: &[
+        PdoMappingSource {
+            entry: &od::POSITION_ACTUAL_VALUE,
+            bit_range: BitRange { start: 0, len: 32 },
+        },
+        PdoMappingSource {
+            entry: &od::VELOCITY_ACTUAL_VALUE,
+            bit_range: BitRange { start: 32, len: 32 },
+        },
+    ],
+    transmission_type: TransmissionType::OnChange,
+};
+
+pub const TPDO_TORQUE_ACTUAL: PdoMapping = PdoMapping {
+    pdo: PdoType::TPDO(3),
     sources: &[PdoMappingSource {
-        entry: &od::POSITION_ACTUAL_VALUE,
-        bit_range: BitRange { start: 0, len: 32 },
+        entry: &od::TORQUE_ACTUAL_VALUE,
+        bit_range: BitRange { start: 0, len: 16 },
     }],
     transmission_type: TransmissionType::OnChange,
 };

@@ -1,7 +1,7 @@
 use crate::{
     comms::pdo::mapping::{
-        BitRange, PDOSet, PdoMapping, PdoMappingSource, PdoType,
-        custom::{RPDO_CONTROL_OPMODE, TPDO_STATUS_OPMODE},
+        BitRange, PdoMapping, PdoMappingSource, PdoSet, PdoType,
+        default::{RPDO_CONTROL_OPMODE, TPDO_STATUS_OPMODE},
         empty::*,
     },
     driver::{
@@ -11,7 +11,7 @@ use crate::{
     od,
 };
 
-pub const MINIMAL_CYCLIC_SYNCHRONOUS_PDO_SET: PDOSet = PDOSet {
+pub const MINIMAL_CYCLIC_SYNCHRONOUS_PDO_SET: PdoSet = PdoSet {
     rpdos: MINIMAL_RPODS,
     tpdos: MINIMAL_TPODS,
 };
@@ -62,7 +62,7 @@ pub const TPDO_STATUS_ACTUAL_POS_TORQUE: PdoMapping = PdoMapping {
             bit_range: BitRange { start: 48, len: 16 },
         },
     ],
-    transmission_type: TransmissionType::OnSync,
+    transmission_type: TransmissionType::OnSyncRPDO,
 };
 pub struct Tpdo2 {
     pub status: StatusWord,
@@ -86,7 +86,7 @@ pub const RPDO_CONTROL_TARGET_POS_TORQUE: PdoMapping = PdoMapping {
             bit_range: BitRange { start: 48, len: 16 },
         },
     ],
-    transmission_type: TransmissionType::OnSync,
+    transmission_type: TransmissionType::OnSyncRPDO,
 };
 pub struct Rpdo2 {
     control: ControlWord,

@@ -3,19 +3,20 @@ pub mod frame;
 pub mod mapping;
 
 use crate::comms::pdo::cmd::PdoCommand;
-use crate::comms::pdo::mapping::PDOSet;
+use crate::comms::pdo::frame::PdoOutputBuffer;
 use crate::comms::pdo::mapping::PdoMapping;
+use crate::comms::pdo::mapping::PdoSet;
 use crate::comms::pdo::mapping::PdoType;
-use crate::comms::pdo::mapping::custom::RPDO_CONTROL_OPMODE;
-use crate::comms::pdo::mapping::custom::RPDO_IDX_CONTROL_WORD;
-use crate::comms::pdo::mapping::custom::RPDO_IDX_TARGET_POS;
-use crate::comms::pdo::mapping::custom::RPDO_IDX_TARGET_TORQUE;
-use crate::comms::pdo::mapping::custom::RPDO_IDX_TARGET_VEL;
-use crate::comms::pdo::mapping::custom::RPDO_TARGET_POS;
-use crate::comms::pdo::mapping::custom::RPDO_TARGET_TORQUE;
-use crate::comms::pdo::mapping::custom::RPDO_TARGET_VEL;
-use crate::comms::pdo::mapping::custom::get_dlc;
+use crate::comms::pdo::mapping::default::RPDO_CONTROL_OPMODE;
+use crate::comms::pdo::mapping::default::RPDO_IDX_CONTROL_WORD;
+use crate::comms::pdo::mapping::default::RPDO_IDX_TARGET_POS;
+use crate::comms::pdo::mapping::default::RPDO_IDX_TARGET_TORQUE;
+use crate::comms::pdo::mapping::default::RPDO_IDX_TARGET_VEL;
+use crate::comms::pdo::mapping::default::RPDO_TARGET_POS;
+use crate::comms::pdo::mapping::default::RPDO_TARGET_TORQUE;
+use crate::comms::pdo::mapping::default::RPDO_TARGET_VEL;
 use crate::comms::pdo::mapping::minimal::RPDO_CONTROL_TARGET_POS_TORQUE;
+use crate::comms::pdo::mapping::table::PdoTable;
 use crate::driver::cyclic::CyclicSynchronousMode;
 use crate::driver::oms::cyclic_pos::CyclicPositionSetpoint;
 use crate::driver::oms::cyclic_torque::CyclicTorqueSetpoint;
@@ -27,11 +28,13 @@ use crate::driver::oms::torque::*;
 use crate::driver::oms::velocity::*;
 use crate::error::InitialisationError;
 use crate::od;
+use crate::od::SET_OPERATION_MODE;
 use std::time::Duration;
 
 /// PDO based Cia402Transport impl for oze-canopen
 use oze_canopen::{interface::CanOpenInterface, transmitter::TxPacket};
 use tokio::sync::mpsc;
+use tokio::sync::watch;
 use tokio::task::AbortHandle;
 use tracing::*;
 
@@ -43,7 +46,7 @@ use crate::{
 };
 
 const SEND_TIMEOUT: Duration = Duration::from_millis(100);
-const DEFAULT_MODE: OperationMode = OperationMode::ProfileVelocity;
+const DEFAULT_MODE: OperationMode = OperationMode::ProfileTorque;
 
 /// Low level CANopen PDO transport implementation
 /// Manages PDO communication to a single node_id / motor in a seperate task
@@ -51,50 +54,39 @@ const DEFAULT_MODE: OperationMode = OperationMode::ProfileVelocity;
 pub struct Pdo {
     canopen: CanOpenInterface,
     node_id: u8,
-    default_pdo_set: &'static PDOSet,
-    minimal_pdo_set: &'static PDOSet,
-    default_dlcs: [usize; 8],
-    minimal_dlcs: [usize; 8],
-    rpdo_frames: [PdoFrame; 4],
+    pdo_table: &'static PdoTable,
+    current_operationmode: OperationMode,
+    current_pdo_set_rx: watch::Receiver<&'static PdoSet>,
+    // default_pdo_set: &'static PdoSet,
+    rpdo_output_buffer: PdoOutputBuffer,
     pdo_rx: mpsc::Receiver<PdoCommand>,
-    mode: OperationMode,
 }
 
 impl Pdo {
     pub fn init(
         canopen: CanOpenInterface,
         node_id: u8,
-        default_pdo_set: &'static PDOSet,
-        minimal_pdo_set: &'static PDOSet,
+        pdo_table: &'static PdoTable,
+        current_pdo_set_rx: watch::Receiver<&'static PdoSet>,
         set: &mut tokio::task::JoinSet<()>,
     ) -> Result<(AbortHandle, mpsc::Sender<PdoCommand>), InitialisationError> {
         // Check if all required mappings are present
+        let default_pdo_set = { current_pdo_set_rx.borrow().clone() };
         Pdo::check_required_rpdo_mappings(default_pdo_set.rpdos)?;
 
         // Initialize communication channels
         let (pdo_tx, pdo_rx) = tokio::sync::mpsc::channel(10);
 
-        // Calculate RPDO Data Length Codes
-        let mut minimal_dlcs = [0usize; 8];
-        for (idx, mappings) in minimal_pdo_set.rpdos.iter().enumerate() {
-            minimal_dlcs[idx] = get_dlc(mappings);
-        }
-        let mut default_dlcs = [0usize; 8];
-        for (idx, mappings) in default_pdo_set.rpdos.iter().enumerate() {
-            default_dlcs[idx] = get_dlc(mappings);
-        }
+        // Initialize PdoFrame array
+        let pdo_output_buffer = PdoOutputBuffer::from_pdo_set(default_pdo_set);
 
-        let pdo = Self {
+        let pdo = Pdo {
             canopen,
             node_id,
-            default_pdo_set,
-            minimal_pdo_set,
-            default_dlcs,
-            minimal_dlcs,
-            // Initialize RPDO Frames with default RPDO mapping DLCs
-            rpdo_frames: core::array::from_fn(|idx| PdoFrame::with_dlc(default_dlcs[idx])),
+            rpdo_output_buffer: pdo_output_buffer,
             pdo_rx,
-            mode: DEFAULT_MODE,
+            pdo_table,
+            current_pdo_set_rx,
         };
 
         // Run the PDO communication task
@@ -145,9 +137,16 @@ impl Pdo {
                                 );
                             }
                         }
-                        ExitCyclicSynchronousMode => {
-                            if let Err(err) = self.disable_cyclic_synchronous_mode().await {
-                                error!("Unable to disable cyclic synchronous mode: {err}");
+                        ExitCyclicSynchronousMode(mode) => {
+                            if mode.is_cyclic_synchronous() {
+                                error!(
+                                    "PDO asked to ExitCyclicSynchronousMode, but given Cyclic mode
+                                    to switch to: {mode:?}, ignoring..."
+                                );
+                            } else {
+                                if let Err(err) = self.disable_cyclic_synchronous_mode(mode).await {
+                                    error!("Unable to disable cyclic synchronous mode: {err}");
+                                }
                             }
                         }
                         UpdatePositionSetpointFlags(position_flags_cw) => {
@@ -219,67 +218,68 @@ impl Pdo {
         &mut self,
         mode: CyclicSynchronousMode,
     ) -> Result<(), DriveError> {
-        let mode: OperationMode = mode.into();
-        self.mode = mode;
         trace!("Enabling Cyclic Synchronous mode: {mode:?}");
 
-        // Set Position Mode
-        self.set_operational_mode(self.mode);
+        // Set new mode
+        self.set_operational_mode(mode.try_into().unwrap());
 
         // Send RPDO1
         self.send_rpdo(RPDO_CONTROL_OPMODE).await?;
 
         // flush RPDO2 frame to avoid stale writes
-        self.rpdo_frames[1] = PdoFrame::with_dlc(self.minimal_dlcs[1]);
+        self.rpdo_output_buffer[1] = PdoFrame::with_dlc(self.minimal_dlcs[1]);
 
         Ok(())
     }
 
-    pub async fn disable_cyclic_synchronous_mode(&mut self) -> Result<(), DriveError> {
+    /// Switches drive back to non-cyclic DEFAULT_MODE
+    /// NOTE: this assumes NMT Pre-op + PDO remap + NMT OP cycle was previously completed,
+    /// this functionality lives in [`SetpointManager`]
+    pub async fn disable_cyclic_synchronous_mode(
+        &mut self,
+        new_mode: OperationMode, // Mode validity is assumed checked
+    ) -> Result<(), DriveError> {
         trace!("Disabling Cyclic Synchronous mode, switching to default mode: {DEFAULT_MODE:?}");
-        self.mode = DEFAULT_MODE;
 
         // Set Default mode
-        self.set_operational_mode(self.mode);
+        self.set_operational_mode(new_mode);
 
         // Send RPDO1 to effect mode switch
         trace!("Sending RPDO1 to effect mode switch");
         self.send_rpdo(RPDO_CONTROL_OPMODE).await?;
 
+        let pdo_set = self.pdo_table.get_pdoset_for_operationmode(new_mode);
+
         // When changing to cyclic Synchronous mode, T/RPDO2 get remapped
         // flush RPDO2 frame to avoid stale writes
-        self.rpdo_frames[1] = PdoFrame::with_dlc(self.default_dlcs[1]);
+        self.rpdo_output_buffer = PdoOutputBuffer::from_pdo_set(pdo_set);
 
         Ok(())
     }
 
     pub async fn write_setpoint(&mut self, setpoint: &Setpoint) -> Result<(), DriveError> {
         use Setpoint::*;
-        match (setpoint, self.mode.is_cyclic_synchronous()) {
-            (ProfilePosition(position_setpoint), false) => {
+        match setpoint {
+            ProfilePosition(position_setpoint) => {
                 self.write_position_setpoint(position_setpoint).await
             }
-            (ProfileVelocity(velocity_setpoint), false) => {
+            ProfileVelocity(velocity_setpoint) => {
                 self.write_velocity_setpoint(velocity_setpoint).await
             }
-            (ProfileTorque(torque_setpoint), false) => {
-                self.write_torque_setpoint(torque_setpoint).await
-            }
-            (Home(homing_setpoint), false) => self.write_homing_setpoint(homing_setpoint).await,
-            (CyclicPosition(cyclic_position_setpoint), true) => {
+            ProfileTorque(torque_setpoint) => self.write_torque_setpoint(torque_setpoint).await,
+            Home(homing_setpoint) => self.write_homing_setpoint(homing_setpoint).await,
+            CyclicPosition(cyclic_position_setpoint) => {
                 self.write_cyclic_position_setpoint(cyclic_position_setpoint)
                     .await
             }
-            (CyclicVelocity(cyclic_velocity_setpoint), true) => {
+            CyclicVelocity(cyclic_velocity_setpoint) => {
                 self.write_cyclic_velocity_setpoint(cyclic_velocity_setpoint)
                     .await
             }
-            (CyclicTorque(cyclic_torque_setpoint), true) => {
+            CyclicTorque(cyclic_torque_setpoint) => {
                 self.write_cyclic_torque_setpoint(cyclic_torque_setpoint)
                     .await
             }
-            // Fallthrough
-            (setpoint, _) => Err(DriveError::PdoWrongSetpoint(setpoint.clone(), self.mode)),
         }
     }
 
@@ -302,7 +302,7 @@ impl Pdo {
 
         // 2. Construct RPDO2: set new cyclic Synchronous position target
         // TODO: hardcoded offsets
-        self.rpdo_frames[num as usize].set(
+        self.rpdo_output_buffer[num as usize].set(
             (RPDO_CONTROL_TARGET_POS_TORQUE.sources[pos_target_idx]
                 .bit_range
                 .start
@@ -333,7 +333,7 @@ impl Pdo {
         // Write new target to appropriate RPDO frame
         let PdoType::RPDO(num) = RPDO_CONTROL_TARGET_POS_TORQUE.pdo else {
             error!(
-                "Attempting cyclic torque setpoint write bhut RPDO_CONTROL_TARGET_POS_TORQUE is mapped to TPDO, unable to continue"
+                "Attempting cyclic torque setpoint write but RPDO_CONTROL_TARGET_POS_TORQUE is mapped to TPDO, unable to continue"
             );
             return Err(DriveError::PdoWrongMapping(RPDO_CONTROL_TARGET_POS_TORQUE));
         };
@@ -342,7 +342,7 @@ impl Pdo {
 
         // 2. Construct RPDO2: set new cyclic Synchronous position target
         // TODO: hardcoded offsets
-        self.rpdo_frames[num as usize].set(
+        self.rpdo_output_buffer[num as usize].set(
             (RPDO_CONTROL_TARGET_POS_TORQUE.sources[torque_target_idx]
                 .bit_range
                 .start
@@ -375,11 +375,11 @@ impl Pdo {
 
         // 1. Construct RPDO2: Set position and velocity target
         // TODO: hardcoded offsets
-        self.rpdo_frames[RPDO_IDX_TARGET_POS].set(
+        self.rpdo_output_buffer[RPDO_IDX_TARGET_POS].set(
             (RPDO_TARGET_POS.sources[0].bit_range.start / 8) as usize,
             &(*target as u32).to_le_bytes(),
         );
-        self.rpdo_frames[RPDO_IDX_TARGET_POS].set(
+        self.rpdo_output_buffer[RPDO_IDX_TARGET_POS].set(
             (RPDO_TARGET_POS.sources[1].bit_range.start / 8) as usize,
             &(profile_velocity.to_le_bytes()),
         );
@@ -453,7 +453,7 @@ impl Pdo {
         self.send_rpdo(RPDO_CONTROL_OPMODE).await?;
 
         // Set position and torque target
-        self.rpdo_frames[RPDO_IDX_TARGET_VEL]
+        self.rpdo_output_buffer[RPDO_IDX_TARGET_VEL]
             // TODO: hardcoded offset
             .set(
                 (RPDO_TARGET_VEL.sources[0].bit_range.start / 8) as usize,
@@ -479,7 +479,7 @@ impl Pdo {
         self.send_rpdo(RPDO_CONTROL_OPMODE).await?;
 
         // Set position and torque target
-        self.rpdo_frames[RPDO_IDX_TARGET_TORQUE]
+        self.rpdo_output_buffer[RPDO_IDX_TARGET_TORQUE]
             // TODO: hardcoded offset
             .set(
                 (RPDO_TARGET_TORQUE.sources[0].bit_range.start / 8) as usize,
@@ -599,12 +599,12 @@ impl Pdo {
         let idx = (num - 1) as usize;
         trace!(
             "sending RPDO #{num} - Constructing TxPacket from data: {:?} - dlc {}",
-            self.rpdo_frames[idx].data, self.rpdo_frames[idx].dlc,
+            self.rpdo_output_buffer[idx].data, self.rpdo_output_buffer[idx].dlc,
         );
 
         let value = TxPacket::new(
             cob_id,
-            &self.rpdo_frames[idx].data[..self.rpdo_frames[idx].dlc],
+            &self.rpdo_output_buffer[idx].data[..self.rpdo_output_buffer[idx].dlc],
         )
         .map_err(DriveError::CANOpenError)?;
 
@@ -627,8 +627,8 @@ impl Pdo {
         let cw_idx = (num - 1) as usize;
 
         let cw_bytes = [
-            self.rpdo_frames[cw_idx].data[0],
-            self.rpdo_frames[cw_idx].data[1],
+            self.rpdo_output_buffer[cw_idx].data[0],
+            self.rpdo_output_buffer[cw_idx].data[1],
         ];
 
         ControlWord::from_bits(u16::from_le_bytes(cw_bytes)).expect(
@@ -649,7 +649,7 @@ impl Pdo {
         let cw = self.get_current_controlword();
         info!("Controlword before Set: {cw:?}");
 
-        self.rpdo_frames[cw_idx].set(
+        self.rpdo_output_buffer[cw_idx].set(
             RPDO_CONTROL_OPMODE.sources[RPDO_IDX_CONTROL_WORD]
                 .bit_range
                 .start as usize,
@@ -663,19 +663,24 @@ impl Pdo {
     /// Effect a device operational mode change to the given operational mode
     fn set_operational_mode(&mut self, mode: OperationMode) {
         trace!("setting operational mode to {mode:?}");
+        // NOTE: this assumes SetpointManager has done all the required PDO mapping work succesfully
+        self.current_operationmode = mode;
+        let current_pdo_set = self.pdo_table.get_pdoset_for_operationmode(mode);
 
+        // NOTE: assumes current_pdo_set has OPMODE mapped somewhere
+        const OPMODE_ENTRY: &'static ODEntry = &SET_OPERATION_MODE;
+        let (pdo_num, set_opmode_source) = current_pdo_set
+            .get_mapping_source_for_od_entry(OPMODE_ENTRY)
+            .unwrap();
+
+        let offset = set_opmode_source.bit_range.start as usize / std::mem::size_of::<u8>();
         const OPMODE_OFFSET: usize = 2;
 
-        let PdoType::RPDO(num) = RPDO_CONTROL_OPMODE.pdo else {
-            panic!("OPMODE is not mapped to RPDO");
-        };
-        let idx = (num - 1) as usize;
-
-        self.rpdo_frames[idx].set(OPMODE_OFFSET, &[mode as u8]);
+        self.rpdo_output_buffer.rpdo_frames[pdo_num].set(offset, &[mode as u8]);
 
         trace!(
             "Operational mode {mode:?} applied to rpdo_frame: {:?}",
-            self.rpdo_frames[idx]
+            self.rpdo_output_buffer.rpdo_frames[pdo_num]
         );
     }
 }
