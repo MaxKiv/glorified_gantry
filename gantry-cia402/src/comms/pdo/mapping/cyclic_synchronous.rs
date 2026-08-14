@@ -1,20 +1,20 @@
 use crate::{
-    comms::pdo::mapping::{BitRange, PDOSet, PdoMapping, PdoMappingSource, PdoType, empty::*},
+    comms::pdo::mapping::{BitRange, PdoMapping, PdoMappingSource, PdoSet, PdoType, empty::*},
     driver::startup::pdo_mapping::TransmissionType,
     od,
 };
 
-pub const CSP_PDOS: PDOSet = PDOSet {
+pub const CSP_PDOS: PdoSet = PdoSet {
     rpdos: CSP_RPDOS,
     tpdos: CSP_TPDOS,
 };
 
-pub const CSV_PDOS: PDOSet = PDOSet {
+pub const CSV_PDOS: PdoSet = PdoSet {
     rpdos: CSV_RPDOS,
     tpdos: CSV_TPDOS,
 };
 
-pub const CST_PDOS: PDOSet = PDOSet {
+pub const CST_PDOS: PdoSet = PdoSet {
     rpdos: CST_RPDOS,
     tpdos: CST_TPDOS,
 };
@@ -55,7 +55,7 @@ pub const CST_TPDOS: &[PdoMapping; 4] = &[
 ];
 
 pub const CST_RPDOS: &[PdoMapping; 4] = &[
-    RPDO_CST_STATUS_TORQUE,
+    RPDO_CST_CW_OPMODE_TORQUE,
     RPDO_EMPTY_2,
     RPDO_EMPTY_3,
     RPDO_EMPTY_4,
@@ -77,7 +77,7 @@ pub const RPDO_CSP_STATUS_POSITION_OPMODE: PdoMapping = PdoMapping {
             bit_range: BitRange { start: 24, len: 32 },
         },
     ],
-    transmission_type: TransmissionType::OnSync,
+    transmission_type: TransmissionType::OnSyncRPDO,
 };
 
 pub const TPDO_CSP_STATUS_POSITION: PdoMapping = PdoMapping {
@@ -92,7 +92,7 @@ pub const TPDO_CSP_STATUS_POSITION: PdoMapping = PdoMapping {
             bit_range: BitRange { start: 16, len: 32 },
         },
     ],
-    transmission_type: TransmissionType::OnSync,
+    transmission_type: TransmissionType::OnSyncRPDO,
 };
 
 pub const RPDO_CSV_STATUS_VELOCITY: PdoMapping = PdoMapping {
@@ -111,7 +111,7 @@ pub const RPDO_CSV_STATUS_VELOCITY: PdoMapping = PdoMapping {
             bit_range: BitRange { start: 24, len: 32 },
         },
     ],
-    transmission_type: TransmissionType::OnSync,
+    transmission_type: TransmissionType::OnSyncRPDO,
 };
 
 pub const TPDO_CSV_STATUS_VELOCITY: PdoMapping = PdoMapping {
@@ -126,10 +126,10 @@ pub const TPDO_CSV_STATUS_VELOCITY: PdoMapping = PdoMapping {
             bit_range: BitRange { start: 16, len: 32 },
         },
     ],
-    transmission_type: TransmissionType::OnSync,
+    transmission_type: TransmissionType::OnSyncRPDO,
 };
 
-pub const RPDO_CST_STATUS_TORQUE: PdoMapping = PdoMapping {
+pub const RPDO_CST_CW_OPMODE_TORQUE: PdoMapping = PdoMapping {
     pdo: PdoType::RPDO(1),
     sources: &[
         PdoMappingSource {
@@ -145,7 +145,7 @@ pub const RPDO_CST_STATUS_TORQUE: PdoMapping = PdoMapping {
             bit_range: BitRange { start: 24, len: 16 },
         },
     ],
-    transmission_type: TransmissionType::OnSync,
+    transmission_type: TransmissionType::OnSyncRPDO,
 };
 
 pub const TPDO_CST_STATUS_TORQUE: PdoMapping = PdoMapping {
@@ -160,5 +160,5 @@ pub const TPDO_CST_STATUS_TORQUE: PdoMapping = PdoMapping {
             bit_range: BitRange { start: 16, len: 16 },
         },
     ],
-    transmission_type: TransmissionType::OnSync,
+    transmission_type: TransmissionType::OnSyncRPDO,
 };

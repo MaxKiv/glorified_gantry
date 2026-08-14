@@ -11,14 +11,14 @@ use crate::{
 
 #[derive(Debug, Clone)]
 pub enum PDOMessage {
-    TPDO1(TPDO1Message),
-    TPDO2(TPDO2Message),
-    TPDO3(TPDO3Message),
-    TPDO4(TPDO4Message),
-    RPDO1(RPDO1Message),
-    RPDO2(RPDO2Message),
-    RPDO3(RPDO3Message),
-    RPDO4(RPDO4Message),
+    // TPDO1(TPDO1Message),
+    // TPDO2(TPDO2Message),
+    // TPDO3(TPDO3Message),
+    // TPDO4(TPDO4Message),
+    // RPDO1(RPDO1Message),
+    // RPDO2(RPDO2Message),
+    // RPDO3(RPDO3Message),
+    // RPDO4(RPDO4Message),
     Raw(RawPDOMessage),
 }
 
@@ -27,7 +27,7 @@ pub struct ParsedPDO {
     pub node: NodeId,
     pub num: u8,
     pub kind: PdoType,
-    pub message: PDOMessage,
+    pub message: RawPDOMessage,
     pub raw_data: [u8; 8],
     pub raw_dlc: usize,
 }
@@ -70,6 +70,7 @@ impl From<ParsedPDO> for PrettyPdo {
 }
 
 #[derive(Debug, Clone)]
+/// Raw parsed PDO Message, semantic meaning of data bytes determined by drives [`PdoSet`]
 pub struct RawPDOMessage {
     pub cob_id: usize,
     pub data: [u8; 8],

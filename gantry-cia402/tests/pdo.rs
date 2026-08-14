@@ -10,7 +10,7 @@ use tracing::*;
 mod tests {
 
     use gantry_cia402::{
-        comms::pdo::mapping::custom::{CUSTOM_PDOS, CUSTOM_TPDOS},
+        comms::pdo::mapping::default::{DEFAULT_PDOS, DEFAULT_TPDOS},
         driver::{
             nmt::nmt_task,
             receiver::subscriber::wait_for_event,
@@ -39,7 +39,7 @@ mod tests {
         // info!("Starting CANOpen sniffer");
         // task::spawn(log_canopen_pretty(canopen.clone()));
 
-        let tpdo_mapping_set = CUSTOM_TPDOS;
+        let tpdo_mapping_set = DEFAULT_TPDOS;
 
         info!("Starting CANOpen event logger");
         let (_, event_rx) = start_feedback_task(canopen.clone(), node_id, tpdo_mapping_set);
@@ -87,12 +87,12 @@ mod tests {
             .map_err(|err| format!("Error during motor parametrisation: {err}").to_string())?;
 
         info!("Configuring RPDO_mapping of motor at node id {node_id}");
-        configure_pdo_mappings(node_id, sdo.clone(), CUSTOM_PDOS.rpdos)
+        configure_pdo_mappings(node_id, sdo.clone(), DEFAULT_PDOS.rpdos)
             .await
             .map_err(|err| format!("Error during RPDO mapping configuration: {err}").to_string())?;
 
         info!("Configuring TPDO_mapping of motor at node id {node_id}");
-        configure_pdo_mappings(node_id, sdo.clone(), CUSTOM_PDOS.tpdos)
+        configure_pdo_mappings(node_id, sdo.clone(), DEFAULT_PDOS.tpdos)
             .await
             .map_err(|err| format!("Error during TPDO mapping configuration: {err}").to_string())?;
 

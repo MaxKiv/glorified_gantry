@@ -29,13 +29,13 @@ use crate::{
 /// Responsible for all CANopen communication to the drive
 /// Receives updates from the Cia402 state machine and operational mode specific handler
 /// It encodes these changes into the appropriate controlword bits or OD object
-/// It then sends these changes out on the CANopen bus using the accessor
+/// It then sends these changes out to the [`Pdo`] system to affect the drive
 pub async fn publish_updates(
     pdo_tx: mpsc::Sender<PdoCommand>,
     mut state_update_rx: mpsc::Receiver<Cia402Command>,
     mut cmd_rx: broadcast::Receiver<MotorCommand>,
     new_setpoint_tx: mpsc::Sender<Setpoint>,
-    cs_mode_tx: watch::Sender<OperationMode>,
+    mode_transition_tx: watch::Sender<OperationMode>,
     cia402_tx: mpsc::Sender<Cia402State>,
     node_id: u8,
 ) -> Result<(), DriveError> {
@@ -70,7 +70,6 @@ pub async fn publish_updates(
                         }
                     }
                 };
-
             }
 
             Ok(cmd) = cmd_rx.recv() => {
@@ -134,14 +133,14 @@ pub async fn publish_updates(
                     },
                     MotorCommand::EnterCyclicSynchronousMode{ mode } => {
                         SetpointManager::enable_cyclic_synchronous_mode(
-                                &cs_mode_tx,
+                                &mode_transition_tx,
                                 mode,
                                 node_id
                             ).await
                     },
                     MotorCommand::ExitCyclicSynchronousMode => {
                         SetpointManager::disable_cyclic_synchronous_mode(
-                                &cs_mode_tx,
+                                &mode_transition_tx,
                                 node_id
                             ).await
                     },

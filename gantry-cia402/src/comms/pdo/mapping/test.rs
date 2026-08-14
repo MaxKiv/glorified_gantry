@@ -1,13 +1,11 @@
 use crate::{
-    comms::pdo::mapping::{
-        BitRange, PDOSet, PdoMapping, PdoMappingSource, PdoType, custom::*,
-    },
+    comms::pdo::mapping::{BitRange, PdoMapping, PdoMappingSource, PdoSet, PdoType, default::*},
     driver::startup::pdo_mapping::TransmissionType,
     od,
 };
 
-pub const TEST_PDOS: PDOSet = PDOSet {
-    rpdos: CUSTOM_RPDOS,
+pub const TEST_PDOS: PdoSet = PdoSet {
+    rpdos: DEFAULT_RPDOS,
     tpdos: TEST_TPDOS,
 };
 

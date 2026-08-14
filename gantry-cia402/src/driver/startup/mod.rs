@@ -13,7 +13,7 @@ use tokio::{
 use tracing::*;
 
 use crate::{
-    comms::{pdo::mapping::PDOSet, sdo::SdoAction},
+    comms::{pdo::mapping::PdoSet, sdo::SdoAction},
     driver::{
         Cia402Identifier,
         event::MotorEvent,
@@ -31,7 +31,7 @@ pub async fn motor_startup_task(
     nmt_tx: mpsc::Sender<NmtState>,
     sdo: Arc<Mutex<SdoClient>>,
     parameters: &[SdoAction<'_>],
-    default_pdo_set: &'static PDOSet,
+    default_pdo_set: &'static PdoSet,
     event_rx: broadcast::Receiver<MotorEvent>,
 ) -> Result<(), InitialisationError> {
     trace!("Starting up motor {identifier}");

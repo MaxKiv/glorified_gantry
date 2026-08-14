@@ -77,8 +77,6 @@ impl TryFrom<RxMessage> for Frame {
 
             // T/RPDO1..4 (0x180 + n*0x200)
             0x180..=0x57F => {
-                // trace!("parsing message with COB-ID: {id} -> this is a T/RPDO");
-
                 let (kind, base) = match id {
                     0x180..=0x1FF => (PdoType::TPDO(1), 0x180),
                     0x200..=0x21F => (PdoType::RPDO(1), 0x200),
@@ -97,27 +95,23 @@ impl TryFrom<RxMessage> for Frame {
                         )));
                     }
                 };
-                // let node_id = Some((id - base) as u8);
                 let node = (id - base) as u8;
-                // trace!("parsing message with COB-ID: {id} -> this is a T/RPDO");
 
-                let (num, message) = match kind {
-                    PdoType::RPDO(1) => (1, PDOMessage::RPDO1(frame.data.try_into()?)),
-                    PdoType::RPDO(2) => (2, PDOMessage::RPDO2(frame.data.try_into()?)),
-                    PdoType::RPDO(3) => (3, PDOMessage::RPDO3(frame.data.try_into()?)),
-                    PdoType::RPDO(4) => (4, PDOMessage::RPDO4(frame.data.try_into()?)),
-                    PdoType::TPDO(1) => (1, PDOMessage::TPDO1(frame.data.try_into()?)),
-                    PdoType::TPDO(2) => (2, PDOMessage::TPDO2(frame.data.try_into()?)),
-                    PdoType::TPDO(3) => (3, PDOMessage::TPDO3(frame.data.try_into()?)),
-                    PdoType::TPDO(4) => (4, PDOMessage::TPDO4(frame.data.try_into()?)),
-                    _ => (
-                        255,
-                        PDOMessage::Raw(RawPDOMessage {
-                            cob_id: id as usize,
-                            data: frame.data,
-                            dlc: frame.dlc,
-                        }),
-                    ),
+                let num = match kind {
+                    PdoType::RPDO(1) => 1,
+                    PdoType::RPDO(2) => 2,
+                    PdoType::RPDO(3) => 3,
+                    PdoType::RPDO(4) => 4,
+                    PdoType::TPDO(1) => 1,
+                    PdoType::TPDO(2) => 2,
+                    PdoType::TPDO(3) => 3,
+                    PdoType::TPDO(4) => 4,
+                    _ => 255,
+                };
+                let message = RawPDOMessage {
+                    cob_id: id as usize,
+                    data: frame.data,
+                    dlc: frame.dlc,
                 };
 
                 let parsed = ParsedPDO {

@@ -1,12 +1,12 @@
 use oze_canopen::interface::CanOpenInterface;
 use tokio::{
-    sync::broadcast,
+    sync::{broadcast, watch},
     time::{self, Instant},
 };
 use tracing::*;
 
 use crate::{
-    comms::pdo::mapping::PdoMapping,
+    comms::pdo::mapping::{PdoMapping, PdoSet},
     driver::{
         event::MotorEvent,
         oms::OMSFlagsSW,
@@ -25,7 +25,7 @@ use crate::{
 pub async fn handle_feedback(
     this_node_id: u8,
     mut canopen: CanOpenInterface,
-    tpdo_mapping: &'static [PdoMapping],
+    current_pdo_set_rx: watch::Receiver<&'static PdoSet>,
     event_tx: broadcast::Sender<MotorEvent>,
 ) -> Result<(), DriveError> {
     let mut last_seen = Instant::now();
@@ -42,7 +42,7 @@ pub async fn handle_feedback(
 
                 // Parse received frames
                 let Ok(parsed): Result<Frame, _> = message.try_into() else {
-                    debug!("Error parsing message: {message:?}");
+                    error!("Error parsing message: {message:?}");
                     continue;
                 };
                 parsed.log();
@@ -59,16 +59,16 @@ pub async fn handle_feedback(
                     last_seen = Instant::now();
 
                     // Lets check what message we got
+                    let tpdo_mapping = { current_pdo_set_rx.borrow().clone() };
+                    let current_pdo_set_rx_clone = current_pdo_set_rx.clone();
                     if let Err(err) =
-                        handle_message(&parsed.message, &event_tx, &tpdo_mapping).await
+                        handle_message(&parsed.message, &event_tx, current_pdo_set_rx_clone).await
                     {
                         error!(
                             "Error while handling this message: {:?} - {err}",
                             parsed.message
                         );
                     }
-                } else {
-                    // trace!("message not for node {this_node_id}: {message:?} - skipping")
                 }
 
                 if Instant::now() - last_seen > COMMS_TIMEOUT
@@ -93,7 +93,7 @@ pub async fn handle_feedback(
 async fn handle_message(
     message: &MessageType,
     event_tx: &broadcast::Sender<MotorEvent>,
-    _tpdo_mapping: &&'static [PdoMapping],
+    current_pdo_set_rx: watch::Receiver<&'static PdoSet>,
 ) -> Result<(), ReceiverError> {
     match message {
         MessageType::NmtControl(_) => {
@@ -109,7 +109,7 @@ async fn handle_message(
             // We sent this: Ignore
         }
         MessageType::PDO(parsed_pdo) => {
-            handle_parsed_pdo(parsed_pdo, event_tx).await;
+            handle_parsed_pdo(parsed_pdo, event_tx, current_pdo_set_rx).await;
         }
         MessageType::NmtMonitor(nmt_monitor_message) => {
             handle_nmt_monitor(nmt_monitor_message, event_tx).await;
@@ -126,6 +126,7 @@ async fn handle_message(
 async fn handle_parsed_pdo(
     parsed_pdo: &parse::pdo_message::ParsedPDO,
     event_tx: &broadcast::Sender<MotorEvent>,
+    current_pdo_set_rx: watch::Receiver<&'static PdoSet>,
 ) {
     match &parsed_pdo.message {
         parse::pdo_message::PDOMessage::TPDO1(tpdo1_message) => {

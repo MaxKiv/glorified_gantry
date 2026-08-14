@@ -1,9 +1,10 @@
 use crate::driver::{
     cyclic::CyclicSynchronousMode,
-    oms::{home::HomeFlagsCW, position::PositionFlagsCW, setpoint::Setpoint},
+    oms::{OperationMode, home::HomeFlagsCW, position::PositionFlagsCW, setpoint::Setpoint},
     state::Cia402Flags,
 };
 
+#[derive(Debug, Clone)]
 pub enum PdoCommand {
     WriteCia402Transition(Cia402Flags),
     UpdateCia402Flags(Cia402Flags),
@@ -11,5 +12,5 @@ pub enum PdoCommand {
     UpdatePositionSetpointFlags(PositionFlagsCW),
     UpdateHomingSetpointFlags(HomeFlagsCW),
     SwitchToCyclicSynchronousMode(CyclicSynchronousMode),
-    ExitCyclicSynchronousMode,
+    ExitCyclicSynchronousMode(OperationMode),
 }

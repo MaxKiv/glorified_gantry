@@ -1,0 +1,2 @@
+- unrecoverable undefined behavior when PDO map switching fails halfway between rpdos/tpdos
+

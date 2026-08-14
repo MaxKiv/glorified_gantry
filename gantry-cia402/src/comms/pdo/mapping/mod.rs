@@ -1,22 +1,22 @@
-pub mod custom;
 pub mod cyclic_synchronous;
 pub mod default;
 pub mod empty;
 pub mod minimal;
+pub mod table;
 pub mod test;
 
-use crate::comms::pdo::mapping::custom::RPDO_CONTROL_OPMODE;
+use crate::comms::pdo::mapping::default::RPDO_CONTROL_OPMODE;
 use crate::comms::pdo::mapping::minimal::RPDO_CONTROL_TARGET_POS_TORQUE;
 use crate::driver::startup::pdo_mapping::TransmissionType;
 use crate::od::entry::ODEntry;
 
 #[derive(Debug)]
-pub struct PDOSet {
+pub struct PdoSet {
     pub rpdos: &'static [PdoMapping; 4],
     pub tpdos: &'static [PdoMapping; 4],
 }
 
-impl PDOSet {
+impl PdoSet {
     /// Checks if the RPDO_CONTROL_OPMODE PdoMapping is contained within the given default pdo set
     /// Shitty method of guarding a future maintainer against my rushed design
     /// TODO: Move this into type system, improve PDO parsing in general
@@ -39,6 +39,20 @@ impl PDOSet {
             .iter()
             .find(|map| **map == REQUIRED_RPDO)
             .is_some()
+    }
+
+    pub fn get_mapping_source_for_od_entry(
+        &self,
+        entry: &'static ODEntry,
+    ) -> Option<(usize, &'static PdoMappingSource)> {
+        for (pdo_num, mapping) in self.rpdos.iter().enumerate() {
+            for source in mapping.sources.iter() {
+                if source.entry == entry {
+                    return Some((pdo_num, source));
+                }
+            }
+        }
+        None
     }
 }
 
@@ -82,6 +96,17 @@ pub struct PdoMappingSource {
 
     // The T/RPDO bits to map the above entry to
     pub bit_range: BitRange,
+}
+
+impl PdoMapping {
+    pub fn get_dlc(&self) -> usize {
+        let mut dlc = 0u8;
+        for source in self.sources {
+            dlc += source.bit_range.len / 8;
+        }
+
+        dlc as usize
+    }
 }
 
 impl PdoType {

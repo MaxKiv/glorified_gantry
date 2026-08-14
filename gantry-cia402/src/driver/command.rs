@@ -51,7 +51,11 @@ pub enum MotorCommand {
     /// The Driver will reconfigure its T/RPDO mapping to a more verbose OnChange set
     /// and stop responding to SYNC messages
     /// Mode target using RPDO every SYNC cycle
-    ExitCyclicSynchronousMode,
+    // TODO: TMTM-42 - it seems best to have this be done automatically at the right points in time
+    // ie. when doing anything other than MotorCommand::CyclicSynchronousXXX
+    // NOTE: this means publish_updates() now has to track current mode :(
+    // choices choices
+    // ExitCyclicSynchronousMode,
 
     /// Cyclic synchronous position mode update
     /// Note: Only valid when in Cyclic Synchronous Position mode AND the drive is "InSync"
