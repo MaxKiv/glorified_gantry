@@ -6,6 +6,7 @@ members = [
     "gantry-gui",
     "gantry-demo",
     "gantry-sniffer",
+    "motor-controller",
 ]
 
 resolver = "2"
