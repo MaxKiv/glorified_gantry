@@ -14,3 +14,29 @@ pub enum Cia402State {
 pub struct Cia402Manager {
     cia402_state: Cia402State,
 }
+
+bitflags::bitflags! {
+    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+    pub struct Cia402Flags: u16 {
+        /// Bit 0: Switch on
+        /// Requests transition from "Ready to Switch On" → "Switched On".
+        const SWITCH_ON        = 1 << 0;
+
+        /// Bit 1: Enable voltage
+        /// Powers the drive (main contactor / power stage).
+        const ENABLE_VOLTAGE   = 1 << 1;
+
+        /// Bit 2: Quick stop
+        /// 0 = initiate quick stop according to deceleration parameters.
+        /// 1 = allow operation.
+        const DISABLE_QUICK_STOP       = 1 << 2;
+
+        /// Bit 3: Enable operation
+        /// Allows motion commands when set, completing transition into "Operation Enabled".
+        const ENABLE_OPERATION = 1 << 3;
+
+        /// Bit 7: Fault reset
+        /// Rising edge resets faults and attempts to return to "Switch On Disabled".
+        const FAULT_RESET      = 1 << 7;
+    }
+}
