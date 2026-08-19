@@ -1,2 +1,0 @@
-/// RT engine
-struct RealTimeEngine {}

@@ -22,6 +22,7 @@ pub enum MotorCommand {
     MoveCyclic(CyclicMotorSetpoint),
 }
 
+#[derive(Debug, PartialEq, Clone, Copy)]
 pub enum DefaultMode {
     Homing,
     ProfilePosition,
@@ -29,11 +30,14 @@ pub enum DefaultMode {
     ProfileTorque,
 }
 
+#[derive(Debug, PartialEq, Clone, Copy)]
 pub enum CyclicMode {
     CyclicPosition,
     CyclicVelocity,
     CyclicTorque,
 }
+
+#[derive(Debug, PartialEq, Clone, Copy)]
 pub enum OperationMode {
     Default(DefaultMode),
     Cyclic(CyclicMode),

@@ -1,3 +1,5 @@
+use crate::oms::{torque::TorqueSetpoint, velocity::VelocitySetpoint};
+
 pub enum DefaultMotorSetpoint {
     AbsolutePosition(PositionSetpoint),
     RelativePosition(PositionSetpoint),

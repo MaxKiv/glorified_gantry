@@ -1,8 +1,14 @@
+#![feature(core_io)]
+
 pub mod cia402;
 pub mod cmd;
+pub mod cw;
+pub mod event;
 pub mod handshake;
+pub mod oms;
 pub mod rt;
 pub mod setpoint;
+pub mod sw;
 
 use anyhow::bail;
 use tokio::sync::{mpsc, watch};
@@ -28,7 +34,8 @@ impl MotorController {
                     MotorCommand::Enable => todo!(),
                     MotorCommand::Home => todo!(),
                     MotorCommand::Cia402TransitionTo(s) => {
-                        if let Err(err) = self.cia402_manager.try_transition_to(s) {}
+                        todo!()
+                        // if let Err(err) = self.cia402_manager.try_transition_to(s) {}
                     }
                     MotorCommand::Move(default_motor_setpoint) => todo!(),
                     MotorCommand::EnterCyclicMode(cyclic_mode) => todo!(),
