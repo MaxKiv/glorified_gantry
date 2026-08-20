@@ -1,7 +1,8 @@
-#![feature(core_io)]
+// #![feature(core_io)]
 
 pub mod cia402;
 pub mod cmd;
+pub mod consts;
 pub mod cw;
 pub mod event;
 pub mod handshake;
@@ -14,14 +15,14 @@ use anyhow::bail;
 use tokio::sync::{mpsc, watch};
 
 use crate::{
-    cia402::Cia402Manager, cmd::MotorCommand, handshake::HandshakeManager, rt::RealTimeSetpoint,
+    cia402::Cia402Manager, cmd::MotorCommand, handshake::HandshakeManager, rt::RtSetpoint,
 };
 
 pub struct MotorController {
     rx: mpsc::Receiver<MotorCommand>,
     handshake_manager: HandshakeManager,
     cia402_manager: Cia402Manager,
-    tx: watch::Sender<RealTimeSetpoint>,
+    tx: watch::Sender<RtSetpoint>,
 }
 
 impl MotorController {

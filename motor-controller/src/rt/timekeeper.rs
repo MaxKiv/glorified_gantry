@@ -1,6 +1,6 @@
 use libc::timespec;
 
-use crate::rt::RT_CYCLE_TIME;
+use crate::consts::RT_CYCLE_PERIOD;
 
 #[derive(Debug, Clone, Copy)]
 pub struct CycleTiming {
@@ -46,7 +46,7 @@ impl TimeKeeper {
             0u64
         };
 
-        let expected_ns = RT_CYCLE_TIME.as_nanos() as u64;
+        let expected_ns = RT_CYCLE_PERIOD.as_nanos() as u64;
         let jitter_ns = actual_ns as i64 - expected_ns as i64;
 
         let cycle_timing = CycleTiming {
