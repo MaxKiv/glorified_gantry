@@ -1,5 +1,4 @@
-use core::io;
-use std::{os::fd::RawFd, time::Duration};
+use std::{io, os::fd::RawFd, time::Duration};
 
 /// A file descriptor backed timer
 /// Unix only, using licb::timerfd_create
