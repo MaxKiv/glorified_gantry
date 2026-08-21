@@ -3,7 +3,8 @@ pub mod queue;
 
 #[derive(Clone, Copy, Debug)]
 pub enum RtCommand {
-    Test,
     Shutdown,
-    UrMom,
+    Reconfigure,
+    SingleCycle, //?
+    Cyclic,      //?
 }

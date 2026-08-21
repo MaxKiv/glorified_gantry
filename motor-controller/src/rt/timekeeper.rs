@@ -1,19 +1,21 @@
 use libc::timespec;
 
-use crate::consts::RT_CYCLE_PERIOD;
+use crate::consts::RT_CONFIG;
 
 #[derive(Debug, Clone, Copy)]
 pub struct CycleTiming {
     cycle: u64,
-    expected_ns: u64,
-    actual_ns: u64,
-    jitter_ns: i64,
-    execution_ns: u64,
+    cycle_expected_ns: u64,
+    cycle_actual_ns: u64,
+    sync_to_sync_jitter_ns: i64,
+    feedback_duration_ns: u64,
+    cycle_execution_ns: u64,
 }
 
 pub struct TimeKeeper {
     cycle: u64,
     start_cycle: libc::timespec,
+    on_feedback: libc::timespec,
     end_sync: libc::timespec,
     prev_start: Option<libc::timespec>,
 }
@@ -27,6 +29,10 @@ impl TimeKeeper {
                 tv_nsec: 0,
             },
             end_sync: timespec {
+                tv_sec: 0,
+                tv_nsec: 0,
+            },
+            on_feedback: timespec {
                 tv_sec: 0,
                 tv_nsec: 0,
             },
@@ -46,15 +52,20 @@ impl TimeKeeper {
             0u64
         };
 
-        let expected_ns = RT_CYCLE_PERIOD.as_nanos() as u64;
+        let expected_ns = RT_CONFIG.cycle_period.as_nanos() as u64;
         let jitter_ns = actual_ns as i64 - expected_ns as i64;
+
+        let feedback_duration_ns =
+            (1_000_000_000i64 * (self.on_feedback.tv_sec - self.start_cycle.tv_sec)
+                + (self.on_feedback.tv_nsec - self.start_cycle.tv_nsec)) as u64;
 
         let cycle_timing = CycleTiming {
             cycle: self.cycle,
-            expected_ns,
-            actual_ns,
-            jitter_ns,
-            execution_ns: execution_ns as u64,
+            cycle_expected_ns: expected_ns,
+            cycle_actual_ns: actual_ns,
+            sync_to_sync_jitter_ns: jitter_ns,
+            cycle_execution_ns: execution_ns as u64,
+            feedback_duration_ns,
         };
 
         cycle_timing
@@ -87,5 +98,9 @@ impl TimeKeeper {
             let error = std::io::Error::last_os_error();
             tracing::error!("unable to time: {:?}", error);
         }
+    }
+
+    pub fn on_feedback(&mut self) {
+        TimeKeeper::time(&mut self.on_feedback)
     }
 }
