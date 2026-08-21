@@ -4,16 +4,7 @@ use std::sync::{Arc, Mutex, MutexGuard};
 
 use crate::rt::cmd::RtCommand;
 use crate::rt::cmd::queue::CommandQueue;
-
-#[derive(Debug, thiserror::Error)]
-pub enum CmdChannelError {
-    #[error("IO Error: {0:?}")]
-    IoError(io::Error),
-    #[error("Unable to lock mutex")]
-    LockError,
-    #[error("Command Channel is full")]
-    Full,
-}
+use crate::spsc::error::Error;
 
 pub struct CmdChannel<const N: usize> {
     rx: CmdReceiver<N>,
@@ -70,18 +61,16 @@ impl<'a, const N: usize> CmdReceiver<N> {
         Ok(work_required)
     }
 
-    pub fn drain(&'a mut self) -> Result<CmdDrain<'a, N>, CmdChannelError> {
+    pub fn drain(&'a mut self) -> Result<CmdDrain<'a, N>, Error> {
         // Reset eventfd
-        let _ = self
-            .read_eventfd()
-            .map_err(|err| CmdChannelError::IoError(err))?;
+        let _ = self.read_eventfd().map_err(|err| Error::IoError(err))?;
 
         // Lock mutex to guarantee RT gets priority
         // NOTE: this could block current thread, maybe we should attempt to block first, and only
         // drain eventfd later? Or provide a timeout?
 
         tracing::debug!("CmdReceiver::drain() - locking");
-        let queue_lock = self.queue.lock().map_err(|_| CmdChannelError::LockError)?;
+        let queue_lock = self.queue.lock().map_err(|_| Error::LockError)?;
         Ok(CmdDrain { queue_lock })
     }
 }
@@ -124,12 +113,13 @@ impl<const N: usize> CmdSender<N> {
         self.fd
     }
 
-    pub fn send(&self, cmd: RtCommand) -> Result<(), CmdChannelError> {
-        // Enqueue cmd
-        self.queue
-            .lock()
-            .map_err(|_| CmdChannelError::LockError)?
-            .push(cmd)?;
+    pub fn send(&self, cmd: RtCommand) -> Result<(), Error> {
+        // Block on Enqueue cmd
+        loop {
+            if let Ok(_) = self.queue.lock().map_err(|_| Error::LockError)?.push(cmd) {
+                break;
+            }
+        }
         tracing::debug!("CmdReceiver::send() - enqueued cmd {:?}", cmd);
 
         // Notify through eventfd
@@ -142,7 +132,7 @@ impl<const N: usize> CmdSender<N> {
         };
 
         if result != std::mem::size_of::<u64>() as isize {
-            return Err(CmdChannelError::IoError(io::Error::last_os_error()));
+            return Err(Error::IoError(io::Error::last_os_error()));
         }
 
         Ok(())

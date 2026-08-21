@@ -5,11 +5,14 @@ pub mod cmd;
 pub mod consts;
 pub mod cw;
 pub mod event;
+pub mod fifo;
 pub mod handshake;
 pub mod oms;
 pub mod rt;
 pub mod setpoint;
+pub mod spsc;
 pub mod sw;
+pub mod utils;
 
 use anyhow::bail;
 use tokio::sync::{mpsc, watch};
