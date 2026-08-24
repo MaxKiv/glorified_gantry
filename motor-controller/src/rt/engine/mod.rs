@@ -18,8 +18,9 @@ use crate::{
 };
 
 const SYNC: usize = 0;
-const CAN_RX: usize = 1;
-const CMD_RX: usize = 2;
+const FEEDBACK: usize = 1;
+const CAN_RX: usize = 2;
+const CMD_RX: usize = 3;
 const CMD_CHANNEL_SIZE: usize = RT_CONFIG.cmd_channel_size;
 const CMD_QUEUE_SIZE: usize = RT_CONFIG.cmd_channel_size;
 
@@ -91,6 +92,11 @@ impl RtEngine {
                 revents: 0,
             },
             libc::pollfd {
+                fd: feedback_timer.fd(),
+                events: libc::POLLIN,
+                revents: 0,
+            },
+            libc::pollfd {
                 fd: can.as_fd().as_raw_fd(),
                 events: libc::POLLIN,
                 revents: 0,
@@ -120,6 +126,9 @@ impl RtEngine {
             if Self::cmd_received(&poll_fds) {
                 self.process_cmd_rx();
             }
+            if Self::feedback_time_elapsed(&poll_fds) {
+                self.feedback_timer_elapsed();
+            }
             if Self::can_frame_received(&poll_fds) {
                 self.process_can_rx(&mut can);
             }
@@ -129,6 +138,10 @@ impl RtEngine {
 
             info!("RT engine looping");
         }
+    }
+
+    fn feedback_time_elapsed(poll_fds: &[libc::pollfd]) -> bool {
+        poll_fds[FEEDBACK].revents & libc::POLLIN != 0
     }
 
     fn cmd_received(poll_fds: &[libc::pollfd]) -> bool {
@@ -272,5 +285,9 @@ impl RtEngine {
     fn send_sync(&self, can: &CanSocket) {
         can.write_frame(&self.sync_frame)
             .expect("Unable to write SYNC");
+    }
+
+    fn feedback_timer_elapsed(&self) -> _ {
+        todo!()
     }
 }
