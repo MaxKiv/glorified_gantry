@@ -39,8 +39,8 @@ pub enum MessageType {
     NmtMonitor(NmtMonitorMessage),
     Unknown(RxMessage), // No node id
 }
-#[derive(Debug)]
 
+#[derive(Debug)]
 pub struct NmtControlMessage {
     pub requested_state: NmtState,
 }

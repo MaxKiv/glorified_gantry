@@ -91,7 +91,6 @@ pub async fn handle_feedback(
 }
 
 async fn handle_message(
-    message: &MessageType,
     event_tx: &broadcast::Sender<MotorEvent>,
     current_pdo_set_rx: watch::Receiver<&'static PdoSet>,
 ) -> Result<(), ReceiverError> {

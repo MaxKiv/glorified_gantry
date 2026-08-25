@@ -1,9 +1,15 @@
 pub mod cmd;
 pub mod engine;
+pub mod eventfd;
 pub mod timekeeper;
 pub mod timerfd;
 
-use crate::{cw::ControlWord, rt::timekeeper::CycleTiming};
+use crate::{
+    cmd::{DefaultMode, OperationMode},
+    cw::ControlWord,
+    oms::OperationMode::ProfileTorque,
+    rt::timekeeper::CycleTiming,
+};
 use tracing::{debug, error, info, warn};
 
 pub struct RtSetpoint {
@@ -15,8 +21,22 @@ pub struct RtSetpoint {
 }
 
 pub struct RtConfig {
-    // pdo_mapping: PdoMapping,
+    mode: OperationMode,
+    pdo_parser: PdoParser, // PdoMapping?
+                           // motor
 }
+
+impl Default for RtConfig {
+    fn default() -> Self {
+        Self {
+            mode: OperationMode::Default(DefaultMode::ProfileTorque),
+            pdo_parser: Default::default(),
+        }
+    }
+}
+
+#[derive(Default)]
+pub struct PdoParser;
 
 pub struct RtTimeComms {
     // event_rx: RT_API::Receiver<RealTimeFeedback>,
@@ -79,16 +99,16 @@ mod tests {
 
                     info!("tokio sending shutdown");
                     cmd_tx
-                        .send(RtCommand::Shutdown)
+                        .send(RtCommand::SingleCycle)
                         .expect("failed to notify RT");
 
-                    tokio::time::sleep(std::time::Duration::from_millis(10)).await;
-                    cmd_tx
-                        .send(RtCommand::Reconfigure)
-                        .expect("failed to notify RT");
-                    cmd_tx
-                        .send(RtCommand::Reconfigure)
-                        .expect("failed to notify RT");
+                    // tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+                    // cmd_tx
+                    //     .send(RtCommand::Reconfigure)
+                    //     .expect("failed to notify RT");
+                    // cmd_tx
+                    //     .send(RtCommand::Shutdown)
+                    //     .expect("failed to notify RT");
                 }
             });
         });
