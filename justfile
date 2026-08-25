@@ -22,3 +22,6 @@ snif:
 # Show the current canbus load
 show-can-load:
     canbusload can0@1000000 -rbtscv
+
+spam-can:
+    for i in {0..1000}; do cansend can0 123#DEADBEEF; done

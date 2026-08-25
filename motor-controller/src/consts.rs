@@ -26,6 +26,7 @@ pub const RT_CONFIG: RtConfig = RtConfig {
     cycle_period: Duration::from_millis(500),
     feedback_period: Duration::from_micros(250),
     cmd_queue_size: 64,
-    cmd_channel_size: 64,
+    // cmd_channel_size: 64,
+    cmd_channel_size: 8,
     can_frames_per_poll: 1,
 };

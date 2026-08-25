@@ -1,5 +1,6 @@
 // #![feature(core_io)]
 
+pub mod canopen;
 pub mod cia402;
 pub mod cmd;
 pub mod consts;
