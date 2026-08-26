@@ -9,8 +9,8 @@ pub enum ODValue {
     U32(u32),
     I64(i64),
     U64(u64),
-    VisibleString(String),
-    OctetString(Vec<u8>),
+    VisibleString([u8; 8]),
+    OctetString([u8; 8]),
     Array(usize), // Indicates the presence of sub-indices
     Other,
 }

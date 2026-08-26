@@ -30,7 +30,7 @@ pub const DEVICE_NAME: ODEntry = ODEntry::new(
     0x00,
     AccessType::ReadOnly,
     MappableType::None,
-    ODValue::VisibleString(std::string::String::new()),
+    ODValue::VisibleString([0u8; 8]),
 );
 
 /// Controlword — control state machine & motion commands
@@ -88,6 +88,15 @@ pub const TORQUE_ACTUAL_VALUE: ODEntry = ODEntry::new(
     ODValue::I16(0),
 );
 
+/// Contains the current following error in user-defined units
+pub const FOLLOWING_ERROR_ACTUAL_VALUE: ODEntry = ODEntry::new(
+    0x60F4,
+    0x00,
+    AccessType::ReadOnly,
+    MappableType::TPDO,
+    ODValue::I32(0),
+);
+
 /// Mode of operation (set)
 /// 1 = Profile Position, 3 = Profile Velocity, 4 = Profile Torque, 6 = Homing
 pub const SET_OPERATION_MODE: ODEntry = ODEntry::new(
@@ -103,7 +112,7 @@ pub const GET_OPERATION_MODE: ODEntry = ODEntry::new(
     0x6061,
     0x00,
     AccessType::ReadOnly,
-    MappableType::RPDO,
+    MappableType::TPDO,
     ODValue::I8(1),
 );
 
@@ -115,7 +124,7 @@ pub const POSITION_WINDOW: ODEntry = ODEntry::new(
     0x6067,
     0x00,
     AccessType::ReadWrite,
-    MappableType::TPDO,
+    MappableType::RPDO,
     ODValue::U32(0),
 );
 
@@ -124,7 +133,7 @@ pub const SET_TARGET_POSITION: ODEntry = ODEntry::new(
     0x607A,
     0x00,
     AccessType::ReadWrite,
-    MappableType::TPDO,
+    MappableType::RPDO,
     ODValue::I32(0x0000_0FA0),
 );
 
@@ -133,7 +142,7 @@ pub const SET_TARGET_VELOCITY: ODEntry = ODEntry::new(
     0x60FF,
     0x00,
     AccessType::ReadWrite,
-    MappableType::TPDO,
+    MappableType::RPDO,
     ODValue::I32(0),
 );
 
@@ -143,7 +152,7 @@ pub const SET_TARGET_TORQUE: ODEntry = ODEntry::new(
     0x6071,
     0x00,
     AccessType::ReadWrite,
-    MappableType::TPDO,
+    MappableType::RPDO,
     ODValue::I16(0),
 );
 
@@ -153,7 +162,7 @@ pub const SOFTWARE_POSITION_LIMIT: ODEntry = ODEntry::new(
     0x607D,
     0x00,
     AccessType::ReadWrite,
-    MappableType::RPDO,
+    MappableType::None,
     ODValue::Array(3),
 );
 
@@ -180,7 +189,7 @@ pub const POSITION_LIIMT: ODEntry = ODEntry::new(
     0x607B,
     0x00,
     AccessType::ReadOnly,
-    MappableType::RPDO,
+    MappableType::None,
     ODValue::Array(3),
 );
 
@@ -277,7 +286,7 @@ pub const MOTION_PROFILE_TYPE: ODEntry = ODEntry::new(
     ODValue::I16(0),
 );
 
-/// Max acceleration [counts/s²]
+/// Max acceleration [counts/s²] for profile modes
 pub const MAX_ACCELERATION: ODEntry = ODEntry::new(
     0x60C5,
     0x00,
@@ -286,7 +295,7 @@ pub const MAX_ACCELERATION: ODEntry = ODEntry::new(
     ODValue::U32(0x1388),
 );
 
-/// Max deceleration [counts/s²]
+/// Max deceleration [counts/s²] for profile modes
 pub const MAX_DECELERATION: ODEntry = ODEntry::new(
     0x60C6,
     0x00,

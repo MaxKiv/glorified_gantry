@@ -1,6 +1,9 @@
 use socketcan::{CanDataFrame, EmbeddedFrame};
 
-use crate::canopen::frame::{CanOpenParseError, CobId, NodeId};
+use crate::canopen::{
+    frame::{CanOpenParseError, CobId, NodeId},
+    pdo::PdoType,
+};
 
 #[derive(Debug)]
 pub struct RawPdoMessage {
@@ -45,10 +48,4 @@ impl RawPdoMessage {
 
         Ok(msg)
     }
-}
-
-#[derive(Debug)]
-pub enum PdoType {
-    TPDO,
-    RPDO,
 }

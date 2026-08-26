@@ -1,4 +1,5 @@
 pub mod cycle_rx;
+pub mod cfg;
 
 use std::{
     os::fd::{AsFd, AsRawFd},
@@ -10,15 +11,8 @@ use socketcan::{CanFrame, CanSocket, EmbeddedFrame, Frame, Socket};
 use tracing::{error, info, trace, warn};
 
 use crate::{
-    canopen::{MessageType, frame::CanOpenFrame},
-    consts::RT_CONFIG,
-    fifo::Fifo,
-    rt::{
-        RtConfig, RtError,
-        cmd::{RtCommand, channel::CmdReceiver},
-        engine::cycle_rx::CycleState,
-        timekeeper::TimeKeeper,
-        timerfd::{TimerFd, TimerType},
+    canopen::{MessageType, frame::CanOpenFrame, pdo::PdoType}, consts::{RT_CONFIG, pdo::gantry::{DEFAULT_ACTIVE_GANTRY_PDOCFG, DEFAULT_GANTRY_PDOCFG, HGantryActivePdoConfig, HGantryPdoConfig}}, fifo::Fifo, rt::{
+         RtError, cmd::{RtCommand, channel::CmdReceiver}, engine::cfg::ActiveRtEngineConfig, timekeeper::TimeKeeper, timerfd::{TimerFd, TimerType},
     },
 };
 
@@ -47,12 +41,13 @@ pub struct RtEngine {
     cmd_queue: Fifo<RtCommand, CMD_QUEUE_SIZE>,
     state: RtState,
     sync_frame: CanFrame,
-    active_config: RtConfig,
+    gantry_pdo_cfg: HGantryPdoConfig,
+    active_cfg: ActiveRtEngineConfig,
     poll_fds: [pollfd; 4],
-    timekeeper: TimeKeeper,
     sync_timer: TimerFd,
     feedback_timer: TimerFd,
-    cycle_state: CycleState,
+    timekeeper: TimeKeeper,
+    // cycle_state: CycleState,
 }
 
 impl RtEngine {
@@ -111,12 +106,13 @@ impl RtEngine {
             state: RtState::default(),
             cmd_queue: Fifo::<RtCommand, CMD_QUEUE_SIZE>::new(),
             sync_frame: sync,
-            active_config: RtConfig::default(),
             can,
             poll_fds,
             timekeeper,
             sync_timer,
             feedback_timer,
+            gantry_pdo_cfg: DEFAULT_GANTRY_PDOCFG,
+            active_cfg: DEFAULT_ACTIVE_GANTRY_PDOCFG,
         };
 
         // Spawn RT engine thread
@@ -228,13 +224,20 @@ impl RtEngine {
                         &frame.data()[..frame.data().len()]
                     );
 
-                    let parsed = CanOpenFrame::from_canframe(frame);
-                    match parsed {
-                        Ok(frame) => {
-                            info!("RX Parsed: {:?}", frame);
+                    let Ok(parsed) = CanOpenFrame::from_canframe(frame) else {
+                        error!("Unable to parse CAN RX id={:#x} data={:?}", frame.raw_id(), &frame.data());
+                        continue;
+                    };
+                    info!("CAN RX Parsed: {:?}", frame);
 
-                            // Parse PDO messages according to current [`ActiveConfiguration`]
-                            if let MessageType::PDO(pdo) = frame.msg {
+
+                    match parsed.msg {
+                        MessageType::PDO(pdo) => {
+                            if pdo.pdo_type == PdoType::TPDO {
+                                self.active_cfg
+                                if pdo.node_id 
+                            }
+
                                 // NOTE: is Below right?
                                 if let Some(motor) = self.active_pdo_config.expected_tpdo(&pdo) {
                                     if !self.cycle_rx.received[motor] {
@@ -251,13 +254,10 @@ impl RtEngine {
                                         return state change
                                     }
                                 }
-                            }
 
                             // Report parsed messages to tokio?
                         }
-                        Err(err) => {
-                            error!("cansocket -> CANOpen parse error: {err:?}");
-                        }
+                        _ => todo!(),
                     }
                 }
 

@@ -77,7 +77,11 @@ impl ODEntry {
         })
     }
 
-    pub fn get_num_bytes(&self) -> usize {
+    pub const fn get_num_bits(&self) -> u8 {
+        (self.get_num_bytes() * 8) as u8
+    }
+
+    pub const fn get_num_bytes(&self) -> usize {
         match &self.default {
             ODValue::Bool(_) => 1,
             ODValue::I8(_) => 1,

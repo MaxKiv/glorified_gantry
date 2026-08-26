@@ -17,28 +17,32 @@ pub enum MotorCommand {
     Home,
     Cia402TransitionTo(Cia402State),
     Move(DefaultMotorSetpoint),
-    EnterCyclicMode(CyclicMode),
-    ExitCyclic(DefaultMode),
+    EnterCyclicMode(OperationMode), // TODO: make EnterCyclicMode(PP) irrepresentable
+    ExitCyclic(OperationMode),
     MoveCyclic(CyclicMotorSetpoint),
 }
 
 #[derive(Debug, PartialEq, Clone, Copy)]
-pub enum DefaultMode {
-    Homing,
-    ProfilePosition,
-    ProfileVelocity,
-    ProfileTorque,
-}
-
-#[derive(Debug, PartialEq, Clone, Copy)]
-pub enum CyclicMode {
-    CyclicPosition,
-    CyclicVelocity,
-    CyclicTorque,
-}
-
-#[derive(Debug, PartialEq, Clone, Copy)]
+#[repr(C)]
 pub enum OperationMode {
-    Default(DefaultMode),
-    Cyclic(CyclicMode),
+    Homing = 0,
+    ProfilePosition = 1,
+    ProfileVelocity = 2,
+    ProfileTorque = 3,
+    CyclicPosition = 4,
+    CyclicVelocity = 5,
+    CyclicTorque = 6,
+}
+
+impl OperationMode {
+    pub const COUNT: usize = std::mem::variant_count::<OperationMode>();
+
+    pub fn is_cyclic(&self) -> bool {
+        match self {
+            OperationMode::CyclicPosition
+            | OperationMode::CyclicVelocity
+            | OperationMode::CyclicTorque => true,
+            _ => false,
+        }
+    }
 }

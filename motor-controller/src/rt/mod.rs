@@ -5,9 +5,11 @@ pub mod timekeeper;
 pub mod timerfd;
 
 use crate::{
-    cmd::{DefaultMode, OperationMode},
+    canopen::{
+        od::entry::ODEntry,
+        pdo::{PdoType, TransmissionType},
+    },
     cw::ControlWord,
-    oms::OperationMode::ProfileTorque,
     rt::timekeeper::CycleTiming,
 };
 use tracing::{debug, error, info, warn};
@@ -18,28 +20,6 @@ pub struct RtSetpoint {
     target: i32,
     // OR?
     // target: MotorSetpoint(ProfilePosition(10))
-}
-
-pub struct RtConfig {
-    mode: OperationMode,
-    pdo_parser: PdoParser, // PdoMapping?
-                           // motor
-}
-
-impl Default for RtConfig {
-    fn default() -> Self {
-        Self {
-            mode: OperationMode::Default(DefaultMode::ProfileTorque),
-            pdo_parser: Default::default(),
-        }
-    }
-}
-
-#[derive(Default)]
-pub struct PdoParser;
-
-pub struct RtTimeComms {
-    // event_rx: RT_API::Receiver<RealTimeFeedback>,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -62,8 +42,6 @@ struct RtFeedback<const N: usize> {
 
 #[cfg(test)]
 mod tests {
-    use libc::select;
-
     use crate::{
         consts::RT_CONFIG,
         rt::{

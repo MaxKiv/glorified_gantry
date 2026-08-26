@@ -20,8 +20,6 @@ use crate::{
     sw::StatusWord,
 };
 
-// pub const STARTUP_SETPOINT: Setpoint = Setpoint::ProfilePosition(STARTUP_POSITIONMODE_SETPOINT);
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum OperationMode {
     AutoSetup = -2,
@@ -72,20 +70,6 @@ impl From<CyclicSynchronousMode> for OperationMode {
         }
     }
 }
-
-// impl From<Setpoint> for OperationMode {
-//     fn from(value: Setpoint) -> Self {
-//         match value {
-//             Setpoint::ProfilePosition(_) => OperationMode::ProfilePosition,
-//             Setpoint::ProfileVelocity(_) => OperationMode::ProfileVelocity,
-//             Setpoint::ProfileTorque(_) => OperationMode::ProfileTorque,
-//             Setpoint::Home(_) => OperationMode::Homing,
-//             Setpoint::CyclicPosition(_) => OperationMode::CyclicSynchronousPosition,
-//             Setpoint::CyclicVelocity(_) => OperationMode::CyclicSynchronousVelocity,
-//             Setpoint::CyclicTorque(_) => OperationMode::CyclicSynchronousTorque,
-//         }
-//     }
-// }
 
 impl TryFrom<i8> for OperationMode {
     type Error = ();
