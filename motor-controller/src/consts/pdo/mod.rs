@@ -14,7 +14,8 @@ pub mod pp;
 pub mod pt;
 pub mod pv;
 
-/// Full PDO Configuration of a single node, one mapping per relevant OperationMode
+/// Full PDO Configuration of a single node
+/// maps from every relevant OperationMode -> PdoConfig for that mode
 pub struct NodePdoConfig {
     profile_position: OMSNodePdoConfig,
     profile_velocity: OMSNodePdoConfig,

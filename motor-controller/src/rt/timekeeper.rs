@@ -13,7 +13,6 @@ pub struct CycleTiming {
 }
 
 pub struct TimeKeeper {
-    cycle: u64,
     start_cycle: libc::timespec,
     on_feedback: libc::timespec,
     end_sync: libc::timespec,
@@ -23,7 +22,6 @@ pub struct TimeKeeper {
 impl TimeKeeper {
     pub fn new() -> Self {
         Self {
-            cycle: 0u64,
             start_cycle: timespec {
                 tv_sec: 0,
                 tv_nsec: 0,
@@ -41,7 +39,7 @@ impl TimeKeeper {
     }
 
     /// Produces timing stats from the current timekeeper stats
-    pub fn get_cycle_timing(&self) -> CycleTiming {
+    pub fn get_cycle_timing(&self, cycle: u64) -> CycleTiming {
         let execution_ns = 1_000_000_000i64 * (self.end_sync.tv_sec - self.start_cycle.tv_sec)
             + (self.end_sync.tv_nsec - self.start_cycle.tv_nsec);
 
@@ -60,7 +58,7 @@ impl TimeKeeper {
                 + (self.on_feedback.tv_nsec - self.start_cycle.tv_nsec)) as u64;
 
         let cycle_timing = CycleTiming {
-            cycle: self.cycle,
+            cycle,
             cycle_expected_ns: expected_ns,
             cycle_actual_ns: actual_ns,
             sync_to_sync_jitter_ns: jitter_ns,
@@ -79,11 +77,10 @@ impl TimeKeeper {
         TimeKeeper::time(&mut self.end_sync)
     }
 
-    pub fn end_cycle(&mut self) -> CycleTiming {
+    pub fn end_cycle(&mut self, cycle: u64) -> CycleTiming {
         self.time_end_sync();
-        let cycle_timing = self.get_cycle_timing();
+        let cycle_timing = self.get_cycle_timing(cycle);
         self.prev_start = Some(self.start_cycle);
-        self.cycle += 1;
         cycle_timing
     }
 

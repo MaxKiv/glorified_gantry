@@ -35,30 +35,24 @@ impl PdoMappingSource {
     }
 }
 
-/// Per node pdo mapping
+/// Operation Mode specific pdo mapping for a single node
 #[derive(Default)]
 pub struct OMSNodePdoConfig {
-    pub tpdo1: Option<PdoMapping>,
-    pub tpdo2: Option<PdoMapping>,
-    pub tpdo3: Option<PdoMapping>,
-    pub tpdo4: Option<PdoMapping>,
-    pub rpdo1: Option<PdoMapping>,
-    pub rpdo2: Option<PdoMapping>,
-    pub rpdo3: Option<PdoMapping>,
-    pub rpdo4: Option<PdoMapping>,
+    pub tpdo: [Option<PdoMapping>; 4],
+    pub rpdo: [Option<PdoMapping>; 4],
 }
 
-impl OMSNodePdoConfig {
-    pub const fn empty() -> Self {
-        OMSNodePdoConfig {
-            tpdo1: None,
-            tpdo2: None,
-            tpdo3: None,
-            tpdo4: None,
-            rpdo1: None,
-            rpdo2: None,
-            rpdo3: None,
-            rpdo4: None,
-        }
-    }
-}
+// impl OMSNodePdoConfig {
+//     pub const fn empty() -> Self {
+//         OMSNodePdoConfig {
+//             tpdos: None,
+//             tpdo2: None,
+//             tpdo3: None,
+//             tpdo4: None,
+//             rpdo1: None,
+//             rpdo2: None,
+//             rpdo3: None,
+//             rpdo4: None,
+//         }
+//     }
+// }

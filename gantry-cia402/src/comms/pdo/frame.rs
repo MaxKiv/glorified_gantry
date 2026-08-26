@@ -28,7 +28,7 @@ pub struct PdoFrame {
     /// NOTE: Are sent across the wire as is, so make sure to little-endian encode multi-byte values
     pub data: [u8; 8],
     /// Data length code - when sending a PdoFrame data[..dlc] is send on the wire
-    dlc: usize,
+    pub dlc: usize,
     mapping: &'static PdoMapping,
 }
 

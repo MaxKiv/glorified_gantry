@@ -1,8 +1,9 @@
-pub mod cycle_rx;
 pub mod cfg;
+pub mod cycle_rx;
 
 use std::{
     os::fd::{AsFd, AsRawFd},
+    sync::atomic::{AtomicUsize, Ordering},
     thread::JoinHandle,
 };
 
@@ -11,8 +12,27 @@ use socketcan::{CanFrame, CanSocket, EmbeddedFrame, Frame, Socket};
 use tracing::{error, info, trace, warn};
 
 use crate::{
-    canopen::{MessageType, frame::CanOpenFrame, pdo::PdoType}, consts::{RT_CONFIG, pdo::gantry::{DEFAULT_ACTIVE_GANTRY_PDOCFG, DEFAULT_GANTRY_PDOCFG, HGantryActivePdoConfig, HGantryPdoConfig}}, fifo::Fifo, rt::{
-         RtError, cmd::{RtCommand, channel::CmdReceiver}, engine::cfg::ActiveRtEngineConfig, timekeeper::TimeKeeper, timerfd::{TimerFd, TimerType},
+    canopen::{MessageType, frame::CanOpenFrame, pdo::PdoType},
+    consts::{
+        RT_CONFIG,
+        pdo::gantry::{
+            DEFAULT_ACTIVE_GANTRY_PDOCFG, DEFAULT_GANTRY_PDOCFG, HGantryActivePdoConfig,
+            HGantryPdoConfig, TEST_GANTRY_NODEMAP,
+        },
+    },
+    fifo::Fifo,
+    rt::{
+        RtError,
+        cmd::{RtCommand, channel::CmdReceiver},
+        engine::{
+            cfg::{
+                CONST_RT_ENGINE_CFG, ConstRtEngineConfig, DEFAULT_MUT_RT_ENGINE_CFG,
+                MutableRtEngineConfig,
+            },
+            cycle_rx::{CyclePhase, CycleState},
+        },
+        timekeeper::TimeKeeper,
+        timerfd::{TimerFd, TimerType},
     },
 };
 
@@ -34,6 +54,23 @@ enum RtState {
     Shutdown,
 }
 
+#[derive(Debug, Clone, Copy, Default)]
+pub struct PdoValues {
+    // TPDO
+    pub control_word: u16,
+    pub operation_mode: i8,
+    pub target_position: i32,
+    pub target_velocity: i32,
+    pub target_torque: i16,
+
+    // RPDO
+    pub status_word: u16,
+    pub operation_mode_display: i8,
+    pub position_actual: i32,
+    pub velocity_actual: i32,
+    pub torque_actual: i16,
+}
+
 pub struct RtEngine {
     can_interface: String,
     can: CanSocket,
@@ -41,13 +78,13 @@ pub struct RtEngine {
     cmd_queue: Fifo<RtCommand, CMD_QUEUE_SIZE>,
     state: RtState,
     sync_frame: CanFrame,
-    gantry_pdo_cfg: HGantryPdoConfig,
-    active_cfg: ActiveRtEngineConfig,
+    const_rt_cfg: ConstRtEngineConfig,
+    active_rt_cfg: MutableRtEngineConfig,
     poll_fds: [pollfd; 4],
     sync_timer: TimerFd,
     feedback_timer: TimerFd,
     timekeeper: TimeKeeper,
-    // cycle_state: CycleState,
+    cycle_state: CycleState,
 }
 
 impl RtEngine {
@@ -100,6 +137,12 @@ impl RtEngine {
             },
         ];
 
+        let cycle_state = CycleState {
+            cycle: 0u64,
+            phase: CyclePhase::SendingSync,
+            received: [false; 4],
+        };
+
         let mut rt = Self {
             can_interface,
             cmd_channel_rx: cmd_rx,
@@ -111,8 +154,9 @@ impl RtEngine {
             timekeeper,
             sync_timer,
             feedback_timer,
-            gantry_pdo_cfg: DEFAULT_GANTRY_PDOCFG,
-            active_cfg: DEFAULT_ACTIVE_GANTRY_PDOCFG,
+            const_rt_cfg: CONST_RT_ENGINE_CFG,
+            active_rt_cfg: DEFAULT_MUT_RT_ENGINE_CFG,
+            cycle_state,
         };
 
         // Spawn RT engine thread
@@ -207,7 +251,8 @@ impl RtEngine {
         self.feedback_timer.arm_once().map_err(|_| RtError::Timer)?;
 
         // Bookkeeping
-        let cycle_timing = self.timekeeper.end_cycle();
+        self.cycle_state.transition_to(CyclePhase::SendingSync);
+        let cycle_timing = self.timekeeper.end_cycle(self.cycle_state.cycle);
 
         info!("{:?} - SYNC", cycle_timing);
 
@@ -225,35 +270,49 @@ impl RtEngine {
                     );
 
                     let Ok(parsed) = CanOpenFrame::from_canframe(frame) else {
-                        error!("Unable to parse CAN RX id={:#x} data={:?}", frame.raw_id(), &frame.data());
+                        error!(
+                            "Unable to parse CAN RX id={:#x} data={:?}",
+                            frame.raw_id(),
+                            &frame.data()
+                        );
                         continue;
                     };
                     info!("CAN RX Parsed: {:?}", frame);
 
-
                     match parsed.msg {
                         MessageType::PDO(pdo) => {
+                            // What type of PDO is this?
                             if pdo.pdo_type == PdoType::TPDO {
-                                self.active_cfg
-                                if pdo.node_id 
-                            }
-
-                                // NOTE: is Below right?
-                                if let Some(motor) = self.active_pdo_config.expected_tpdo(&pdo) {
-                                    if !self.cycle_rx.received[motor] {
-                                        self.cycle_rx.received[motor] = true;
-                                        self.cycle_rx.received_count += 1;
-
-                                        self.store_feedback(motor, pdo);
-                                    }
-
-                                    if self.cycle_rx.all_received() {
-                                        // NOTE: either
-                                        self.execute_cycle();
-                                        // OR
-                                        return state change
+                                // Is this TPDO for a node we track?
+                                if self.const_rt_cfg.node_map.z == pdo.node_id {
+                                    // Parse TPDO according to currently active pdo cfg
+                                    if let Some(oms_pdo_cfg) =
+                                        self.active_rt_cfg.current_pdo_cfg.z.tpdo[pdo.num]
+                                    {
+                                        // TODO: toggle activation in sync start
+                                        if expecting_cycle_feedback {
+                                            assosiate_with_cycle();
+                                        }
                                     }
                                 }
+                            }
+
+                            // // NOTE: is Below right?
+                            // if let Some(motor) = self.active_pdo_config.expected_tpdo(&pdo) {
+                            //     if !self.cycle_rx.received[motor] {
+                            //         self.cycle_rx.received[motor] = true;
+                            //         self.cycle_rx.received_count += 1;
+                            //
+                            //         self.store_feedback(motor, pdo);
+                            //     }
+                            //
+                            //     if self.cycle_rx.all_received() {
+                            //         // NOTE: either
+                            //         self.execute_cycle();
+                            //         // OR
+                            //         return state change
+                            //     }
+                            // }
 
                             // Report parsed messages to tokio?
                         }
