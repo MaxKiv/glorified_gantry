@@ -7,7 +7,7 @@ use socketcan::CanDataFrame;
 
 use crate::canopen::{
     frame::NodeId,
-    pdo::RawPdoMessage,
+    pdo::message::RawPdoMessage,
     sdo::{SdoRequest, SdoResponse},
 };
 

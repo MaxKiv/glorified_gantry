@@ -11,7 +11,9 @@ use crate::canopen::{
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct CobId(pub u16);
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+/// CANOpen NodeId
 pub struct NodeId(pub u8);
 
 #[derive(Debug)]

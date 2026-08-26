@@ -1,4 +1,4 @@
-// #![feature(core_io)]
+#![feature(variant_count)]
 
 pub mod canopen;
 pub mod cia402;

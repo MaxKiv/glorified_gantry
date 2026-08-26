@@ -1,3 +1,5 @@
+pub mod pdo;
+
 use std::time::Duration;
 
 pub struct RtConfig {

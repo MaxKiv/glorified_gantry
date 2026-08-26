@@ -40,3 +40,19 @@ bitflags::bitflags! {
         const FAULT_RESET      = 1 << 7;
     }
 }
+
+/// Identifies a single Cia402 capable motor drive
+/// Cia402 drives contain this in OD 0x1000 & 0x1008
+#[derive(Debug, Clone)]
+pub struct Cia402Identifier {
+    pub node_id: NodeId,                         // CAN node id
+    pub device_profile_number: CiaProfileNumber, // Supported cia standard
+    pub motor_type: MotorType,                   // Type of the motor
+    pub device_name: &'static str,               // Device name given by manufacturer
+}
+
+impl std::fmt::Display for Cia402Identifier {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::result::Result<(), std::fmt::Error> {
+        write!(f, "{} - node_id: {}", self.device_name, self.node_id)
+    }
+}
