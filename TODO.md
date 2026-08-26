@@ -1,12 +1,22 @@
 ### Left off:
 
-Started on motor-controller, supposed to be a cia402driver impl with less tasks.
+Figure out:
 
-- impl motor-controller
-- finish gantry-controller
-- write rt_engine
+1. how to switch pdo configuration?
+2. how to parse PDO on CAN_RX
+3. how to map "All motors setpoints" -> current active PDO mapping
+
+4. Should Profile modes RPDO transmission type be "onchange" or "onsync"?
+5. Should Cyclic Profile mode use TPDO2?
+6. Validate TEST/DEMOSTRATOR HGantryNodeMap
+7. Merge HGantryNodeMap -> AxisConfiguration?
+8. Move gantry specific stuff to its own crate
 
 ## Improvements
+
+### Move Gantry specific stuff to its own crate
+
+Yea that
 
 ### Heartbeat / Node guarding protocol
 

@@ -302,7 +302,7 @@ impl Pdo {
 
         // 2. Construct RPDO2: set new cyclic Synchronous position target
         // TODO: hardcoded offsets
-        self.rpdo_output_buffer[num as usize].set(
+        self.rpdo_output_buffer.rpdo_frames[num as usize].set(
             (RPDO_CONTROL_TARGET_POS_TORQUE.sources[pos_target_idx]
                 .bit_range
                 .start
@@ -342,7 +342,7 @@ impl Pdo {
 
         // 2. Construct RPDO2: set new cyclic Synchronous position target
         // TODO: hardcoded offsets
-        self.rpdo_output_buffer[num as usize].set(
+        self.rpdo_output_buffer.rpdo_frames[num as usize].set(
             (RPDO_CONTROL_TARGET_POS_TORQUE.sources[torque_target_idx]
                 .bit_range
                 .start
@@ -375,11 +375,11 @@ impl Pdo {
 
         // 1. Construct RPDO2: Set position and velocity target
         // TODO: hardcoded offsets
-        self.rpdo_output_buffer[RPDO_IDX_TARGET_POS].set(
+        self.rpdo_output_buffer.rpdo_frames[RPDO_IDX_TARGET_POS].set(
             (RPDO_TARGET_POS.sources[0].bit_range.start / 8) as usize,
             &(*target as u32).to_le_bytes(),
         );
-        self.rpdo_output_buffer[RPDO_IDX_TARGET_POS].set(
+        self.rpdo_output_buffer.rpdo_frames[RPDO_IDX_TARGET_POS].set(
             (RPDO_TARGET_POS.sources[1].bit_range.start / 8) as usize,
             &(profile_velocity.to_le_bytes()),
         );
@@ -453,7 +453,7 @@ impl Pdo {
         self.send_rpdo(RPDO_CONTROL_OPMODE).await?;
 
         // Set position and torque target
-        self.rpdo_output_buffer[RPDO_IDX_TARGET_VEL]
+        self.rpdo_output_buffer.rpdo_frames[RPDO_IDX_TARGET_VEL]
             // TODO: hardcoded offset
             .set(
                 (RPDO_TARGET_VEL.sources[0].bit_range.start / 8) as usize,
@@ -479,7 +479,7 @@ impl Pdo {
         self.send_rpdo(RPDO_CONTROL_OPMODE).await?;
 
         // Set position and torque target
-        self.rpdo_output_buffer[RPDO_IDX_TARGET_TORQUE]
+        self.rpdo_output_buffer.rpdo_frames[RPDO_IDX_TARGET_TORQUE]
             // TODO: hardcoded offset
             .set(
                 (RPDO_TARGET_TORQUE.sources[0].bit_range.start / 8) as usize,
@@ -599,12 +599,14 @@ impl Pdo {
         let idx = (num - 1) as usize;
         trace!(
             "sending RPDO #{num} - Constructing TxPacket from data: {:?} - dlc {}",
-            self.rpdo_output_buffer[idx].data, self.rpdo_output_buffer[idx].dlc,
+            self.rpdo_output_buffer.rpdo_frames[idx].data,
+            self.rpdo_output_buffer.rpdo_frames[idx].dlc,
         );
 
         let value = TxPacket::new(
             cob_id,
-            &self.rpdo_output_buffer[idx].data[..self.rpdo_output_buffer[idx].dlc],
+            &self.rpdo_output_buffer.rpdo_frames[idx].data
+                [..self.rpdo_output_buffer.rpdo_frames[idx].dlc],
         )
         .map_err(DriveError::CANOpenError)?;
 
@@ -627,8 +629,8 @@ impl Pdo {
         let cw_idx = (num - 1) as usize;
 
         let cw_bytes = [
-            self.rpdo_output_buffer[cw_idx].data[0],
-            self.rpdo_output_buffer[cw_idx].data[1],
+            self.rpdo_output_buffer.rpdo_frames[cw_idx].data[0],
+            self.rpdo_output_buffer.rpdo_frames[cw_idx].data[1],
         ];
 
         ControlWord::from_bits(u16::from_le_bytes(cw_bytes)).expect(
@@ -649,7 +651,7 @@ impl Pdo {
         let cw = self.get_current_controlword();
         info!("Controlword before Set: {cw:?}");
 
-        self.rpdo_output_buffer[cw_idx].set(
+        self.rpdo_output_buffer.rpdo_frames[cw_idx].set(
             RPDO_CONTROL_OPMODE.sources[RPDO_IDX_CONTROL_WORD]
                 .bit_range
                 .start as usize,

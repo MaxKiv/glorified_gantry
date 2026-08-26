@@ -1,4 +1,4 @@
-// TODO: Move this to its own crate
+// TODO:8 Move this to its own crate
 
 use crate::{
     canopen::{frame::NodeId, pdo::mapping::OMSNodePdoConfig},
@@ -6,22 +6,21 @@ use crate::{
     oms::OperationMode,
 };
 
+// TODO:7. Merge HGantryNodeMap -> AxisConfiguration?
 pub struct HGantryNodeMap {
-    x_master: NodeId,
-    x_slave: NodeId,
-    y: NodeId,
-    z: NodeId,
+    pub x_master: NodeId,
+    pub x_slave: NodeId,
+    pub y: NodeId,
+    pub z: NodeId,
 }
 
-/// TODO:6 validate
 pub const TEST_GANTRY_NODEMAP: HGantryNodeMap = HGantryNodeMap {
-    x_master: NodeId(0),
-    x_slave: NodeId(1),
+    x_master: NodeId(1),
+    x_slave: NodeId(0),
     y: NodeId(3),
-    z: NodeId(4),
+    z: NodeId(0),
 };
 
-/// TODO:6 validate
 pub const DEMO_GANTRY_NODEMAP: HGantryNodeMap = HGantryNodeMap {
     x_master: NodeId(1),
     x_slave: NodeId(2),
@@ -31,10 +30,10 @@ pub const DEMO_GANTRY_NODEMAP: HGantryNodeMap = HGantryNodeMap {
 
 /// PDO configuration for every node/motor that makes up a H-gantry
 pub struct HGantryPdoConfig {
-    x1: NodePdoConfig,
-    x2: NodePdoConfig,
-    y: NodePdoConfig,
-    z: NodePdoConfig,
+    pub x1: NodePdoConfig,
+    pub x2: NodePdoConfig,
+    pub y: NodePdoConfig,
+    pub z: NodePdoConfig,
 }
 
 pub const DEFAULT_GANTRY_PDOCFG: HGantryPdoConfig = HGantryPdoConfig {
@@ -46,15 +45,13 @@ pub const DEFAULT_GANTRY_PDOCFG: HGantryPdoConfig = HGantryPdoConfig {
 
 /// Currently active PDO configuration for all 4 motors that make up the H-gantry
 pub struct HGantryActivePdoConfig {
-    mode: OperationMode,
-    x1: OMSNodePdoConfig,
-    x2: OMSNodePdoConfig,
-    y: OMSNodePdoConfig,
-    z: OMSNodePdoConfig,
+    pub x1: OMSNodePdoConfig,
+    pub x2: OMSNodePdoConfig,
+    pub y: OMSNodePdoConfig,
+    pub z: OMSNodePdoConfig,
 }
 
 pub const DEFAULT_ACTIVE_GANTRY_PDOCFG: HGantryActivePdoConfig = HGantryActivePdoConfig {
-    mode: OperationMode::ProfilePosition,
     x1: DEFAULT_PP_PDOCFG,
     x2: DEFAULT_PP_PDOCFG,
     y: DEFAULT_PP_PDOCFG,
