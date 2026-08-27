@@ -2,7 +2,7 @@ pub enum CyclePhase {
     SendingSync,
     WaitingForTpdos,
     SendingRpdoS,
-    SyncWindowElapsed,
+    SdoWindow,
 }
 
 pub struct CycleState {
@@ -20,10 +20,10 @@ impl CycleState {
             (CyclePhase::WaitingForTpdos, CyclePhase::SendingRpdoS) => {
                 self.done_waiting_for_tpdos();
             }
-            (CyclePhase::SendingRpdoS, CyclePhase::SyncWindowElapsed) => {
+            (CyclePhase::SendingRpdoS, CyclePhase::SdoWindow) => {
                 self.done_sending_rpdos();
             }
-            (CyclePhase::SyncWindowElapsed, CyclePhase::SendingSync) => {
+            (CyclePhase::SdoWindow, CyclePhase::SendingSync) => {
                 self.restart_cycle();
             }
             _ => panic!("Invalid CycleState transition"),
@@ -31,7 +31,7 @@ impl CycleState {
     }
 
     fn done_sending_rpdos(&mut self) {
-        self.phase = CyclePhase::SyncWindowElapsed;
+        self.phase = CyclePhase::SdoWindow;
     }
 
     fn done_waiting_for_tpdos(&mut self) {
@@ -48,5 +48,9 @@ impl CycleState {
         }
         self.cycle += 1;
         self.phase = CyclePhase::SendingSync;
+    }
+
+    pub fn all_sync_feedback_received(&self) -> bool {
+        self.received.iter().all(|x| *x)
     }
 }
