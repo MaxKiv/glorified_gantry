@@ -185,8 +185,8 @@ impl RtEngine {
             if self.can_frame_received() {
                 self.process_can_rx();
             }
-            if self.sync_cycle_feedback_received() {
-                self.feedback_timer_elapsed();
+            if self.cycle_state.all_sync_feedback_received() {
+                self.sync_feedback_received();
             }
             if self.feedback_time_elapsed() {
                 self.feedback_timer_elapsed();
@@ -231,7 +231,7 @@ impl RtEngine {
 
         // Check if we missed any
         if expirations != 1 {
-            error!("RT overrun: {} timer expirations", expirations);
+            error!("RT overrun: {} SYNC timer expirations", expirations);
         }
 
         // Check cmd queue
@@ -373,8 +373,6 @@ impl RtEngine {
     }
 
     fn feedback_timer_elapsed(&mut self) {
-        info!("Feedback timer elapsed");
-
         // Check timer expirations
         let expirations = self
             .feedback_timer
@@ -383,12 +381,45 @@ impl RtEngine {
 
         // Check if we missed any
         if expirations != 1 {
-            error!("RT overrun: {} timer expirations", expirations);
+            error!("RT overrun: {} feedback timer expirations", expirations);
         }
 
-        self.timekeeper.on_feedback()
+        self.timekeeper.on_feedback();
+        let ct = self.timekeeper.get_cycle_timing(self.cycle_state.cycle);
+        error!("Device feedback did not arrive in time! - {:?}", ct);
 
         // Check
+    }
+
+    /// Triggers on sync feedback received
+    /// Handles CyclePhase::SendingRpdoS & CyclePhase::SdoWindow
+    fn sync_feedback_received(&mut self) {
+        // TPDOs are in, bookkeeping
+        self.timekeeper.on_feedback();
+        self.cycle_state.transition_to(CyclePhase::SendingRpdoS);
+
+        // CAN_RX parses TPDO into [`MotorState`]
+
+        //   if (x-axis skew > large) -> ESTOP
+
+        // Snapshot RPDO Setpoints
+
+        //   if (torque mode) {
+        //      Calculate x axis skew compensation
+        //      Add skew compensation to setpoint
+        //   }
+
+        // Transmit PDO
+
+        // Construct CycleFeedback
+        // Notify tokio of it somehow
+
+        // Enter "SDO window" cycle phase
+        self.cycle_state.transition_to(CyclePhase::SdoWindow);
+
+        // Fetch pending SDO from Tokio somehow
+        // Add those to a list, poll these in main polling loop as lowest priority and send
+        // conditioned on cycle_state.phase = CyclePhase::SdoWindow
     }
 
     fn poll(&mut self) -> i32 {
