@@ -1,5 +1,8 @@
 use crate::canopen::{
-    od::entry::ODEntry,
+    od::{
+        entry::{ODEntry, PdoSemantic},
+        value::ODValue,
+    },
     pdo::{PdoType, TransmissionType},
 };
 
@@ -25,6 +28,19 @@ pub struct PdoMappingSource {
     pub len: u8,
 }
 
+impl PdoMapping {
+    // Encodes the given values into the given buffer, ready to be sent over the wire
+    // NOTE: this opportunistically encodes values, it is the users responsibility to
+    // provide &[`PdoValue`] with the same order and semantic meaning as defined in this mapping
+    pub fn encode(&self, values: &[PdoValue], data: &mut [u8; 8]) -> Result<(), ()> {
+        for (i, src) in self.sources.iter().enumerate() {
+            // TODO: encode values[i]; -> LE(!) bits
+        }
+
+        Ok(())
+    }
+}
+
 impl PdoMappingSource {
     pub const fn from_od_entry(od_entry: &'static ODEntry, start: u8) -> Self {
         PdoMappingSource {
@@ -42,17 +58,8 @@ pub struct OMSNodePdoConfig {
     pub rpdo: [Option<PdoMapping>; 4],
 }
 
-// impl OMSNodePdoConfig {
-//     pub const fn empty() -> Self {
-//         OMSNodePdoConfig {
-//             tpdos: None,
-//             tpdo2: None,
-//             tpdo3: None,
-//             tpdo4: None,
-//             rpdo1: None,
-//             rpdo2: None,
-//             rpdo3: None,
-//             rpdo4: None,
-//         }
-//     }
-// }
+#[derive(Debug, PartialEq, Eq)]
+pub struct PdoValue {
+    pub semantic: PdoSemantic,
+    pub value: ODValue,
+}

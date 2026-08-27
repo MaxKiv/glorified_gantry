@@ -14,7 +14,8 @@ pub struct CycleTiming {
 
 pub struct TimeKeeper {
     start_cycle: libc::timespec,
-    on_feedback: libc::timespec,
+    start_feedback: libc::timespec,
+    end_feedback: libc::timespec,
     end_sync: libc::timespec,
     prev_start: Option<libc::timespec>,
 }
@@ -30,7 +31,11 @@ impl TimeKeeper {
                 tv_sec: 0,
                 tv_nsec: 0,
             },
-            on_feedback: timespec {
+            start_feedback: timespec {
+                tv_sec: 0,
+                tv_nsec: 0,
+            },
+            end_feedback: timespec {
                 tv_sec: 0,
                 tv_nsec: 0,
             },
@@ -54,8 +59,8 @@ impl TimeKeeper {
         let jitter_ns = actual_ns as i64 - expected_ns as i64;
 
         let feedback_duration_ns =
-            (1_000_000_000i64 * (self.on_feedback.tv_sec - self.start_cycle.tv_sec)
-                + (self.on_feedback.tv_nsec - self.start_cycle.tv_nsec)) as u64;
+            (1_000_000_000i64 * (self.end_feedback.tv_sec - self.start_feedback.tv_sec)
+                + (self.end_feedback.tv_nsec - self.start_feedback.tv_nsec)) as u64;
 
         let cycle_timing = CycleTiming {
             cycle,
@@ -97,7 +102,11 @@ impl TimeKeeper {
         }
     }
 
-    pub fn on_feedback(&mut self) {
-        TimeKeeper::time(&mut self.on_feedback)
+    pub fn start_feedback(&mut self) {
+        TimeKeeper::time(&mut self.start_feedback)
+    }
+
+    pub fn end_feedback(&mut self) {
+        TimeKeeper::time(&mut self.end_feedback)
     }
 }

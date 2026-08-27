@@ -5,7 +5,7 @@ use crate::canopen::{
     EMCY, EmergencyMessage, MessageType, NmtControlMessage, NmtMonitorMessage, NmtState,
     SyncMessage,
     od::entry::ODEntry,
-    pdo::{PdoType, RawPdoMessage},
+    pdo::message::RawPdoMessage,
     sdo::{SdoRequest, SdoResponse},
 };
 

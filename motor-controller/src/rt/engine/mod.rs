@@ -249,12 +249,10 @@ impl RtEngine {
 
         // Setup feedback timer
         self.feedback_timer.arm_once().map_err(|_| RtError::Timer)?;
+        self.timekeeper.start_feedback();
 
         // Bookkeeping
-        self.cycle_state.transition_to(CyclePhase::SendingSync);
-        let cycle_timing = self.timekeeper.end_cycle(self.cycle_state.cycle);
-
-        info!("{:?} - SYNC", cycle_timing);
+        self.cycle_state.transition_to(CyclePhase::WaitingForTpdos);
 
         Ok(())
     }
@@ -284,14 +282,17 @@ impl RtEngine {
                             // What type of PDO is this?
                             if pdo.pdo_type == PdoType::TPDO {
                                 // Is this TPDO for a node we track?
-                                if self.const_rt_cfg.node_map.z == pdo.node_id {
-                                    // Parse TPDO according to currently active pdo cfg
-                                    if let Some(oms_pdo_cfg) =
-                                        self.active_rt_cfg.current_pdo_cfg.z.tpdo[pdo.num]
-                                    {
-                                        // TODO: toggle activation in sync start
-                                        if expecting_cycle_feedback {
-                                            assosiate_with_cycle();
+                                for node in self.const_rt_cfg.node_map.nodes {
+                                    if pdo.node_id == node {
+                                        // Parse TPDO according to currently active pdo cfg
+                                        if let Some(oms_pdo_cfg) =
+                                            &self.active_rt_cfg.current_pdo_cfg.z.tpdo[pdo.num]
+                                        {
+                                            // TODO: toggle activation in sync start
+                                            if self.cycle_state.phase == CyclePhase::WaitingForTpdos
+                                            {
+                                                self.cycle_state.received[node.0] = true;
+                                            }
                                         }
                                     }
                                 }
@@ -316,7 +317,9 @@ impl RtEngine {
 
                             // Report parsed messages to tokio?
                         }
-                        _ => todo!(),
+                        _ => {
+                            warn!("TODO: impl logic for this CAN RX {:?}", parsed);
+                        }
                     }
                 }
 
@@ -384,21 +387,25 @@ impl RtEngine {
             error!("RT overrun: {} feedback timer expirations", expirations);
         }
 
-        self.timekeeper.on_feedback();
-        let ct = self.timekeeper.get_cycle_timing(self.cycle_state.cycle);
+        self.timekeeper.end_feedback();
+        let ct = self.timekeeper.end_cycle(self.cycle_state.cycle);
         error!("Device feedback did not arrive in time! - {:?}", ct);
 
-        // Check
+        // TODO: what to do here?
+        // Transition to ErrorState?
+        // Accept a single feedback delayed cycle and restart?
+        self.cycle_state.phase = CyclePhase::SendingSync; // TODO: remove
+        self.timekeeper.end_cycle(self.cycle_state.cycle);
     }
 
     /// Triggers on sync feedback received
     /// Handles CyclePhase::SendingRpdoS & CyclePhase::SdoWindow
     fn sync_feedback_received(&mut self) {
         // TPDOs are in, bookkeeping
-        self.timekeeper.on_feedback();
+        self.timekeeper.end_feedback();
         self.cycle_state.transition_to(CyclePhase::SendingRpdoS);
 
-        // CAN_RX parses TPDO into [`MotorState`]
+        // CAN_RX should have parsed TPDO into coherent current [`MotorState`]
 
         //   if (x-axis skew > large) -> ESTOP
 
@@ -420,6 +427,10 @@ impl RtEngine {
         // Fetch pending SDO from Tokio somehow
         // Add those to a list, poll these in main polling loop as lowest priority and send
         // conditioned on cycle_state.phase = CyclePhase::SdoWindow
+
+        self.cycle_state.transition_to(CyclePhase::SendingSync);
+        let cycle_timing = self.timekeeper.end_cycle(self.cycle_state.cycle);
+        info!("{:?} - SYNC", cycle_timing);
     }
 
     fn poll(&mut self) -> i32 {

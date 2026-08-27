@@ -4,6 +4,26 @@ use crate::canopen::od::{OD_LOOKUP, ODIdx, mappable::MappableType};
 
 use super::{access::AccessType, value::ODValue};
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PdoSemantic {
+    DeviceType,
+    DeviceName,
+    Statusword,
+    Controlword,
+    ActualPosition,
+    ActualVelocity,
+    ActualTorque,
+    ActualOperationMode,
+    TargetOperationMode,
+    TargetPosition,
+    TargetVelocity,
+    TargetTorque,
+    ProfileVelocity,
+    ProfileAcceleration,
+    ProfileDecceleration,
+    Other,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ODEntry {
     // Index of the OD entry
@@ -14,6 +34,8 @@ pub struct ODEntry {
     pub default: ODValue,
     pub access: AccessType,
     pub pdo_mappable: MappableType,
+    // Indicates the semantic meaning of this OD entry
+    pub semantic: PdoSemantic,
 }
 
 impl ODEntry {
@@ -23,6 +45,7 @@ impl ODEntry {
         access: AccessType,
         pdo_mappable: MappableType,
         default: ODValue,
+        semantic: PdoSemantic,
     ) -> Self {
         Self {
             index,
@@ -30,6 +53,7 @@ impl ODEntry {
             access,
             pdo_mappable,
             default,
+            semantic,
         }
     }
 
