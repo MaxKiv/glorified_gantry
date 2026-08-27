@@ -46,5 +46,4 @@ pub const DEFAULT_CP_PDOCFG: OMSNodePdoConfig = OMSNodePdoConfig {
     //     ],
     //     transmission_type: TransmissionType::OnSyncTPDO(OnSyncN::from(1).unwrap()),
     // }),
-    ..OMSNodePdoConfig::empty()
 };

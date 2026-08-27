@@ -1,6 +1,8 @@
 ### Left off:
 
-Figure out:
+/home/max/git/saxion/glorified_gantry/motor-controller/src/canopen/pdo/mapping.rs:35
+
+## To Figure out:
 
 1. how to switch pdo configuration?
 2. how to parse PDO on CAN_RX

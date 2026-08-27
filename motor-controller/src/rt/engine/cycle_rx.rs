@@ -1,3 +1,4 @@
+#[derive(Debug, PartialEq, Eq)]
 pub enum CyclePhase {
     SendingSync,
     WaitingForTpdos,
@@ -13,7 +14,7 @@ pub struct CycleState {
 
 impl CycleState {
     pub fn transition_to(&mut self, target: CyclePhase) {
-        match (&self.phase, target) {
+        match (&self.phase, &target) {
             (CyclePhase::SendingSync, CyclePhase::WaitingForTpdos) => {
                 self.done_sending_sync();
             }
@@ -26,7 +27,10 @@ impl CycleState {
             (CyclePhase::SdoWindow, CyclePhase::SendingSync) => {
                 self.restart_cycle();
             }
-            _ => panic!("Invalid CycleState transition"),
+            _ => panic!(
+                "Invalid CycleState transition {:?} -> {:?}",
+                self.phase, target
+            ),
         }
     }
 

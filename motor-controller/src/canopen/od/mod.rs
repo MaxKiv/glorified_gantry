@@ -2,7 +2,11 @@ use access::AccessType;
 use once_cell::sync::Lazy;
 
 use crate::{
-    canopen::od::{entry::ODEntry, mappable::MappableType, value::ODValue},
+    canopen::od::{
+        entry::{ODEntry, PdoSemantic},
+        mappable::MappableType,
+        value::ODValue,
+    },
     oms::home::HomingMethods,
 };
 
@@ -22,6 +26,7 @@ pub const DEVICE_TYPE: ODEntry = ODEntry::new(
     AccessType::ReadOnly,
     MappableType::None,
     ODValue::U32(0x0004_0192), // CiA 402 drive
+    PdoSemantic::DeviceType,
 );
 
 /// Device Type — identifies the device profile
@@ -31,6 +36,7 @@ pub const DEVICE_NAME: ODEntry = ODEntry::new(
     AccessType::ReadOnly,
     MappableType::None,
     ODValue::VisibleString([0u8; 8]),
+    PdoSemantic::DeviceName,
 );
 
 /// Controlword — control state machine & motion commands
@@ -40,6 +46,7 @@ pub const CONTROL_WORD: ODEntry = ODEntry::new(
     AccessType::ReadWrite,
     MappableType::RPDO,
     ODValue::U16(0x0000),
+    PdoSemantic::Controlword,
 );
 
 /// Statusword — drive state and feedback
@@ -49,6 +56,7 @@ pub const STATUS_WORD: ODEntry = ODEntry::new(
     AccessType::ReadOnly,
     MappableType::TPDO,
     ODValue::U16(0x0000),
+    PdoSemantic::Statusword,
 );
 
 /// Heartbeat producer time in [ms]
@@ -59,6 +67,7 @@ pub const PRODUCER_HEARTBEAT_TIME: ODEntry = ODEntry::new(
     AccessType::ReadWrite,
     MappableType::None,
     ODValue::U16(0), // By default send no heartbeat
+    PdoSemantic::Other,
 );
 
 /// Actual position value [counts]
@@ -68,6 +77,7 @@ pub const POSITION_ACTUAL_VALUE: ODEntry = ODEntry::new(
     AccessType::ReadOnly,
     MappableType::TPDO,
     ODValue::I32(0),
+    PdoSemantic::ActualPosition,
 );
 
 /// Actual velocity value [counts/s]
@@ -77,6 +87,7 @@ pub const VELOCITY_ACTUAL_VALUE: ODEntry = ODEntry::new(
     AccessType::ReadOnly,
     MappableType::TPDO,
     ODValue::I32(0),
+    PdoSemantic::ActualVelocity,
 );
 
 /// Actual torque value [0.1 % of nominal torque]
@@ -86,6 +97,7 @@ pub const TORQUE_ACTUAL_VALUE: ODEntry = ODEntry::new(
     AccessType::ReadOnly,
     MappableType::TPDO,
     ODValue::I16(0),
+    PdoSemantic::ActualTorque,
 );
 
 /// Contains the current following error in user-defined units
@@ -95,6 +107,7 @@ pub const FOLLOWING_ERROR_ACTUAL_VALUE: ODEntry = ODEntry::new(
     AccessType::ReadOnly,
     MappableType::TPDO,
     ODValue::I32(0),
+    PdoSemantic::Other,
 );
 
 /// Mode of operation (set)
@@ -105,6 +118,7 @@ pub const SET_OPERATION_MODE: ODEntry = ODEntry::new(
     AccessType::ReadWrite,
     MappableType::RPDO,
     ODValue::I8(1),
+    PdoSemantic::TargetOperationMode,
 );
 
 /// Mode of operation (get)
@@ -114,6 +128,7 @@ pub const GET_OPERATION_MODE: ODEntry = ODEntry::new(
     AccessType::ReadOnly,
     MappableType::TPDO,
     ODValue::I8(1),
+    PdoSemantic::ActualOperationMode,
 );
 
 /// Position Window
@@ -126,6 +141,7 @@ pub const POSITION_WINDOW: ODEntry = ODEntry::new(
     AccessType::ReadWrite,
     MappableType::RPDO,
     ODValue::U32(0),
+    PdoSemantic::Other,
 );
 
 /// Target position [counts] (default 3600 counts = 1 rev)
@@ -135,6 +151,7 @@ pub const SET_TARGET_POSITION: ODEntry = ODEntry::new(
     AccessType::ReadWrite,
     MappableType::RPDO,
     ODValue::I32(0x0000_0FA0),
+    PdoSemantic::TargetPosition,
 );
 
 /// Target velocity [counts/s]
@@ -144,6 +161,7 @@ pub const SET_TARGET_VELOCITY: ODEntry = ODEntry::new(
     AccessType::ReadWrite,
     MappableType::RPDO,
     ODValue::I32(0),
+    PdoSemantic::TargetVelocity,
 );
 
 /// Target torque — Desired torque setpoint in thousandths of the maximum torque.
@@ -154,6 +172,7 @@ pub const SET_TARGET_TORQUE: ODEntry = ODEntry::new(
     AccessType::ReadWrite,
     MappableType::RPDO,
     ODValue::I16(0),
+    PdoSemantic::TargetTorque,
 );
 
 /// Software position limit - defines the limit positions relative to the reference point of the
@@ -164,6 +183,7 @@ pub const SOFTWARE_POSITION_LIMIT: ODEntry = ODEntry::new(
     AccessType::ReadWrite,
     MappableType::None,
     ODValue::Array(3),
+    PdoSemantic::Other,
 );
 
 /// Software Position range limit — subindex 1 = min, subindex 2 = max
@@ -173,6 +193,7 @@ pub const SOFTWARE_POSITION_RANGE_LIMIT_MIN: ODEntry = ODEntry::new(
     AccessType::ReadWrite,
     MappableType::RPDO,
     ODValue::I32(0),
+    PdoSemantic::Other,
 );
 
 /// Software Position range limit — subindex 1 = min, subindex 2 = max
@@ -182,6 +203,7 @@ pub const SOFTWARE_POSITION_RANGE_LIMIT_MAX: ODEntry = ODEntry::new(
     AccessType::ReadWrite,
     MappableType::RPDO,
     ODValue::I32(0),
+    PdoSemantic::Other,
 );
 
 /// Contains the minimum and maximum position limit in user defined units
@@ -191,6 +213,7 @@ pub const POSITION_LIIMT: ODEntry = ODEntry::new(
     AccessType::ReadOnly,
     MappableType::None,
     ODValue::Array(3),
+    PdoSemantic::Other,
 );
 
 /// Position range limit — subindex 1 = min, subindex 2 = max
@@ -200,6 +223,7 @@ pub const POSITION_RANGE_LIMIT_MIN: ODEntry = ODEntry::new(
     AccessType::ReadWrite,
     MappableType::RPDO,
     ODValue::I32(0),
+    PdoSemantic::Other,
 );
 
 /// Position range limit — subindex 1 = min, subindex 2 = max
@@ -209,6 +233,7 @@ pub const POSITION_RANGE_LIMIT_MAX: ODEntry = ODEntry::new(
     AccessType::ReadWrite,
     MappableType::RPDO,
     ODValue::I32(0),
+    PdoSemantic::Other,
 );
 
 /// Home offset — Specifies the difference between the zero position of the controller
@@ -220,6 +245,7 @@ pub const HOME_OFFSET: ODEntry = ODEntry::new(
     AccessType::ReadWrite,
     MappableType::RPDO,
     ODValue::I32(0),
+    PdoSemantic::Other,
 );
 
 /// Polarity — inverts direction of motion or sensor inputs
@@ -229,6 +255,7 @@ pub const POLARITY: ODEntry = ODEntry::new(
     AccessType::ReadWrite,
     MappableType::RPDO,
     ODValue::U8(0),
+    PdoSemantic::Other,
 );
 
 /// Profile velocity — desired constant velocity in Profile Position/Velocity modes [counts/s]
@@ -238,6 +265,7 @@ pub const PROFILE_VELOCITY: ODEntry = ODEntry::new(
     AccessType::ReadWrite,
     MappableType::RPDO,
     ODValue::U32(0x01F4),
+    PdoSemantic::ProfileVelocity,
 );
 
 /// End velocity — used for homing or interpolated motion [counts/s]
@@ -247,6 +275,7 @@ pub const END_VELOCITY: ODEntry = ODEntry::new(
     AccessType::ReadWrite,
     MappableType::RPDO,
     ODValue::U32(0),
+    PdoSemantic::Other,
 );
 
 /// Profile acceleration — acceleration during motion [counts/s²]
@@ -256,6 +285,7 @@ pub const PROFILE_ACCELERATION: ODEntry = ODEntry::new(
     AccessType::ReadWrite,
     MappableType::RPDO,
     ODValue::U32(0x01F4),
+    PdoSemantic::ProfileAcceleration,
 );
 
 /// Profile deceleration — deceleration during motion [counts/s²]
@@ -265,6 +295,7 @@ pub const PROFILE_DECELERATION: ODEntry = ODEntry::new(
     AccessType::ReadWrite,
     MappableType::RPDO,
     ODValue::U32(0x01F4),
+    PdoSemantic::ProfileDecceleration,
 );
 
 /// Quick stop deceleration — deceleration used during quick stop [counts/s²]
@@ -274,6 +305,7 @@ pub const QUICK_STOP_DECELERATION: ODEntry = ODEntry::new(
     AccessType::ReadWrite,
     MappableType::RPDO,
     ODValue::U32(0x1388),
+    PdoSemantic::Other,
 );
 
 /// Motion profile type — defines velocity profile shape
@@ -284,6 +316,7 @@ pub const MOTION_PROFILE_TYPE: ODEntry = ODEntry::new(
     AccessType::ReadWrite,
     MappableType::RPDO,
     ODValue::I16(0),
+    PdoSemantic::Other,
 );
 
 /// Max acceleration [counts/s²] for profile modes
@@ -293,6 +326,7 @@ pub const MAX_ACCELERATION: ODEntry = ODEntry::new(
     AccessType::ReadWrite,
     MappableType::RPDO,
     ODValue::U32(0x1388),
+    PdoSemantic::Other,
 );
 
 /// Max deceleration [counts/s²] for profile modes
@@ -302,6 +336,7 @@ pub const MAX_DECELERATION: ODEntry = ODEntry::new(
     AccessType::ReadWrite,
     MappableType::RPDO,
     ODValue::U32(0x1388),
+    PdoSemantic::Other,
 );
 
 /// Profile jerk — rate of change of acceleration [counts/s³]
@@ -311,6 +346,7 @@ pub const PROFILE_JERK: ODEntry = ODEntry::new(
     AccessType::ReadOnly,
     MappableType::None,
     ODValue::Array(5),
+    PdoSemantic::Other,
 );
 
 pub const PROFILE_JERK_BEGIN_ACCEL: ODEntry = ODEntry::new(
@@ -319,6 +355,7 @@ pub const PROFILE_JERK_BEGIN_ACCEL: ODEntry = ODEntry::new(
     AccessType::ReadWrite,
     MappableType::None,
     ODValue::U32(0x03E8),
+    PdoSemantic::Other,
 );
 
 pub const PROFILE_JERK_BEGIN_DECEL: ODEntry = ODEntry::new(
@@ -327,6 +364,7 @@ pub const PROFILE_JERK_BEGIN_DECEL: ODEntry = ODEntry::new(
     AccessType::ReadWrite,
     MappableType::None,
     ODValue::U32(0x03E8),
+    PdoSemantic::Other,
 );
 
 pub const PROFILE_JERK_END_ACCEL: ODEntry = ODEntry::new(
@@ -335,6 +373,7 @@ pub const PROFILE_JERK_END_ACCEL: ODEntry = ODEntry::new(
     AccessType::ReadWrite,
     MappableType::None,
     ODValue::U32(0x03E8),
+    PdoSemantic::Other,
 );
 
 pub const PROFILE_JERK_END_DECEL: ODEntry = ODEntry::new(
@@ -343,6 +382,7 @@ pub const PROFILE_JERK_END_DECEL: ODEntry = ODEntry::new(
     AccessType::ReadWrite,
     MappableType::None,
     ODValue::U32(0x03E8),
+    PdoSemantic::Other,
 );
 
 /// Positioning option code — defines motion termination and rounding behavior
@@ -354,6 +394,7 @@ pub const POSITIONING_OPTION_CODE: ODEntry = ODEntry::new(
     AccessType::ReadWrite,
     MappableType::RPDO,
     ODValue::U16(1), // Position movements are executed relative to the preset value (or output) of the ramp generator
+    PdoSemantic::Other,
 );
 
 /// Homing method — Defines which homing procedure the device should use.
@@ -365,6 +406,7 @@ pub const HOMING_METHOD: ODEntry = ODEntry::new(
     AccessType::ReadWrite,
     MappableType::RPDO,
     ODValue::I8(HomingMethods::IndexOnly.as_i8()), // Home on current position
+    PdoSemantic::Other,
 );
 
 /// Speed during search for switch — Speed used while seeking the limit or home switch
@@ -375,6 +417,7 @@ pub const HOMING_SPEED_SWITCH_SEARCH: ODEntry = ODEntry::new(
     AccessType::ReadWrite,
     MappableType::RPDO,
     ODValue::U32(0x32),
+    PdoSemantic::Other,
 );
 
 /// Speed during search for zero — Speed used for the fine search phase
@@ -385,6 +428,7 @@ pub const HOMING_SPEED_ZERO_SEARCH: ODEntry = ODEntry::new(
     AccessType::ReadWrite,
     MappableType::RPDO,
     ODValue::U32(0x0A),
+    PdoSemantic::Other,
 );
 
 /// Maximum motor speed — Defines the motor’s absolute maximum velocity
@@ -395,6 +439,7 @@ pub const MAX_MOTOR_SPEED: ODEntry = ODEntry::new(
     AccessType::ReadWrite,
     MappableType::RPDO,
     ODValue::U32(0x7530),
+    PdoSemantic::Other,
 );
 
 /// Homing acceleration — Acceleration (and deceleration) to use during the homing procedure [counts/s²]
@@ -404,6 +449,7 @@ pub const HOMING_ACCELERATION: ODEntry = ODEntry::new(
     AccessType::ReadWrite,
     MappableType::RPDO,
     ODValue::U32(0x1F4),
+    PdoSemantic::Other,
 );
 
 /// Minimum current for block detection — Threshold current above which the motor
@@ -414,6 +460,7 @@ pub const BLOCK_DETECTION_MIN_CURRENT: ODEntry = ODEntry::new(
     AccessType::ReadWrite,
     MappableType::RPDO,
     ODValue::I32(0x41A), // 1050 mA
+    PdoSemantic::Other,
 );
 
 /// Period of blocking — Time duration the motor continues to run after
@@ -424,6 +471,7 @@ pub const BLOCK_DETECTION_PERIOD: ODEntry = ODEntry::new(
     AccessType::ReadWrite,
     MappableType::RPDO,
     ODValue::I32(0xC8), // 200ms
+    PdoSemantic::Other,
 );
 
 /// Max torque — Limit for torque during the entire ramp (accelerate, maintain, decelerate)
@@ -434,6 +482,7 @@ pub const MAX_TORQUE: ODEntry = ODEntry::new(
     AccessType::ReadWrite,
     MappableType::RPDO,
     ODValue::U16(0x64), // 100 = 1/10 of max rated torque
+    PdoSemantic::Other,
 );
 
 /// Max current — Maximum current in thousandths of rated current.
@@ -444,6 +493,7 @@ pub const MAX_CURRENT: ODEntry = ODEntry::new(
     AccessType::ReadWrite,
     MappableType::RPDO,
     ODValue::U16(1000), // 1000 ‰ = rated current
+    PdoSemantic::Other,
 );
 
 /// Torque demand — Current output torque (from ramp generator) in thousandths of max torque.
@@ -453,6 +503,7 @@ pub const TORQUE_DEMAND: ODEntry = ODEntry::new(
     AccessType::ReadOnly,
     MappableType::TPDO,
     ODValue::I16(0x0000),
+    PdoSemantic::Other,
 );
 
 /// Torque slope — Maximum allowed change in torque per second [thousandths/s].
@@ -463,6 +514,7 @@ pub const TORQUE_SLOPE: ODEntry = ODEntry::new(
     AccessType::ReadWrite,
     MappableType::RPDO,
     ODValue::U32(100), // Example: 100 thousandths/s = 10% of max rated torque change per second
+    PdoSemantic::Other,
 );
 
 // PDO related (datasheet page 118)
@@ -486,6 +538,7 @@ pub const SI_UNIT_POSITION: ODEntry = ODEntry::new(
     AccessType::ReadWrite,
     MappableType::None,
     ODValue::U32(0xFF410000), // Combined value [tenth of degrees], look at page 378
+    PdoSemantic::Other,
 );
 
 /// Combines the velocity mode units for position and time, and the exponent
@@ -497,6 +550,7 @@ pub const SI_UNIT_SPEED: ODEntry = ODEntry::new(
     AccessType::ReadWrite,
     MappableType::None,
     ODValue::U32(0x00B447000), // Combined value [revolutions per minute], look at page 379
+    PdoSemantic::Other,
 );
 
 /// Limit switch related
@@ -507,6 +561,7 @@ pub const LIMIT_SWITCH_OPTION_CODE: ODEntry = ODEntry::new(
     AccessType::ReadWrite,
     MappableType::None,
     ODValue::I16(-1), // No reaction (e. g., to execute a homing operation) except noting the limit switch position
+    PdoSemantic::Other,
 );
 
 /// Digital Input & Special Function bits
@@ -516,6 +571,7 @@ pub const DIGITAL_INPUTS: ODEntry = ODEntry::new(
     AccessType::ReadWrite,
     MappableType::TPDO,
     ODValue::U32(0),
+    PdoSemantic::Other,
 );
 
 /// Digital input special special function control object
@@ -525,6 +581,7 @@ pub const DIGITAL_INPUTS_CONTROL_SPECIAL_FUNCTION: ODEntry = ODEntry::new(
     AccessType::ReadOnly,
     MappableType::None,
     ODValue::U32(0),
+    PdoSemantic::Other,
 );
 
 /// Whether digital input logic should be inverted [default = active low]
@@ -534,6 +591,7 @@ pub const DIGITAL_INPUTS_CONTROL_INVERTED: ODEntry = ODEntry::new(
     AccessType::ReadOnly,
     MappableType::None,
     ODValue::U8(0),
+    PdoSemantic::Other,
 );
 
 /// Contains unmodified Digital Inputs values
@@ -543,6 +601,7 @@ pub const DIGITAL_INPUTS_RAW_VALUE: ODEntry = ODEntry::new(
     AccessType::ReadWrite,
     MappableType::RPDO,
     ODValue::U32(0),
+    PdoSemantic::Other,
 );
 
 /// Enables routing physical inputs to "digital inputs"
@@ -553,6 +612,7 @@ pub const DIGITAL_INPUTS_ROUTING_ENABLE: ODEntry = ODEntry::new(
     AccessType::ReadWrite,
     MappableType::RPDO,
     ODValue::U32(0),
+    PdoSemantic::Other,
 );
 
 /// Determines physical source for DI 1
@@ -562,6 +622,7 @@ pub const DIGITAL_INPUTS_ROUTING_1: ODEntry = ODEntry::new(
     AccessType::ReadOnly,
     MappableType::None,
     ODValue::U8(0),
+    PdoSemantic::Other,
 );
 
 /// Determines physical source for DI 2
@@ -571,6 +632,7 @@ pub const DIGITAL_INPUTS_ROUTING_2: ODEntry = ODEntry::new(
     AccessType::ReadOnly,
     MappableType::None,
     ODValue::U8(0),
+    PdoSemantic::Other,
 );
 
 /// Determines physical source for DI 3
@@ -580,6 +642,7 @@ pub const DIGITAL_INPUTS_ROUTING_3: ODEntry = ODEntry::new(
     AccessType::ReadOnly,
     MappableType::None,
     ODValue::U8(0),
+    PdoSemantic::Other,
 );
 
 /// Minimum set of Object Dictionary entries required for Profile Position
