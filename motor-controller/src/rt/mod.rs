@@ -10,7 +10,9 @@ use crate::{
         pdo::{PdoType, TransmissionType},
     },
     cw::ControlWord,
+    oms::OperationMode,
     rt::timekeeper::CycleTiming,
+    sw::StatusWord,
 };
 use tracing::{debug, error, info, warn};
 
@@ -30,7 +32,13 @@ pub enum RtError {
     Poll,
 }
 
-pub struct MotorFeedback {}
+pub struct MotorFeedback {
+    pub sw: StatusWord,
+    pub pos: i32,
+    pub vel: i32,
+    pub torque: i16,
+    pub opmode: OperationMode,
+}
 
 struct RtFeedback<const N: usize> {
     cycle: u64,

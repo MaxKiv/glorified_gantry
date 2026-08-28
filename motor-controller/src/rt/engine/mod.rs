@@ -26,8 +26,8 @@ use crate::{
         cmd::{RtCommand, channel::CmdReceiver},
         engine::{
             cfg::{
-                CONST_RT_ENGINE_CFG, ConstRtEngineConfig, DEFAULT_MUT_RT_ENGINE_CFG,
-                MutableRtEngineConfig,
+                ConstRtEngineConfig, DEFAULT_MUT_RT_ENGINE_CFG, MutableRtEngineConfig,
+                TEST_CONST_RT_ENGINE_CFG,
             },
             cycle_rx::{CyclePhase, CycleState},
         },
@@ -55,14 +55,16 @@ enum RtState {
 }
 
 #[derive(Debug, Clone, Copy, Default)]
-pub struct PdoValues {
+pub struct MotorSetpoint {
     // TPDO
     pub control_word: u16,
     pub operation_mode: i8,
     pub target_position: i32,
     pub target_velocity: i32,
     pub target_torque: i16,
+}
 
+pub struct MotorFeedback {
     // RPDO
     pub status_word: u16,
     pub operation_mode_display: i8,
@@ -71,6 +73,7 @@ pub struct PdoValues {
     pub torque_actual: i16,
 }
 
+/// N = Number of Managed Motors
 pub struct RtEngine {
     can_interface: String,
     can: CanSocket,
@@ -78,7 +81,7 @@ pub struct RtEngine {
     cmd_queue: Fifo<RtCommand, CMD_QUEUE_SIZE>,
     state: RtState,
     sync_frame: CanFrame,
-    const_rt_cfg: ConstRtEngineConfig,
+    const_rt_cfg: ConstRtEngineConfig<2>,
     active_rt_cfg: MutableRtEngineConfig,
     poll_fds: [pollfd; 4],
     sync_timer: TimerFd,
@@ -154,7 +157,7 @@ impl RtEngine {
             timekeeper,
             sync_timer,
             feedback_timer,
-            const_rt_cfg: CONST_RT_ENGINE_CFG,
+            const_rt_cfg: TEST_CONST_RT_ENGINE_CFG,
             active_rt_cfg: DEFAULT_MUT_RT_ENGINE_CFG,
             cycle_state,
         };
@@ -218,10 +221,6 @@ impl RtEngine {
         self.poll_fds[SYNC_TIMER_FD].revents & libc::POLLIN != 0
     }
 
-    fn sync_cycle_feedback_received(&self) -> bool {
-        self.poll_fds[SYNC_TIMER_FD].revents & libc::POLLIN != 0
-    }
-
     fn start_sync_cycle(&mut self) -> Result<(), RtError> {
         // Time cycle
         self.timekeeper.start_new_cycle();
@@ -280,22 +279,27 @@ impl RtEngine {
                     match parsed.msg {
                         MessageType::PDO(pdo) => {
                             // What type of PDO is this?
-                            if pdo.pdo_type == PdoType::TPDO {
-                                // Is this TPDO for a node we track?
-                                for node in self.const_rt_cfg.node_map.nodes {
-                                    if pdo.node_id == node {
-                                        // Parse TPDO according to currently active pdo cfg
-                                        if let Some(oms_pdo_cfg) =
-                                            &self.active_rt_cfg.current_pdo_cfg.z.tpdo[pdo.num]
-                                        {
-                                            // TODO: toggle activation in sync start
-                                            if self.cycle_state.phase == CyclePhase::WaitingForTpdos
-                                            {
-                                                self.cycle_state.received[node.0] = true;
-                                            }
-                                        }
-                                    }
+                            if pdo.pdo_type == PdoType::RPDO {
+                                // Check node id
+                                if !self.const_rt_cfg.nodes.contains(&pdo.node_id) {
+                                    error!("Received RPDO from unknown node {:?}", pdo.node_id);
                                 }
+
+                                // Is this TPDO for a node we track?
+                                // for node in self.const_rt_cfg.node_map.nodes {
+                                //     if pdo.node_id == node {
+                                //         // Parse TPDO according to currently active pdo cfg
+                                //         if let Some(oms_pdo_cfg) =
+                                //             &self.active_rt_cfg.current_pdo_cfg.z.tpdo[pdo.num]
+                                //         {
+                                //             // TODO: toggle activation in sync start
+                                //             if self.cycle_state.phase == CyclePhase::WaitingForTpdos
+                                //             {
+                                //                 self.cycle_state.received[node.0] = true;
+                                //             }
+                                //         }
+                                //     }
+                                // }
                             }
 
                             // // NOTE: is Below right?

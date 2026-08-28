@@ -1,7 +1,8 @@
 use crate::{
+    canopen::frame::NodeId,
     consts::pdo::gantry::{
         DEFAULT_ACTIVE_GANTRY_PDOCFG, DEFAULT_GANTRY_PDOCFG, HGantryActivePdoConfig,
-        HGantryNodeMap, HGantryPdoConfig, TEST_GANTRY_NODEMAP,
+        HGantryNodeMap, HGantryPdoConfig, TEST_GANTRY_NODEMAP, TEST_GANTRY_NODES,
     },
     oms::OperationMode,
 };
@@ -20,12 +21,14 @@ pub const DEFAULT_MUT_RT_ENGINE_CFG: MutableRtEngineConfig = MutableRtEngineConf
 };
 
 /// Constant/unchangable part of the RtEngine configuration
-pub struct ConstRtEngineConfig {
+pub struct ConstRtEngineConfig<const N: usize> {
     pub gantry_oms_pdo_cfg: HGantryPdoConfig,
     pub node_map: HGantryNodeMap,
+    pub nodes: [NodeId; N],
 }
 
-pub const CONST_RT_ENGINE_CFG: ConstRtEngineConfig = ConstRtEngineConfig {
+pub const TEST_CONST_RT_ENGINE_CFG: ConstRtEngineConfig<2> = ConstRtEngineConfig {
     gantry_oms_pdo_cfg: DEFAULT_GANTRY_PDOCFG,
     node_map: TEST_GANTRY_NODEMAP,
+    nodes: TEST_GANTRY_NODES,
 };
