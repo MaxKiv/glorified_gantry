@@ -14,11 +14,12 @@ pub struct HGantryNodeMap {
     pub z: NodeId,
 }
 
+pub const TEST_GANTRY_NODES: [NodeId; 2] = [NodeId(1), NodeId(3)];
 pub const TEST_GANTRY_NODEMAP: HGantryNodeMap = HGantryNodeMap {
-    x_master: NodeId(1),
+    x_master: NodeId(0),
     x_slave: NodeId(0),
-    y: NodeId(3),
-    z: NodeId(0),
+    y: NodeId(1),
+    z: NodeId(3),
 };
 
 pub const DEMO_GANTRY_NODEMAP: HGantryNodeMap = HGantryNodeMap {

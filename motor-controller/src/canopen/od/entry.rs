@@ -24,6 +24,26 @@ pub enum PdoSemantic {
     Other,
 }
 
+impl PdoSemantic {
+    /// NOTE: Assumes correctly shitfted BE raw value
+    pub const fn to_odvalue(&self, raw: u64) -> ODValue {
+        use PdoSemantic::*;
+
+        match self {
+            ActualOperationMode | TargetOperationMode => ODValue::I8(raw as i8),
+            Statusword | Controlword | ActualTorque | TargetTorque => ODValue::I16(raw as i16),
+            ActualPosition | ActualVelocity | TargetPosition | TargetVelocity => {
+                ODValue::I32(raw as i32)
+            }
+            DeviceType | ProfileVelocity | ProfileAcceleration | ProfileDecceleration => {
+                ODValue::U32(raw as u32)
+            }
+            DeviceName => ODValue::VisibleString(raw.to_be_bytes()),
+            Other => ODValue::Other,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ODEntry {
     // Index of the OD entry
@@ -98,6 +118,7 @@ impl ODEntry {
             default: parsed_value,
             access: entry.access,
             pdo_mappable: entry.pdo_mappable.clone(),
+            semantic: entry.semantic,
         })
     }
 
