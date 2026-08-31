@@ -32,7 +32,7 @@ impl RawPdoMessage {
                 return Err(CanOpenParseError::PdoNumRange(frame));
             }
         };
-        let node = NodeId((cob_id.0 - base) as u8);
+        let node = NodeId::new((cob_id.0 - base) as u8);
         let dlc = frame.dlc();
 
         let msg = RawPdoMessage {

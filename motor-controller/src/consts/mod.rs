@@ -2,6 +2,8 @@ pub mod pdo;
 
 use std::time::Duration;
 
+pub const MAX_NODE_ID: usize = 4;
+
 pub struct RtConfig {
     /// RT Thread SYNC cycle period
     pub cycle_period: Duration,

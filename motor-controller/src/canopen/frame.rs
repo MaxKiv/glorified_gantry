@@ -1,20 +1,43 @@
 use socketcan::{CanDataFrame, CanFrame, EmbeddedFrame};
 use tracing::error;
 
-use crate::canopen::{
-    EMCY, EmergencyMessage, MessageType, NmtControlMessage, NmtMonitorMessage, NmtState,
-    SyncMessage,
-    od::entry::ODEntry,
-    pdo::message::RawPdoMessage,
-    sdo::{SdoRequest, SdoResponse},
+use crate::{
+    canopen::{
+        EMCY, EmergencyMessage, MessageType, NmtControlMessage, NmtMonitorMessage, NmtState,
+        SyncMessage,
+        od::entry::ODEntry,
+        pdo::message::RawPdoMessage,
+        sdo::{SdoRequest, SdoResponse},
+    },
+    consts::MAX_NODE_ID,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct CobId(pub u16);
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 /// CANOpen NodeId
 pub struct NodeId(pub u8);
+
+impl NodeId {
+    pub fn new(id: u8) -> Self {
+        assert!(
+            id <= MAX_NODE_ID as u8,
+            "Attempted to construct NodeID {} < MAX_NODE_ID of {}",
+            id,
+            MAX_NODE_ID
+        );
+        Self(id)
+    }
+
+    pub fn idx(&self) -> usize {
+        self.0 as usize
+    }
+
+    pub fn get(&self) -> u8 {
+        self.0
+    }
+}
 
 #[derive(Debug)]
 pub struct CanOpenFrame {
