@@ -169,6 +169,8 @@ impl RtEngine {
 
         // Start SYNC timer
         self.sync_timer.arm().map_err(|_| RtError::Timer)?;
+
+        // Main loop
         while self.state != RtState::Shutdown {
             // Wait for event to happen: Poll FDs
             if self.poll() < 0 {
@@ -278,8 +280,7 @@ impl RtEngine {
                         MessageType::PDO(pdo) => {
                             // What type of PDO is this?
                             if pdo.pdo_type == PdoType::RPDO {
-                                let rpdo = &pdo;
-                                // Match pdo msg node id to a managed motor
+                                // Match rpdo msg node id to a managed motor
                                 if let Some((idx, motor)) = self
                                     .managed_motors
                                     .iter()
@@ -287,6 +288,7 @@ impl RtEngine {
                                     .filter_map(|(i, m)| Some((i, m.as_ref()?)))
                                     .find(|(_, m)| m.node_id == pdo.node_id)
                                 {
+                                    // RPDO matched, parse into [`MotorFeedback`]
                                     let state = self.motor_state[idx].as_ref().unwrap();
                                     let feedback = self.motor_feedback[idx].as_mut().unwrap();
 
