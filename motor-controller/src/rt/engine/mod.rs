@@ -2,6 +2,7 @@ pub mod cfg;
 pub mod cycle_rx;
 
 use std::{
+    mem::MaybeUninit,
     os::fd::{AsFd, AsRawFd},
     sync::atomic::{AtomicUsize, Ordering},
     thread::JoinHandle,
@@ -14,20 +15,20 @@ use tracing::{error, info, trace, warn};
 use crate::{
     canopen::{MessageType, frame::CanOpenFrame, pdo::PdoType},
     consts::{
-        RT_CONFIG,
+        MAX_NODE_ID, RT_CONFIG,
         pdo::gantry::{
             DEFAULT_ACTIVE_GANTRY_PDOCFG, DEFAULT_GANTRY_PDOCFG, HGantryActivePdoConfig,
-            HGantryPdoConfig, TEST_GANTRY_NODEMAP,
+            HGantryPdoConfig, TEST_MOTORS, get_initial_gantry_state,
         },
     },
     fifo::Fifo,
     rt::{
-        RtError,
+        MotorFeedback, RtError,
         cmd::{RtCommand, channel::CmdReceiver},
         engine::{
             cfg::{
-                ConstRtEngineConfig, DEFAULT_MUT_RT_ENGINE_CFG, MutableRtEngineConfig,
-                TEST_CONST_RT_ENGINE_CFG,
+                ConstRtEngineConfig, DEFAULT_MUT_RT_ENGINE_CFG, GantryMotor, MotorState,
+                MutableRtEngineConfig, TEST_CONST_RT_ENGINE_CFG,
             },
             cycle_rx::{CyclePhase, CycleState},
         },
@@ -64,15 +65,6 @@ pub struct MotorSetpoint {
     pub target_torque: i16,
 }
 
-pub struct MotorFeedback {
-    // RPDO
-    pub status_word: u16,
-    pub operation_mode_display: i8,
-    pub position_actual: i32,
-    pub velocity_actual: i32,
-    pub torque_actual: i16,
-}
-
 /// N = Number of Managed Motors
 pub struct RtEngine {
     can_interface: String,
@@ -81,8 +73,11 @@ pub struct RtEngine {
     cmd_queue: Fifo<RtCommand, CMD_QUEUE_SIZE>,
     state: RtState,
     sync_frame: CanFrame,
-    const_rt_cfg: ConstRtEngineConfig<2>,
-    active_rt_cfg: MutableRtEngineConfig,
+    const_rt_cfg: ConstRtEngineConfig,
+    managed_motors: [Option<GantryMotor>; MAX_NODE_ID],
+    motor_state: [Option<MotorState>; MAX_NODE_ID],
+    motor_feedback: [Option<MotorFeedback>; MAX_NODE_ID],
+    motor_setpoint: [Option<MotorSetpoint>; MAX_NODE_ID],
     poll_fds: [pollfd; 4],
     sync_timer: TimerFd,
     feedback_timer: TimerFd,
@@ -158,8 +153,11 @@ impl RtEngine {
             sync_timer,
             feedback_timer,
             const_rt_cfg: TEST_CONST_RT_ENGINE_CFG,
-            active_rt_cfg: DEFAULT_MUT_RT_ENGINE_CFG,
             cycle_state,
+            managed_motors: TEST_MOTORS,
+            motor_state: todo!(),
+            motor_feedback: todo!(),
+            motor_setpoint: todo!(),
         };
 
         // Spawn RT engine thread
@@ -256,7 +254,7 @@ impl RtEngine {
         Ok(())
     }
 
-    fn process_can_rx(&self) {
+    fn process_can_rx(&mut self) {
         for _ in 0..RT_CONFIG.can_frames_per_poll {
             match self.can.read_frame() {
                 Ok(frame) => {
@@ -280,46 +278,39 @@ impl RtEngine {
                         MessageType::PDO(pdo) => {
                             // What type of PDO is this?
                             if pdo.pdo_type == PdoType::RPDO {
-                                // Check node id
-                                if !self.const_rt_cfg.nodes.contains(&pdo.node_id) {
-                                    error!("Received RPDO from unknown node {:?}", pdo.node_id);
+                                let rpdo = &pdo;
+                                // Match pdo msg node id to a managed motor
+                                if let Some((idx, motor)) = self
+                                    .managed_motors
+                                    .iter()
+                                    .enumerate()
+                                    .filter_map(|(i, m)| Some((i, m.as_ref()?)))
+                                    .find(|(_, m)| m.node_id == pdo.node_id)
+                                {
+                                    let state = self.motor_state[idx].as_ref().unwrap();
+                                    let feedback = self.motor_feedback[idx].as_mut().unwrap();
+
+                                    match state.pdo_cfg.parse_rpdo(&pdo, feedback) {
+                                        Ok(_) => {
+                                            tracing::info!(
+                                                "RPDO parsing & feedback update success! -
+                                                    motor: {}",
+                                                motor.node_id.get()
+                                            )
+
+                                            // TODO: update cycle state feedback processed for motor.node_id
+                                        }
+                                        Err(e) => {
+                                            tracing::error!("Failed to parse RPDO: {}", e)
+                                        }
+                                    }
+                                } else {
+                                    tracing::error!(
+                                        "RPDO parse error - unable to match {:?} to any managed motor",
+                                        pdo
+                                    );
                                 }
-
-                                // Is this TPDO for a node we track?
-                                // for node in self.const_rt_cfg.node_map.nodes {
-                                //     if pdo.node_id == node {
-                                //         // Parse TPDO according to currently active pdo cfg
-                                //         if let Some(oms_pdo_cfg) =
-                                //             &self.active_rt_cfg.current_pdo_cfg.z.tpdo[pdo.num]
-                                //         {
-                                //             // TODO: toggle activation in sync start
-                                //             if self.cycle_state.phase == CyclePhase::WaitingForTpdos
-                                //             {
-                                //                 self.cycle_state.received[node.0] = true;
-                                //             }
-                                //         }
-                                //     }
-                                // }
                             }
-
-                            // // NOTE: is Below right?
-                            // if let Some(motor) = self.active_pdo_config.expected_tpdo(&pdo) {
-                            //     if !self.cycle_rx.received[motor] {
-                            //         self.cycle_rx.received[motor] = true;
-                            //         self.cycle_rx.received_count += 1;
-                            //
-                            //         self.store_feedback(motor, pdo);
-                            //     }
-                            //
-                            //     if self.cycle_rx.all_received() {
-                            //         // NOTE: either
-                            //         self.execute_cycle();
-                            //         // OR
-                            //         return state change
-                            //     }
-                            // }
-
-                            // Report parsed messages to tokio?
                         }
                         _ => {
                             warn!("TODO: impl logic for this CAN RX {:?}", parsed);

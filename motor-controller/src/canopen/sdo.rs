@@ -47,7 +47,7 @@ pub enum SdoResponse {
 
 impl SdoResponse {
     pub fn try_from_frame(cob_id: CobId, frame: &CanDataFrame) -> Result<Self, CanOpenParseError> {
-        let from = NodeId((cob_id.0 - 0x580) as u8);
+        let from = NodeId::new((cob_id.0 - 0x580) as u8);
         let dlc = frame.dlc();
         let data = frame.data();
         let payload = &data[4..dlc.min(8)];

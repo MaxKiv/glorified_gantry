@@ -56,7 +56,7 @@ impl PdoMapping {
         for (i, src) in self.sources.iter().enumerate() {
             let mask = (src.start as u64) << src.len;
             let raw = data & mask >> src.len;
-            let val = PdoValue::from_raw_semantic(&data, src.entry.semantic);
+            let val = PdoValue::from_raw_semantic(&raw, src.entry.semantic);
             out[i] = Some(val);
         }
 
@@ -84,7 +84,7 @@ pub struct OMSNodePdoConfig {
 impl OMSNodePdoConfig {
     pub fn parse_rpdo(
         &self,
-        rpdo: RawPdoMessage,
+        rpdo: &RawPdoMessage,
         feedback: &mut MotorFeedback,
     ) -> anyhow::Result<()> {
         match rpdo.pdo_type {

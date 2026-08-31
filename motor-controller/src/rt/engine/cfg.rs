@@ -1,13 +1,45 @@
+use std::{collections::HashSet, hash::Hash};
+
 use crate::{
-    canopen::frame::NodeId,
-    consts::pdo::gantry::{
-        DEFAULT_ACTIVE_GANTRY_PDOCFG, DEFAULT_GANTRY_PDOCFG, HGantryActivePdoConfig,
-        HGantryNodeMap, HGantryPdoConfig, TEST_GANTRY_NODEMAP, TEST_GANTRY_NODES,
+    canopen::{frame::NodeId, pdo::mapping::OMSNodePdoConfig},
+    consts::pdo::{
+        gantry::{
+            DEFAULT_ACTIVE_GANTRY_PDOCFG, DEFAULT_GANTRY_PDOCFG, HGantryActivePdoConfig,
+            HGantryPdoConfig, TEST_GANTRY_NODEMAP, TEST_GANTRY_NODES,
+        },
+        pp::DEFAULT_PP_PDOCFG,
     },
     oms::OperationMode,
 };
 
 // TODO:8. Move gantry specific stuff to its own crate
+#[derive(Eq, PartialEq, Clone, Debug)]
+pub enum GantryMotorType {
+    Xmaster,
+    Xslave,
+    Y,
+    Z,
+}
+
+#[derive(Eq, PartialEq, Clone, Debug)]
+pub struct GantryMotor {
+    pub node_id: NodeId,
+    pub kind: GantryMotorType,
+}
+
+pub struct MotorState {
+    pub mode: OperationMode,
+    pub pdo_cfg: OMSNodePdoConfig,
+}
+
+impl Default for MotorState {
+    fn default() -> Self {
+        MotorState {
+            mode: OperationMode::Homing,
+            pdo_cfg: DEFAULT_PP_PDOCFG,
+        }
+    }
+}
 
 /// Mutable/changable part of the RtEngine configuration
 pub struct MutableRtEngineConfig {
@@ -21,14 +53,12 @@ pub const DEFAULT_MUT_RT_ENGINE_CFG: MutableRtEngineConfig = MutableRtEngineConf
 };
 
 /// Constant/unchangable part of the RtEngine configuration
-pub struct ConstRtEngineConfig<const N: usize> {
+pub struct ConstRtEngineConfig {
     pub gantry_oms_pdo_cfg: HGantryPdoConfig,
-    pub node_map: HGantryNodeMap,
-    pub nodes: [NodeId; N],
+    pub nodes: &'static [GantryMotor],
 }
 
-pub const TEST_CONST_RT_ENGINE_CFG: ConstRtEngineConfig<2> = ConstRtEngineConfig {
+pub const TEST_CONST_RT_ENGINE_CFG: ConstRtEngineConfig = ConstRtEngineConfig {
     gantry_oms_pdo_cfg: DEFAULT_GANTRY_PDOCFG,
-    node_map: TEST_GANTRY_NODEMAP,
     nodes: TEST_GANTRY_NODES,
 };
