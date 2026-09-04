@@ -1,4 +1,4 @@
-use crate::{cia402::Cia402State, cmd::OperationMode, sw::StatusWord};
+use crate::{cia402::Cia402State, oms::OperationMode, sw::StatusWord};
 
 /// Events broadcast by a motor driver (status updates, transitions, errors).
 #[derive(Debug, Clone, Copy, PartialEq)]

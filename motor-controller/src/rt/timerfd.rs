@@ -9,6 +9,7 @@ pub enum TimerType {
 /// A file descriptor backed timer
 /// Unix only, using licb::timerfd_create
 pub struct TimerFd {
+    name: &'static str,
     /// Period of clock
     period: Duration,
     /// Period of clock
@@ -111,6 +112,17 @@ impl TimerFd {
 
         if err != core::mem::size_of::<u64>() as isize {
             return Err(io::Error::last_os_error());
+        }
+
+        Ok(expirations)
+    }
+
+    pub fn reset(&self) -> io::Result<u64> {
+        let expirations = self.expirations()?;
+
+        // Did the timer overrun?
+        if expirations != 1 {
+            tracing::error!("RT: {} timer {} overruns", self.name, expirations);
         }
 
         Ok(expirations)

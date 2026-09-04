@@ -1,3 +1,5 @@
+use crate::{canopen::pdo::message::RawPdoMessage, consts::MAX_NODE_ID};
+
 #[derive(Debug, PartialEq, Eq)]
 pub enum CyclePhase {
     SendingSync,
@@ -9,23 +11,35 @@ pub enum CyclePhase {
 pub struct CycleState {
     pub cycle: u64,
     pub phase: CyclePhase,
-    pub received: [bool; 4],
+    pub rpdos_received: [[bool; 4]; MAX_NODE_ID],
 }
 
 impl CycleState {
+    pub fn new() -> Self {
+        CycleState {
+            cycle: 0u64,
+            phase: CyclePhase::SendingSync,
+            rpdos_received: [[false; 4]; MAX_NODE_ID],
+        }
+    }
+
     pub fn transition_to(&mut self, target: CyclePhase) {
         match (&self.phase, &target) {
             (CyclePhase::SendingSync, CyclePhase::WaitingForTpdos) => {
-                self.done_sending_sync();
+                self.phase = CyclePhase::WaitingForTpdos;
             }
             (CyclePhase::WaitingForTpdos, CyclePhase::SendingRpdoS) => {
-                self.done_waiting_for_tpdos();
+                self.phase = CyclePhase::SendingRpdoS;
             }
             (CyclePhase::SendingRpdoS, CyclePhase::SdoWindow) => {
-                self.done_sending_rpdos();
+                self.phase = CyclePhase::SdoWindow;
             }
             (CyclePhase::SdoWindow, CyclePhase::SendingSync) => {
-                self.restart_cycle();
+                self.rpdos_received
+                    .iter_mut()
+                    .map(|x| x.iter_mut().map(|_| false));
+                self.cycle += 1;
+                self.phase = CyclePhase::SendingSync;
             }
             _ => panic!(
                 "Invalid CycleState transition {:?} -> {:?}",
@@ -34,27 +48,23 @@ impl CycleState {
         }
     }
 
-    fn done_sending_rpdos(&mut self) {
-        self.phase = CyclePhase::SdoWindow;
+    pub fn is_all_cycle_feedback_received(&self) -> bool {
+        self.rpdos_received.iter().all(|x| x.iter().all(|x| *x))
     }
 
-    fn done_waiting_for_tpdos(&mut self) {
-        self.phase = CyclePhase::SendingRpdoS;
-    }
+    pub fn process_rpdo_received(&mut self, pdo: &RawPdoMessage, motor_idx: usize) {
+        let node_id = pdo.node_id.get() as usize;
+        let received = &mut self.rpdos_received[motor_idx][node_id];
 
-    fn done_sending_sync(&mut self) {
-        self.phase = CyclePhase::WaitingForTpdos;
-    }
-
-    fn restart_cycle(&mut self) {
-        for rx in &mut self.received {
-            *rx = false;
+        if *received {
+            tracing::warn!(
+                "Node {} RPDO {} received more than once this cycle!",
+                node_id,
+                pdo.num
+            );
+        } else {
+            *received = true;
+            tracing::info!("Node {} RPDO {} received!", node_id, pdo.num);
         }
-        self.cycle += 1;
-        self.phase = CyclePhase::SendingSync;
-    }
-
-    pub fn all_sync_feedback_received(&self) -> bool {
-        self.received.iter().all(|x| *x)
     }
 }
