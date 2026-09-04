@@ -30,6 +30,8 @@ pub enum RtError {
     Timer,
     #[error("Polling error")]
     Poll,
+    #[error("Invalid Motor")]
+    InvalidMotor,
 }
 
 pub struct MotorFeedback {

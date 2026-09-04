@@ -2,9 +2,7 @@ pub mod cfg;
 pub mod cycle_rx;
 
 use std::{
-    mem::MaybeUninit,
     os::fd::{AsFd, AsRawFd},
-    sync::atomic::{AtomicUsize, Ordering},
     thread::JoinHandle,
 };
 
@@ -14,22 +12,13 @@ use tracing::{error, info, trace, warn};
 
 use crate::{
     canopen::{MessageType, frame::CanOpenFrame, pdo::PdoType},
-    consts::{
-        MAX_NODE_ID, RT_CONFIG,
-        pdo::gantry::{
-            DEFAULT_ACTIVE_GANTRY_PDOCFG, DEFAULT_GANTRY_PDOCFG, HGantryActivePdoConfig,
-            HGantryPdoConfig, TEST_MOTORS, get_initial_gantry_state,
-        },
-    },
+    consts::{MAX_NODE_ID, RT_CONFIG, pdo::gantry::TEST_MOTORS},
     fifo::Fifo,
     rt::{
         MotorFeedback, RtError,
-        cmd::{RtCommand, channel::CmdReceiver},
+        cmd::{ReconfigurePayload, RtCommand, channel::CmdReceiver},
         engine::{
-            cfg::{
-                ConstRtEngineConfig, DEFAULT_MUT_RT_ENGINE_CFG, GantryMotor, MotorState,
-                MutableRtEngineConfig, TEST_CONST_RT_ENGINE_CFG,
-            },
+            cfg::{ConstRtEngineConfig, GantryMotor, MotorState, TEST_CONST_RT_ENGINE_CFG},
             cycle_rx::{CyclePhase, CycleState},
         },
         timekeeper::TimeKeeper,
@@ -135,11 +124,10 @@ impl RtEngine {
             },
         ];
 
-        let cycle_state = CycleState {
-            cycle: 0u64,
-            phase: CyclePhase::SendingSync,
-            received: [false; 4],
-        };
+        let motor_state = [const { None }; MAX_NODE_ID];
+        let motor_feedback = [const { None }; MAX_NODE_ID];
+        let motor_setpoint = [const { None }; MAX_NODE_ID];
+        let cycle_state = CycleState::new();
 
         let mut rt = Self {
             can_interface,
@@ -155,9 +143,9 @@ impl RtEngine {
             const_rt_cfg: TEST_CONST_RT_ENGINE_CFG,
             cycle_state,
             managed_motors: TEST_MOTORS,
-            motor_state: todo!(),
-            motor_feedback: todo!(),
-            motor_setpoint: todo!(),
+            motor_state,
+            motor_feedback,
+            motor_setpoint,
         };
 
         // Spawn RT engine thread
@@ -167,38 +155,52 @@ impl RtEngine {
     fn run(&mut self) -> Result<(), RtError> {
         info!("RT Thread started");
 
-        // Start SYNC timer
+        // Arm SYNC timer
         self.sync_timer.arm().map_err(|_| RtError::Timer)?;
 
         // Main loop
-        while self.state != RtState::Shutdown {
+        loop {
+            // Error condition
+            if self.state == RtState::Faulted {
+                self.to_safe_state();
+            }
+            if self.state == RtState::Shutdown {
+                break; // Exit from main rt loop
+            }
+
             // Wait for event to happen: Poll FDs
             if self.poll() < 0 {
                 let error = std::io::Error::last_os_error();
                 if error.kind() == std::io::ErrorKind::Interrupted {
                     continue;
                 }
-                panic!("poll failed: {error}");
+                error!("poll failed: {error}");
+                self.to_error_state("poll failed");
             }
 
             // Event happend: Service events
-            if self.cmd_received() {
-                self.process_cmd_rx();
-            }
             if self.can_frame_received() {
                 self.process_can_rx();
             }
-            if self.cycle_state.all_sync_feedback_received() {
-                self.sync_feedback_received();
+
+            if self.cmd_received() {
+                self.process_cmd_rx();
             }
-            if self.feedback_time_elapsed() {
+
+            // ALL states
+            // TODO: check assumption - Motors produce TPDO (when transmission_type=on_sync) within
+            // feedback window in every operation mode
+            if self.cycle_state.is_all_cycle_feedback_received() {
+                self.sync_feedback_received();
+            } else if self.feedback_time_elapsed() {
                 self.feedback_timer_elapsed();
             }
+
             if self.sync_timer_elapsed() {
                 self.start_sync_cycle()?;
             }
 
-            trace!("RT engine looping");
+            trace!("RT engine looping\n");
         }
 
         warn!("RT engine shutting down...");
@@ -223,24 +225,38 @@ impl RtEngine {
 
     fn start_sync_cycle(&mut self) -> Result<(), RtError> {
         // Time cycle
-        self.timekeeper.start_new_cycle();
+        self.timekeeper.on_sync_cycle_start();
 
-        // Check timer expirations
-        let expirations = self.sync_timer.expirations().expect("TimerFD read failed");
+        self.sync_timer.reset().map_err(|_| RtError::Timer)?;
 
-        // Check if we missed any
-        if expirations != 1 {
-            error!("RT overrun: {} SYNC timer expirations", expirations);
-        }
-
-        // Check cmd queue
+        // Process cmds
         if !self.cmd_queue.is_empty() {
             let cmd = self
                 .cmd_queue
                 .pop()
-                .expect("no cmd in cmd_queue after !is_empty()");
-            info!("self.transition_to({:?})", cmd);
-            self.transition_to(cmd);
+                .expect("CMD Queue checks out to be non-empty, but pop() returns Error");
+            match cmd {
+                RtCommand::Shutdown => {
+                    self.set_rt_state(RtState::Faulted);
+                    // TODO: cyclephase?
+                    return Ok(());
+                }
+                RtCommand::Reconfigure(new_cfg) => {
+                    self.reconfigure_motor(new_cfg)?;
+                    self.set_rt_state(RtState::Reconfiguring);
+                    // TODO: get new config from somewhere?
+                    // TODO: set mapping
+                }
+                RtCommand::SingleCycle => {
+                    self.set_rt_state(RtState::SingleCycle);
+                }
+                RtCommand::Cyclic => {
+                    self.set_rt_state(RtState::Cyclic);
+                }
+                RtCommand::Idle => {
+                    self.set_rt_state(RtState::Idle);
+                }
+            }
         }
 
         // Write SYNC
@@ -281,7 +297,7 @@ impl RtEngine {
                             // What type of PDO is this?
                             if pdo.pdo_type == PdoType::RPDO {
                                 // Match rpdo msg node id to a managed motor
-                                if let Some((idx, motor)) = self
+                                if let Some((motor_idx, motor)) = self
                                     .managed_motors
                                     .iter()
                                     .enumerate()
@@ -289,33 +305,47 @@ impl RtEngine {
                                     .find(|(_, m)| m.node_id == pdo.node_id)
                                 {
                                     // RPDO matched, parse into [`MotorFeedback`]
-                                    let state = self.motor_state[idx].as_ref().unwrap();
-                                    let feedback = self.motor_feedback[idx].as_mut().unwrap();
+                                    let state = self.motor_state[motor_idx].as_ref().unwrap();
+                                    let feedback = self.motor_feedback[motor_idx].as_mut().unwrap();
 
-                                    match state.pdo_cfg.parse_rpdo(&pdo, feedback) {
-                                        Ok(_) => {
-                                            tracing::info!(
-                                                "RPDO parsing & feedback update success! -
-                                                    motor: {}",
-                                                motor.node_id.get()
-                                            )
+                                    // Was this RPDO num expected for this motor?
+                                    if let Some(_) = state.pdo_cfg.rpdo[pdo.num] {
+                                        // if self.cycle_state.pdo_state[motor_idx][pdo.num].expected {
+                                        // Try to update motor feedback for this motor
+                                        match state.pdo_cfg.parse_rpdo(&pdo, feedback) {
+                                            Ok(_) => {
+                                                info!(
+                                                    "RPDO parsing & feedback update success for motor: {}",
+                                                    motor.node_id.get()
+                                                );
 
-                                            // TODO: update cycle state feedback processed for motor.node_id
+                                                // Update cycle state feedback processed for this motor
+                                                self.cycle_state
+                                                    .process_rpdo_received(&pdo, motor_idx);
+                                            }
+                                            Err(e) => {
+                                                error!("Failed to parse RPDO: {}", e)
+                                            }
                                         }
-                                        Err(e) => {
-                                            tracing::error!("Failed to parse RPDO: {}", e)
-                                        }
+                                    } else {
+                                        error!(
+                                            "RPDO parse error - unable to match {:?} to any managed
+                                            motor, ignoring...",
+                                            pdo
+                                        );
                                     }
                                 } else {
-                                    tracing::error!(
-                                        "RPDO parse error - unable to match {:?} to any managed motor",
-                                        pdo
+                                    // this RPDO num was not expected for this motor
+                                    warn!(
+                                        "Node {} Unexpected RPDO {} Received!, ignoring",
+                                        pdo.node_id.get(),
+                                        pdo.num
                                     );
                                 }
                             }
                         }
                         _ => {
-                            warn!("TODO: impl logic for this CAN RX {:?}", parsed);
+                            error!("TODO: impl logic for this CAN RX {:?}", parsed);
                         }
                     }
                 }
@@ -350,20 +380,6 @@ impl RtEngine {
             Err(err) => {
                 error!("Unable to drain command queue: {:?}", err);
             }
-        }
-    }
-
-    fn transition_to(&mut self, cmd: RtCommand) {
-        match cmd {
-            RtCommand::Shutdown => {
-                self.state = RtState::Shutdown;
-            }
-            RtCommand::Reconfigure => {
-                // TODO: get new config somehow
-                self.state = RtState::Reconfiguring
-            }
-            RtCommand::SingleCycle => self.state = RtState::SingleCycle,
-            RtCommand::Cyclic => self.state = RtState::Cyclic,
         }
     }
 
@@ -402,11 +418,13 @@ impl RtEngine {
         self.timekeeper.end_feedback();
         self.cycle_state.transition_to(CyclePhase::SendingRpdoS);
 
+        // TODO:
         // CAN_RX should have parsed TPDO into coherent current [`MotorState`]
 
         //   if (x-axis skew > large) -> ESTOP
 
         // Snapshot RPDO Setpoints
+        self.snapshot_motor_setpoints();
 
         //   if (torque mode) {
         //      Calculate x axis skew compensation
@@ -438,5 +456,42 @@ impl RtEngine {
                 -1,
             )
         }
+    }
+
+    fn to_error_state(&mut self, arg: &'static str) {
+        self.set_rt_state(RtState::Faulted);
+        todo!("TODO error_state for: {}", arg)
+    }
+
+    fn to_safe_state(&mut self) {
+        // TODO: Move motors to safe setpoint / state
+        todo!("Move motors to safe setpoint / state -> E/QUICK STOP drives?");
+        self.set_rt_state(RtState::Shutdown);
+    }
+
+    fn set_rt_state(&mut self, new_state: RtState) {
+        self.state = new_state;
+    }
+
+    fn reconfigure_motor(&self, new_cfg: ReconfigurePayload) -> Result<(), RtError> {
+        // is this a valid motor?
+        let Some(motor) = self
+            .managed_motors
+            .iter()
+            .filter_map(|x| Some(x.as_ref()?))
+            .find(|m| m.node_id == new_cfg.motor)
+        else {
+            return Err(RtError::InvalidMotor);
+        };
+
+        // Valid motor: Reconfigure PDO mappping
+
+        // TODO: Get list of default params for this given operationmode
+        // Do all the sdo calls
+        // steal from parametrise_motor
+        can.write_frame(&self.sync_frame)
+            .expect("Unable to write SYNC");
+
+        Ok(())
     }
 }

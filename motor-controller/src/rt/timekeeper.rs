@@ -74,7 +74,7 @@ impl TimeKeeper {
         cycle_timing
     }
 
-    pub fn start_new_cycle(&mut self) {
+    pub fn on_sync_cycle_start(&mut self) {
         TimeKeeper::time(&mut self.start_cycle)
     }
 

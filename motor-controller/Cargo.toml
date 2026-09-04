@@ -16,6 +16,7 @@ owo-colors = "4.2.3"
 heapless = { version = "0.9.1", features = ["serde"] }
 socketcan = "3.6.2"
 libc = "0.2.189"
+once_cell = "1.21.4"
 
 [dev-dependencies]
 tracing-subscriber = { version = "0.3.19", features = ["registry", "env-filter"] }

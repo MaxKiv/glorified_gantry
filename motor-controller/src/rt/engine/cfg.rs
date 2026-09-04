@@ -1,11 +1,9 @@
-use std::{collections::HashSet, hash::Hash};
-
 use crate::{
     canopen::{frame::NodeId, pdo::mapping::OMSNodePdoConfig},
     consts::pdo::{
         gantry::{
             DEFAULT_ACTIVE_GANTRY_PDOCFG, DEFAULT_GANTRY_PDOCFG, HGantryActivePdoConfig,
-            HGantryPdoConfig, TEST_GANTRY_NODEMAP, TEST_GANTRY_NODES,
+            HGantryPdoConfig,
         },
         pp::DEFAULT_PP_PDOCFG,
     },
