@@ -1,4 +1,4 @@
-use crate::{canopen::frame::NodeId, oms::OperationMode};
+use crate::{canopen::frame::NodeId, oms::OperationMode, rt::RtSetpoint};
 
 pub mod channel;
 pub mod queue;
@@ -14,6 +14,6 @@ pub enum RtCommand {
     Idle,
     Shutdown,
     Reconfigure(ReconfigurePayload),
-    SingleCycle, //?
-    Cyclic,      //?
+    SingleCycle(RtSetpoint),
+    Cyclic(RtSetpoint),
 }

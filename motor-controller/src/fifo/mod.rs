@@ -3,7 +3,7 @@ pub mod error;
 
 use std::mem::MaybeUninit;
 
-use crate::fifo::error::Error;
+use crate::fifo::error::FifoError;
 
 /// A single thread FIFO impl
 #[derive(Debug)]
@@ -26,10 +26,10 @@ impl<T, const N: usize> Fifo<T, N> {
         self.read == self.write
     }
 
-    pub fn push(&mut self, item: T) -> Result<usize, Error> {
+    pub fn push(&mut self, item: T) -> Result<usize, FifoError<T>> {
         // Check full
         if self.write - self.read == N {
-            return Err(Error::Full);
+            return Err(FifoError::Full(item));
         }
 
         self.buff[self.write % N].write(item);
@@ -39,9 +39,9 @@ impl<T, const N: usize> Fifo<T, N> {
         Ok(self.write)
     }
 
-    pub fn pop(&mut self) -> Result<T, Error> {
+    pub fn pop(&mut self) -> Result<T, FifoError<T>> {
         if self.is_empty() {
-            return Err(Error::Empty);
+            return Err(FifoError::Empty);
         }
 
         let out = unsafe { self.buff[self.read % N].assume_init_read() };

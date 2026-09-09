@@ -2,7 +2,7 @@ use std::io;
 use std::os::fd::RawFd;
 use std::sync::{Arc, Mutex, MutexGuard};
 
-use crate::rt::cmd::RtCommand;
+use crate::frontend::GantryCommand;
 use crate::rt::cmd::queue::CommandQueue;
 use crate::spsc::error::Error;
 
@@ -80,7 +80,7 @@ pub struct CmdDrain<'a, const N: usize> {
 }
 
 impl<'a, const N: usize> Iterator for CmdDrain<'a, N> {
-    type Item = RtCommand;
+    type Item = GantryCommand;
 
     fn next(&mut self) -> Option<Self::Item> {
         self.queue_lock.pop()
@@ -113,10 +113,15 @@ impl<const N: usize> CmdSender<N> {
         self.fd
     }
 
-    pub fn send(&self, cmd: RtCommand) -> Result<(), Error> {
+    pub fn send(&self, cmd: &GantryCommand) -> Result<(), Error> {
         // Block on Enqueue cmd
         loop {
-            if let Ok(_) = self.queue.lock().map_err(|_| Error::LockError)?.push(cmd) {
+            if let Ok(_) = self
+                .queue
+                .lock()
+                .map_err(|_| Error::LockError)?
+                .push(cmd.clone())
+            {
                 break;
             }
         }

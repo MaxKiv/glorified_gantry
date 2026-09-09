@@ -1,7 +1,7 @@
 #[derive(Debug, thiserror::Error)]
-pub enum Error {
+pub enum FifoError<T> {
     #[error("Fifo is full")]
-    Full,
+    Full(T),
     #[error("Fifo is empty")]
     Empty,
 }
