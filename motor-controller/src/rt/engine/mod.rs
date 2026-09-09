@@ -11,12 +11,13 @@ use socketcan::{CanFrame, CanSocket, EmbeddedFrame, Frame, Socket};
 use tracing::{error, info, trace, warn};
 
 use crate::{
-    canopen::{MessageType, frame::CanOpenFrame, pdo::PdoType},
+    canopen::{CanOpen, MessageType, frame::CanOpenFrame, pdo::PdoType},
     consts::{MAX_NODE_ID, RT_CONFIG, pdo::gantry::TEST_MOTORS},
     fifo::Fifo,
+    frontend::GantryCommand,
     rt::{
         MotorFeedback, RtError,
-        cmd::{ReconfigurePayload, RtCommand, channel::CmdReceiver},
+        cmd::{ReconfigurePayload, channel::CmdReceiver},
         engine::{
             cfg::{ConstRtEngineConfig, GantryMotor, MotorState, TEST_CONST_RT_ENGINE_CFG},
             cycle_rx::{CyclePhase, CycleState},
@@ -58,20 +59,28 @@ pub struct MotorSetpoint {
 pub struct RtEngine {
     can_interface: String,
     can: CanSocket,
+    canopen: CanOpen,
+
+    /// Bridges frontend -> RT FIFO
     cmd_channel_rx: CmdReceiver<CMD_CHANNEL_SIZE>,
-    cmd_queue: Fifo<RtCommand, CMD_QUEUE_SIZE>,
+    /// FIFO GantryCommand stack for later consumption
+    cmd_queue: Fifo<GantryCommand, CMD_QUEUE_SIZE>,
+
     state: RtState,
-    sync_frame: CanFrame,
     const_rt_cfg: ConstRtEngineConfig,
-    managed_motors: [Option<GantryMotor>; MAX_NODE_ID],
+
     motor_state: [Option<MotorState>; MAX_NODE_ID],
     motor_feedback: [Option<MotorFeedback>; MAX_NODE_ID],
     motor_setpoint: [Option<MotorSetpoint>; MAX_NODE_ID],
+
+    current_cmd: GantryCommand,
+
+    cycle_state: CycleState,
+
     poll_fds: [pollfd; 4],
     sync_timer: TimerFd,
     feedback_timer: TimerFd,
     timekeeper: TimeKeeper,
-    cycle_state: CycleState,
 }
 
 impl RtEngine {
@@ -79,9 +88,6 @@ impl RtEngine {
         can_interface: String,
         cmd_rx: CmdReceiver<CMD_CHANNEL_SIZE>,
     ) -> JoinHandle<Result<(), RtError>> {
-        let sync: CanFrame =
-            CanFrame::from_raw_id(0x080, &[]).expect("failed to construct SYNC frame");
-
         let timekeeper = TimeKeeper::new();
 
         // Constructs a new sync cycle timer
@@ -99,6 +105,7 @@ impl RtEngine {
         let can = CanSocket::open(&can_interface).expect("Unable to open CAN interface");
         can.set_nonblocking(false)
             .expect("Unable to set CAN socket nonblocking");
+        let canopen = CanOpen::new(can);
 
         // Construct poll FDs
         let poll_fds = [
@@ -131,10 +138,10 @@ impl RtEngine {
 
         let mut rt = Self {
             can_interface,
+            canopen,
             cmd_channel_rx: cmd_rx,
             state: RtState::default(),
-            cmd_queue: Fifo::<RtCommand, CMD_QUEUE_SIZE>::new(),
-            sync_frame: sync,
+            cmd_queue: Fifo::<GantryCommand, CMD_QUEUE_SIZE>::new(),
             can,
             poll_fds,
             timekeeper,
@@ -142,10 +149,10 @@ impl RtEngine {
             feedback_timer,
             const_rt_cfg: TEST_CONST_RT_ENGINE_CFG,
             cycle_state,
-            managed_motors: TEST_MOTORS,
             motor_state,
             motor_feedback,
             motor_setpoint,
+            current_cmd: GantryCommand::default(),
         };
 
         // Spawn RT engine thread
@@ -155,11 +162,16 @@ impl RtEngine {
     fn run(&mut self) -> Result<(), RtError> {
         info!("RT Thread started");
 
+        self.startup_drives().map_err(|_| RtError::Startup)?;
+
         // Arm SYNC timer
         self.sync_timer.arm().map_err(|_| RtError::Timer)?;
 
-        // Main loop
+        // Main RT loop
         loop {
+            // NOTE: anything here triggers on every poll() resulution
+            // So after CAN RX, Timer expirations, CMD RX, etc
+
             // Error condition
             if self.state == RtState::Faulted {
                 self.to_safe_state();
@@ -235,32 +247,46 @@ impl RtEngine {
                 .cmd_queue
                 .pop()
                 .expect("CMD Queue checks out to be non-empty, but pop() returns Error");
-            match cmd {
-                RtCommand::Shutdown => {
-                    self.set_rt_state(RtState::Faulted);
-                    // TODO: cyclephase?
-                    return Ok(());
-                }
-                RtCommand::Reconfigure(new_cfg) => {
-                    self.reconfigure_motor(new_cfg)?;
-                    self.set_rt_state(RtState::Reconfiguring);
-                    // TODO: get new config from somewhere?
-                    // TODO: set mapping
-                }
-                RtCommand::SingleCycle => {
+
+            match &cmd {
+                GantryCommand::CyclicSetpoint(gantry_setpoint) => todo!(),
+                GantryCommand::Setpoint(gantry_setpoint) => {}
+                GantryCommand::Home => {
                     self.set_rt_state(RtState::SingleCycle);
                 }
-                RtCommand::Cyclic => {
-                    self.set_rt_state(RtState::Cyclic);
-                }
-                RtCommand::Idle => {
+                GantryCommand::Idle => {
+                    //empty
                     self.set_rt_state(RtState::Idle);
                 }
             }
+            self.current_cmd = cmd;
+
+            // match cmd {
+            //     RtCommand::Shutdown => {
+            //         self.set_rt_state(RtState::Faulted);
+            //         // TODO: cyclephase?
+            //         return Ok(());
+            //     }
+            //     RtCommand::Reconfigure(new_cfg) => {
+            //         self.reconfigure_motor(new_cfg)?;
+            //         self.set_rt_state(RtState::Reconfiguring);
+            //         // TODO: get new config from somewhere?
+            //         // TODO: set mapping
+            //     }
+            //     RtCommand::SingleCycle => {
+            //         self.set_rt_state(RtState::SingleCycle);
+            //     }
+            //     RtCommand::Cyclic => {
+            //         self.set_rt_state(RtState::Cyclic);
+            //     }
+            //     RtCommand::Idle => {
+            //         self.set_rt_state(RtState::Idle);
+            //     }
+            // }
         }
 
         // Write SYNC
-        self.send_sync(&self.can);
+        self.canopen.send_sync().map_err(|e| RtError::CanOpen(e))?;
 
         // Setup feedback timer
         self.feedback_timer.arm_once().map_err(|_| RtError::Timer)?;
@@ -274,6 +300,7 @@ impl RtEngine {
 
     fn process_can_rx(&mut self) {
         for _ in 0..RT_CONFIG.can_frames_per_poll {
+            // Read raw can frame
             match self.can.read_frame() {
                 Ok(frame) => {
                     info!(
@@ -282,6 +309,7 @@ impl RtEngine {
                         &frame.data()[..frame.data().len()]
                     );
 
+                    // Try parse into CANOpen data frame
                     let Ok(parsed) = CanOpenFrame::from_canframe(frame) else {
                         error!(
                             "Unable to parse CAN RX id={:#x} data={:?}",
@@ -292,21 +320,22 @@ impl RtEngine {
                     };
                     info!("CAN RX Parsed: {:?}", frame);
 
+                    // Process parsed CANOpen dataframe
                     match parsed.msg {
                         MessageType::PDO(pdo) => {
                             // What type of PDO is this?
                             if pdo.pdo_type == PdoType::RPDO {
                                 // Match rpdo msg node id to a managed motor
-                                if let Some((motor_idx, motor)) = self
-                                    .managed_motors
-                                    .iter()
-                                    .enumerate()
-                                    .filter_map(|(i, m)| Some((i, m.as_ref()?)))
+                                if let Some((_, motor)) = self
+                                    .const_rt_cfg
+                                    .axis_cfg
+                                    .motors()
                                     .find(|(_, m)| m.node_id == pdo.node_id)
                                 {
+                                    let i = motor.node_id.idx();
                                     // RPDO matched, parse into [`MotorFeedback`]
-                                    let state = self.motor_state[motor_idx].as_ref().unwrap();
-                                    let feedback = self.motor_feedback[motor_idx].as_mut().unwrap();
+                                    let state = self.motor_state[i].as_ref().unwrap();
+                                    let feedback = self.motor_feedback[i].as_mut().unwrap();
 
                                     // Was this RPDO num expected for this motor?
                                     if let Some(_) = state.pdo_cfg.rpdo[pdo.num] {
@@ -321,7 +350,7 @@ impl RtEngine {
 
                                                 // Update cycle state feedback processed for this motor
                                                 self.cycle_state
-                                                    .process_rpdo_received(&pdo, motor_idx);
+                                                    .process_rpdo_received(&pdo, i);
                                             }
                                             Err(e) => {
                                                 error!("Failed to parse RPDO: {}", e)
@@ -370,8 +399,8 @@ impl RtEngine {
             Ok(drain) => {
                 trace!("Drain success");
                 for cmd in drain {
-                    if let Err(err) = self.cmd_queue.push(cmd) {
-                        error!("RT CMD RX unable to push {:?} - {:?}", cmd, err);
+                    if let Err(err) = self.cmd_queue.push(cmd.clone()) {
+                        error!("RT CMD RX unable to push {:?}", err);
                     }
 
                     info!("RT pushed cmd: {:?} -> {}", cmd, self.cmd_queue);
@@ -381,11 +410,6 @@ impl RtEngine {
                 error!("Unable to drain command queue: {:?}", err);
             }
         }
-    }
-
-    fn send_sync(&self, can: &CanSocket) {
-        can.write_frame(&self.sync_frame)
-            .expect("Unable to write SYNC");
     }
 
     fn feedback_timer_elapsed(&mut self) {
@@ -489,9 +513,26 @@ impl RtEngine {
         // TODO: Get list of default params for this given operationmode
         // Do all the sdo calls
         // steal from parametrise_motor
-        can.write_frame(&self.sync_frame)
-            .expect("Unable to write SYNC");
+        self.canopen.send_sync().map_err(|e| RtError::CanOpen(e))?;
 
         Ok(())
     }
+
+    // Startup?
+    // Set NMT OP?
+    // parametrise_motor?
+    fn startup_drives(&self) -> _ {
+        // NMT PreOp
+
+        // Default parametrisation
+
+        // Switch motors into default operationmode
+        for motor in self.motors {
+            self.mode_switch(motor)
+        }
+
+        // Drives end in NMT Op + Cia402 disabled
+    }
+
+    fn mode_switch(&self, motor: NodeId)
 }

@@ -1,10 +1,10 @@
-use std::{fmt::Display, sync::atomic::Ordering};
+use std::fmt::Display;
 
 use crate::fifo::Fifo;
 
 impl<T, const N: usize> Display for Fifo<T, N>
 where
-    T: std::fmt::Debug + Clone,
+    T: std::fmt::Debug,
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let write = self.write;

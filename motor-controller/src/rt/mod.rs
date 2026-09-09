@@ -6,6 +6,7 @@ pub mod timerfd;
 
 use crate::{
     canopen::{
+        CanOpenError,
         od::entry::ODEntry,
         pdo::{PdoType, TransmissionType},
     },
@@ -32,6 +33,10 @@ pub enum RtError {
     Poll,
     #[error("Invalid Motor")]
     InvalidMotor,
+    #[error("Unable to start motor")]
+    Startup,
+    #[error("Canopen Error: {0:?}")]
+    CanOpen(CanOpenError),
 }
 
 pub struct MotorFeedback {
