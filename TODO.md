@@ -4,17 +4,16 @@
 
 ## To Figure out:
 
-1. how to switch pdo configuration?
-2. how to parse PDO on CAN_RX
-3. how to map "All motors setpoints" -> current active PDO mapping
-
-4. Should Profile modes RPDO transmission type be "onchange" or "onsync"?
-5. Should Cyclic Profile mode use TPDO2?
-6. Validate TEST/DEMOSTRATOR HGantryNodeMap
-7. Merge HGantryNodeMap -> AxisConfiguration?
-8. Move gantry specific stuff to its own crate
+1. Think very hard how to Impl Cia402Motor
+2. Should Profile modes RPDO transmission type be "onchange" or "onsync"?
+3. Validate TEST/DEMOSTRATOR HGantryNodeMap
+4. Move gantry specific stuff to its own crate
 
 ## Improvements
+
+### Add feedback to NMT system
+
+Currently I assume the drives always switch into the requested state
 
 ### Move Gantry specific stuff to its own crate
 

@@ -34,7 +34,7 @@ impl NodeId {
         self.0 as usize
     }
 
-    pub fn get(&self) -> u8 {
+    pub fn u8(&self) -> u8 {
         self.0
     }
 }

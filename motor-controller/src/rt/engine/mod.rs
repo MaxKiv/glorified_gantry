@@ -11,15 +11,18 @@ use socketcan::{CanFrame, CanSocket, EmbeddedFrame, Frame, Socket};
 use tracing::{error, info, trace, warn};
 
 use crate::{
-    canopen::{CanOpen, MessageType, frame::CanOpenFrame, pdo::PdoType},
+    axis::GantryAxis,
+    canopen::{CanOpen, MessageType, frame::CanOpenFrame, nmt::NmtCommandSpecifier, pdo::PdoType},
+    cia402::Cia402Identifier,
     consts::{MAX_NODE_ID, RT_CONFIG, pdo::gantry::TEST_MOTORS},
     fifo::Fifo,
     frontend::GantryCommand,
+    oms::OperationMode,
     rt::{
         MotorFeedback, RtError,
         cmd::{ReconfigurePayload, channel::CmdReceiver},
         engine::{
-            cfg::{ConstRtEngineConfig, GantryMotor, MotorState, TEST_CONST_RT_ENGINE_CFG},
+            cfg::{Axis, ConstRtEngineConfig, GantryMotor, MotorState, TEST_CONST_RT_ENGINE_CFG},
             cycle_rx::{CyclePhase, CycleState},
         },
         timekeeper::TimeKeeper,
@@ -68,6 +71,8 @@ pub struct RtEngine {
 
     state: RtState,
     const_rt_cfg: ConstRtEngineConfig,
+
+    axi: [Option<GantryAxis>; Axis::COUNT],
 
     motor_state: [Option<MotorState>; MAX_NODE_ID],
     motor_feedback: [Option<MotorFeedback>; MAX_NODE_ID],
@@ -162,7 +167,7 @@ impl RtEngine {
     fn run(&mut self) -> Result<(), RtError> {
         info!("RT Thread started");
 
-        self.startup_drives().map_err(|_| RtError::Startup)?;
+        self.startup_drives()?;
 
         // Arm SYNC timer
         self.sync_timer.arm().map_err(|_| RtError::Timer)?;
@@ -345,12 +350,11 @@ impl RtEngine {
                                             Ok(_) => {
                                                 info!(
                                                     "RPDO parsing & feedback update success for motor: {}",
-                                                    motor.node_id.get()
+                                                    motor.node_id.u8()
                                                 );
 
                                                 // Update cycle state feedback processed for this motor
-                                                self.cycle_state
-                                                    .process_rpdo_received(&pdo, i);
+                                                self.cycle_state.process_rpdo_received(&pdo, i);
                                             }
                                             Err(e) => {
                                                 error!("Failed to parse RPDO: {}", e)
@@ -367,7 +371,7 @@ impl RtEngine {
                                     // this RPDO num was not expected for this motor
                                     warn!(
                                         "Node {} Unexpected RPDO {} Received!, ignoring",
-                                        pdo.node_id.get(),
+                                        pdo.node_id.u8(),
                                         pdo.num
                                     );
                                 }
@@ -497,42 +501,39 @@ impl RtEngine {
         self.state = new_state;
     }
 
-    fn reconfigure_motor(&self, new_cfg: ReconfigurePayload) -> Result<(), RtError> {
-        // is this a valid motor?
-        let Some(motor) = self
-            .managed_motors
-            .iter()
-            .filter_map(|x| Some(x.as_ref()?))
-            .find(|m| m.node_id == new_cfg.motor)
-        else {
-            return Err(RtError::InvalidMotor);
-        };
-
-        // Valid motor: Reconfigure PDO mappping
-
-        // TODO: Get list of default params for this given operationmode
-        // Do all the sdo calls
-        // steal from parametrise_motor
-        self.canopen.send_sync().map_err(|e| RtError::CanOpen(e))?;
-
-        Ok(())
-    }
-
     // Startup?
     // Set NMT OP?
     // parametrise_motor?
-    fn startup_drives(&self) -> _ {
+    fn startup_drives(&self) -> Result<(), RtError> {
         // NMT PreOp
 
         // Default parametrisation
 
         // Switch motors into default operationmode
-        for motor in self.motors {
-            self.mode_switch(motor)
+        for axis in &self.axi {
+            if let Some(axis) = axis.as_ref() {
+                axis.master
+                    .switch_operation_mode(OperationMode::default())?;
+                if let Some(slave) = axis.slave.as_ref() {
+                    slave.switch_operation_mode(OperationMode::default())?;
+                }
+            }
         }
 
         // Drives end in NMT Op + Cia402 disabled
+
+        Ok(())
     }
 
-    fn mode_switch(&self, motor: NodeId)
+    fn mode_switch(&self, motor: &Cia402Identifier) -> Result<(), RtError> {
+        // NMT PreOp
+        self.canopen
+            .send_nmt(NmtCommandSpecifier::EnterPreOperational, motor);
+
+        // Mode-specific Parametrisation
+
+        // NMT OP + Cia402 Disabled
+
+        Ok(())
+    }
 }

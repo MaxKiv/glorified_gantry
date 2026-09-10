@@ -20,10 +20,11 @@ use crate::{
     sw::StatusWord,
 };
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum OperationMode {
     AutoSetup = -2,
     ClockDirectionMode = -1,
+    #[default]
     NoChange = 0,
     ProfilePosition = 1,
     Velocity = 2,

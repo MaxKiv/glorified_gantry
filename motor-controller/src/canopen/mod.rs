@@ -6,9 +6,12 @@ pub mod pdo;
 pub mod sdo;
 pub mod sync;
 
-use crate::canopen::{
-    nmt::{NmtControlMessage, NmtMonitorMessage},
-    sync::SyncMessage,
+use crate::{
+    canopen::{
+        nmt::{NmtCommandSpecifier, NmtControlMessage, NmtFrame, NmtMonitorMessage},
+        sync::SyncMessage,
+    },
+    cia402::Cia402Identifier,
 };
 use socketcan::{CanDataFrame, CanFrame, CanSocket, Frame, Socket};
 
@@ -34,6 +37,8 @@ pub enum MessageType {
 pub enum CanOpenError {
     #[error("Unable to write sync")]
     Sync,
+    #[error("Unable to send NMT cmd {0:?} to {1:?}")]
+    Nmt(NmtCommandSpecifier, Cia402Identifier),
 }
 
 /// Thin socketcan wrapper for CANOpen primitives
@@ -55,5 +60,18 @@ impl CanOpen {
         self.can
             .write_frame(&self.sync_frame)
             .map_err(|_| CanOpenError::Sync)
+    }
+
+    pub fn send_nmt(
+        &self,
+        cmd: nmt::NmtCommandSpecifier,
+        motor: &Cia402Identifier,
+    ) -> Result<(), CanOpenError> {
+        let frame = NmtFrame::new_cmd_to_node(cmd, motor);
+        self.can
+            .write_frame(&frame.inner)
+            .map_err(|_| CanOpenError::Nmt(cmd, motor.clone()))?;
+
+        Ok(())
     }
 }

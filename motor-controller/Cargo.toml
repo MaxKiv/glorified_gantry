@@ -7,7 +7,7 @@ edition = "2024"
 thiserror = "2.0.16"
 anyhow = "1.0.100"
 # oze-canopen = "0.1.0"
-oze-canopen = { path = "../vendor/oze-canopen/" } 
+# oze-canopen = { path = "../vendor/oze-canopen/" } 
 tokio = { version = "1.48.0", features = ["full"] }
 async-trait = "0.1.88"
 tracing = "0.1.41"

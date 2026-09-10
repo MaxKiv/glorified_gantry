@@ -2161,7 +2161,6 @@ dependencies = [
  "libc",
  "once_cell",
  "owo-colors 4.2.3",
- "oze-canopen",
  "socketcan",
  "thiserror 2.0.17",
  "tokio",
