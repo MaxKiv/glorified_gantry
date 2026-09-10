@@ -53,10 +53,15 @@ pub const DEFAULT_MUT_RT_ENGINE_CFG: MutableRtEngineConfig = MutableRtEngineConf
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(C)]
 pub enum Axis {
-    X,
-    Y,
-    Z,
+    X = 0,
+    Y = 1,
+    Z = 2,
+}
+
+impl Axis {
+    pub const COUNT: usize = std::mem::variant_count::<Axis>();
 }
 
 pub struct GantryAxisCfg {

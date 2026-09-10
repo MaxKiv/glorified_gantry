@@ -53,7 +53,7 @@ impl CycleState {
     }
 
     pub fn process_rpdo_received(&mut self, pdo: &RawPdoMessage, motor_idx: usize) {
-        let node_id = pdo.node_id.get() as usize;
+        let node_id = pdo.node_id.u8() as usize;
         let received = &mut self.rpdos_received[motor_idx][node_id];
 
         if *received {
