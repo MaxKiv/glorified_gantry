@@ -82,7 +82,7 @@ impl NmtFrame {
     pub fn new_cmd_to_node(cmd: NmtCommandSpecifier, node: &Cia402Identifier) -> Self {
         const NMT_COB_ID: u32 = 0x0;
         let inner: CanFrame = CanFrame::from_raw_id(NMT_COB_ID, &[cmd.as_u8(), node.node_id.u8()])
-            .expect("failed to construct SYNC frame");
+            .expect("failed to construct NMT frame");
 
         Self { inner }
     }

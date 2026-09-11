@@ -1,10 +1,11 @@
 use crate::{
-    axis::scaling::AxisScaling,
+    axis::{error::AxisError, scaling::AxisScaling},
     cia402::Cia402Identifier,
-    oms::OperationMode,
+    oms::{OperationMode, setpoint::Setpoint},
     rt::{engine::cfg::Axis, motor::Cia402Motor},
 };
 
+pub mod error;
 pub mod scaling;
 
 pub struct GantryAxis {
@@ -12,6 +13,7 @@ pub struct GantryAxis {
     pub master: Cia402Motor,
     pub slave: Option<Cia402Motor>,
     pub scaling: AxisScaling,
+    pub opmode: OperationMode,
 }
 
 impl GantryAxis {
@@ -24,12 +26,14 @@ impl GantryAxis {
         // Start master
         let master = Cia402Motor::new(master);
         let slave = slave.map(|s| Cia402Motor::new(s));
+        let opmode = OperationMode::default();
 
         Self {
             axis,
             master,
             slave,
             scaling,
+            opmode,
         }
     }
 
@@ -39,11 +43,25 @@ impl GantryAxis {
             .flatten()
     }
 
-    pub fn switch_opmode(&mut self, new_opmode: OperationMode) -> Result<(), ()> {
+    pub fn switch_opmode(&mut self, new_opmode: &OperationMode) -> Result<(), AxisError> {
         for motor in self.get_axis_motors_mut() {
-            motor.switch_opmode(new_opmode)?;
+            motor
+                .switch_operation_mode(new_opmode)
+                .map_err(|_| AxisError::UnableToSwitchOpMode(*new_opmode))?;
         }
 
+        self.opmode = *new_opmode;
         Ok(())
+    }
+
+    /// Push a new setpoint to the axis master drive, and slave if any
+    pub fn new_axis_setpoint(&mut self, setpoint: Setpoint) {
+        if let Some(slave) = self.slave.as_mut() {
+            self.master.new_motor_setpoint(setpoint.clone());
+            slave.new_motor_setpoint(setpoint);
+        } else {
+            // Avoid setpoint clone
+            self.master.new_motor_setpoint(setpoint);
+        }
     }
 }

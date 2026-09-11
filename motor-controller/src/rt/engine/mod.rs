@@ -7,22 +7,22 @@ use std::{
 };
 
 use libc::pollfd;
-use socketcan::{CanFrame, CanSocket, EmbeddedFrame, Frame, Socket};
+use socketcan::{CanSocket, EmbeddedFrame, Frame, Socket};
 use tracing::{error, info, trace, warn};
 
 use crate::{
     axis::GantryAxis,
     canopen::{CanOpen, MessageType, frame::CanOpenFrame, nmt::NmtCommandSpecifier, pdo::PdoType},
     cia402::Cia402Identifier,
-    consts::{MAX_NODE_ID, RT_CONFIG, pdo::gantry::TEST_MOTORS},
+    consts::{MAX_NODE_ID, RT_CONFIG},
     fifo::Fifo,
-    frontend::GantryCommand,
+    frontend::{GantryCommand, GantrySetpoint},
     oms::OperationMode,
     rt::{
         MotorFeedback, RtError,
-        cmd::{ReconfigurePayload, channel::CmdReceiver},
+        cmd::channel::CmdReceiver,
         engine::{
-            cfg::{Axis, ConstRtEngineConfig, GantryMotor, MotorState, TEST_CONST_RT_ENGINE_CFG},
+            cfg::{Axis, ConstRtEngineConfig, MotorState, TEST_CONST_RT_ENGINE_CFG},
             cycle_rx::{CyclePhase, CycleState},
         },
         timekeeper::TimeKeeper,
@@ -36,6 +36,9 @@ const CAN_RX_FD: usize = 2;
 const CMD_RX_FD: usize = 3;
 const CMD_CHANNEL_SIZE: usize = RT_CONFIG.cmd_channel_size;
 const CMD_QUEUE_SIZE: usize = RT_CONFIG.cmd_channel_size;
+const X_AXIS: usize = 1;
+const Y_AXIS: usize = 2;
+const Z_AXIS: usize = 3;
 
 #[derive(Default, PartialEq)]
 enum RtState {
@@ -74,6 +77,7 @@ pub struct RtEngine {
 
     axi: [Option<GantryAxis>; Axis::COUNT],
 
+    // TODO move this state into GantryAxis (& its internal Cia402Motor) above
     motor_state: [Option<MotorState>; MAX_NODE_ID],
     motor_feedback: [Option<MotorFeedback>; MAX_NODE_ID],
     motor_setpoint: [Option<MotorSetpoint>; MAX_NODE_ID],
@@ -195,22 +199,26 @@ impl RtEngine {
                 self.to_error_state("poll failed");
             }
 
-            // Event happend: Service events
+            // Drain new available inputs
             if self.can_frame_received() {
+                //
                 self.process_can_rx();
             }
-
             if self.cmd_received() {
                 self.process_cmd_rx();
             }
 
-            // ALL states
-            // TODO: check assumption - Motors produce TPDO (when transmission_type=on_sync) within
-            // feedback window in every operation mode
+            // Advance protocol/long-running operations like SDO traffic
+            // TODO: if CyclePhase::SdoWindow???
+            // TODO: how does this work with our main SDO work: drive pdo remapping?
+            // TODO: without condition on right cyclephase this seems to increase rt cycle latency no?
+            self.progress_protocol_tasks()?;
+
+            // Handle timing events.
             if self.cycle_state.is_all_cycle_feedback_received() {
                 self.sync_feedback_received();
-            } else if self.feedback_time_elapsed() {
-                self.feedback_timer_elapsed();
+            } else if self.feedback_deadline_elapsed() {
+                self.feedback_deadline_exceeded();
             }
 
             if self.sync_timer_elapsed() {
@@ -224,7 +232,7 @@ impl RtEngine {
         Ok(())
     }
 
-    fn feedback_time_elapsed(&self) -> bool {
+    fn feedback_deadline_elapsed(&self) -> bool {
         self.poll_fds[FEEDBACK_TIMER_FD].revents & libc::POLLIN != 0
     }
 
@@ -253,9 +261,10 @@ impl RtEngine {
                 .pop()
                 .expect("CMD Queue checks out to be non-empty, but pop() returns Error");
 
-            match &cmd {
-                GantryCommand::CyclicSetpoint(gantry_setpoint) => todo!(),
-                GantryCommand::Setpoint(gantry_setpoint) => {}
+            match cmd {
+                GantryCommand::CyclicSetpoint(gantry_setpoint) | GantryCommand::Setpoint(gantry_setpoint) => {
+                    self.new_gantry_setpoint(gantry_setpoint);
+                }
                 GantryCommand::Home => {
                     self.set_rt_state(RtState::SingleCycle);
                 }
@@ -265,29 +274,6 @@ impl RtEngine {
                 }
             }
             self.current_cmd = cmd;
-
-            // match cmd {
-            //     RtCommand::Shutdown => {
-            //         self.set_rt_state(RtState::Faulted);
-            //         // TODO: cyclephase?
-            //         return Ok(());
-            //     }
-            //     RtCommand::Reconfigure(new_cfg) => {
-            //         self.reconfigure_motor(new_cfg)?;
-            //         self.set_rt_state(RtState::Reconfiguring);
-            //         // TODO: get new config from somewhere?
-            //         // TODO: set mapping
-            //     }
-            //     RtCommand::SingleCycle => {
-            //         self.set_rt_state(RtState::SingleCycle);
-            //     }
-            //     RtCommand::Cyclic => {
-            //         self.set_rt_state(RtState::Cyclic);
-            //     }
-            //     RtCommand::Idle => {
-            //         self.set_rt_state(RtState::Idle);
-            //     }
-            // }
         }
 
         // Write SYNC
@@ -416,7 +402,7 @@ impl RtEngine {
         }
     }
 
-    fn feedback_timer_elapsed(&mut self) {
+    fn feedback_deadline_exceeded(&mut self) {
         // Check timer expirations
         let expirations = self
             .feedback_timer
@@ -439,27 +425,30 @@ impl RtEngine {
         self.timekeeper.end_cycle(self.cycle_state.cycle);
     }
 
-    /// Triggers on sync feedback received
-    /// Handles CyclePhase::SendingRpdoS & CyclePhase::SdoWindow
     fn sync_feedback_received(&mut self) {
         // TPDOs are in, bookkeeping
         self.timekeeper.end_feedback();
         self.cycle_state.transition_to(CyclePhase::SendingRpdoS);
 
-        // TODO:
-        // CAN_RX should have parsed TPDO into coherent current [`MotorState`]
+        // CAN_RX should have parsed TPDO and dispatched to each Cia402Motor (or axis?) state update
+        // This means we assume each motor/axis to contain the latest version of its state
+        // (else we would not be here, but in feedback_deadline_elapsed())
 
         //   if (x-axis skew > large) -> ESTOP
+        for axis in self.axi.as_ref().iter().flatten() {
+            if axis.skew() > LARGE {
+                self.do_e_stop();
+            }
+        }
 
-        // Snapshot RPDO Setpoints
-        self.snapshot_motor_setpoints();
-
-        //   if (torque mode) {
-        //      Calculate x axis skew compensation
-        //      Add skew compensation to setpoint
-        //   }
+        for axis in self.axi.as_ref().iter().flatten() {
+            if axis.opmode.is_torque_mode() {
+                axis.compensate_skew();
+            }
+        }
 
         // Transmit PDO
+        let rpdos = 
 
         // Construct CycleFeedback
         // Notify tokio of it somehow
@@ -513,9 +502,9 @@ impl RtEngine {
         for axis in &self.axi {
             if let Some(axis) = axis.as_ref() {
                 axis.master
-                    .switch_operation_mode(OperationMode::default())?;
+                    .switch_operation_mode(&OperationMode::default())?;
                 if let Some(slave) = axis.slave.as_ref() {
-                    slave.switch_operation_mode(OperationMode::default())?;
+                    slave.switch_operation_mode(&OperationMode::default())?;
                 }
             }
         }
@@ -535,5 +524,26 @@ impl RtEngine {
         // NMT OP + Cia402 Disabled
 
         Ok(())
+    }
+
+    /// Push a new setpoint to each of the gantry axis
+    fn new_gantry_setpoint(&mut self, gantry_setpoint: GantrySetpoint) {
+        if let Some(axis) = &mut self.axi[X_AXIS]
+            && let Some(setpoint) = gantry_setpoint.x
+        {
+            axis.new_axis_setpoint(setpoint)
+        }
+
+        if let Some(axis) = &mut self.axi[Y_AXIS]
+            && let Some(setpoint) = gantry_setpoint.y
+        {
+            axis.new_axis_setpoint(setpoint)
+        }
+
+        if let Some(axis) = &mut self.axi[Z_AXIS]
+            && let Some(setpoint) = gantry_setpoint.z
+        {
+            axis.new_axis_setpoint(setpoint)
+        }
     }
 }
