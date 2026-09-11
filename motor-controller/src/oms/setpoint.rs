@@ -20,7 +20,25 @@ pub enum Setpoint {
     CyclicTorque(CyclicTorqueSetpoint),
 }
 
+impl Default for Setpoint {
+    fn default() -> Self {
+        Setpoint::ProfileTorque(TorqueSetpoint { target_torque: 0 })
+    }
+}
+
 impl Setpoint {
+    pub fn required_opmode(&self) -> OperationMode {
+        match self {
+            Setpoint::ProfilePosition(_) => OperationMode::ProfilePosition,
+            Setpoint::ProfileVelocity(_) => OperationMode::Velocity,
+            Setpoint::ProfileTorque(_) => OperationMode::ProfileTorque,
+            Setpoint::Home(_) => OperationMode::Homing,
+            Setpoint::CyclicPosition(_) => OperationMode::CyclicSynchronousPosition,
+            Setpoint::CyclicVelocity(_) => OperationMode::CyclicSynchronousVelocity,
+            Setpoint::CyclicTorque(_) => OperationMode::CyclicSynchronousTorque,
+        }
+    }
+
     pub fn acknowledge_setpoint_received(&mut self) {
         match self {
             Setpoint::ProfilePosition(PositionSetpoint { flags, .. }) => {

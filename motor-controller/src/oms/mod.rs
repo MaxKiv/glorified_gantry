@@ -104,6 +104,10 @@ impl OperationMode {
         )
     }
 
+    pub fn is_torque_mode(&self) -> bool {
+        matches!(self, Self::CyclicSynchronousTorque | Self::ProfileTorque)
+    }
+
     /// Convert enum to array index (0-based)
     pub const fn as_index(&self) -> usize {
         (*self as isize - (Self::AutoSetup as isize)) as usize

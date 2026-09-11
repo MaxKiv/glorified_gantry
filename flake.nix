@@ -70,8 +70,7 @@
       toolchain = with fenix.packages.${system};
         fromToolchainFile {
           file = ./rust-toolchain.toml; # alternatively, dir = ./.;
-          sha256 = "sha256-oQ/2hdIVkwfkFNKcGh+X5XbHfFnr6TxME9B1/H4IjUs=";
-          # sha256 = pkgs.lib.fakeSha256;
+          sha256 = "sha256-WNgkxog3AjBwz7SOkczNDt4HuBdyxPgaf0udJrTVVfc=";
         };
 
       poetry2nix = inputs.poetry2nix.lib.mkPoetry2Nix {inherit pkgs;};

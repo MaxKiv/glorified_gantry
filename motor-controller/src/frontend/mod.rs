@@ -7,6 +7,7 @@ use uom::si::f64::Torque;
 use uom::si::f64::Velocity;
 
 use crate::consts::RT_CONFIG;
+use crate::oms::setpoint::Setpoint;
 use crate::rt::cmd::channel::CmdSender;
 
 const CMD_CHANNEL_SIZE: usize = RT_CONFIG.cmd_channel_size;
@@ -35,17 +36,10 @@ pub struct TorqueCommand {
 }
 
 #[derive(Debug, Clone)]
-pub enum AxisSetpoint {
-    Position(PositionCommand),
-    Velocity(VelocityCommand),
-    Torque(TorqueCommand),
-}
-
-#[derive(Debug, Clone)]
 pub struct GantrySetpoint {
-    x: Option<AxisSetpoint>,
-    y: Option<AxisSetpoint>,
-    z: Option<AxisSetpoint>,
+    pub x: Option<Setpoint>,
+    pub y: Option<Setpoint>,
+    pub z: Option<Setpoint>,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -64,15 +58,38 @@ pub enum GantryCommand {
 
 #[derive(Debug, thiserror::Error)]
 pub enum GantryFrontendError {
-    #[error("something")]
-    Something,
     #[error("Command Channel Closed")]
     CommandChannelClosed,
 }
 
-/// https://excalidraw.com/
-#[derive(Debug, Clone)]
-pub enum GantryEvent {}
+struct GantrySnapshot {
+    sequence: u64,
+
+    state: GantryState,
+
+    axes: [AxisSnapshot; 3],
+
+    drives: [DriveSnapshot; 6],
+
+    faults: FaultSummary,
+}
+struct AxisSnapshot {
+    position: Position,
+    velocity: Velocity,
+    torque: Torque,
+
+    skew: Option<Position>,
+}
+struct DriveSnapshot {
+    nmt_state: NmtState,
+    cia402_state: Cia402State,
+
+    position: Position,
+    velocity: Velocity,
+    torque: Torque,
+
+    following_error: Position,
+}
 
 // | Thing                      | Owner                                         |
 // | -------------------------- | --------------------------------------------- |

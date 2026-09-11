@@ -1,18 +1,29 @@
+pub mod frame;
+
 use socketcan::{CanDataFrame, EmbeddedFrame};
 
-use crate::canopen::{
-    frame::{CanOpenParseError, CobId, NodeId},
-    od::entry::ODEntry,
+use crate::{
+    canopen::{
+        frame::{CanOpenParseError, CobId, NodeId},
+        od::{entry::ODEntry, value::ODValue},
+    },
+    cia402::Cia402Identifier,
 };
 
 #[derive(Debug)]
-pub struct SdoRequest {
-    pub data: [u8; 8],
-    pub dlc: usize,
-    pub value: Option<ODEntry>,
+pub struct SdoUpload {
+    pub node: &'static Cia402Identifier,
+    pub od_entry: &'static ODEntry,
+    pub result: Option<SdoUploadResult>,
 }
 
-impl SdoRequest {}
+#[derive(Debug)]
+pub struct SdoDownload {
+    pub node: &'static Cia402Identifier,
+    pub od_entry: &'static ODEntry,
+    pub value: ODValue,
+    pub result: Option<SdoDownloadConfirmed>,
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct SdoError {
