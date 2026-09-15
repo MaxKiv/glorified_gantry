@@ -14,7 +14,7 @@ use crate::{
 };
 
 pub struct Cia402Motor {
-    id: Cia402Identifier,
+    pub id: Cia402Identifier,
     cia402_state: Cia402State,
     nmt: NmtState,
     canopen: CanOpen,
@@ -22,10 +22,16 @@ pub struct Cia402Motor {
     setpoint: Setpoint,
     pdo_cfg: &'static NodePdoConfig,
     active_cfg: &'static OMSNodePdoConfig,
+    default_parameters: &'static [SdoCommand],
 }
 
 impl Cia402Motor {
-    pub fn new(id: Cia402Identifier, canopen: CanOpen, pdo_cfg: &'static NodePdoConfig) -> Self {
+    pub fn new(
+        id: Cia402Identifier,
+        canopen: CanOpen,
+        pdo_cfg: &'static NodePdoConfig,
+        default_parameters: &'static [SdoCommand],
+    ) -> Self {
         let nmt = NmtState::Bootup;
         let opmode = OperationMode::default();
         let setpoint = Setpoint::default();
@@ -57,7 +63,7 @@ impl Cia402Motor {
     }
 
     /// Switches drive [`OperationMode`], remapping pdo if required
-    /// NOTE: this must be called at the start of a cycle (TODO: typestate on CyclePhase? seems meh)
+    /// NOTE: this must be called at the start of a cycle
     pub fn switch_operation_mode(&mut self, new: &OperationMode) -> Result<(), MotorError> {
         // Is a pdo remapping required?
         if switching_opmode_requires_pdo_remapping(&self.opmode, new) {
@@ -101,6 +107,21 @@ impl Cia402Motor {
 
         self.active_cfg = new_pdo_cfg;
         Ok(())
+    }
+
+    pub fn default_parametrisation(&mut self) -> Result<(), MotorError> {
+        // switch to NMT Pre-OP
+        self.request_nmt_command(NmtCommandSpecifier::EnterPreOperational)
+            .map_err(|e| MotorError::PdoRemapping(e))?;
+
+        // Parametrise using SDO
+        for sdo_cmd in self.default_parameters {
+            self.canopen_tx.enqueue_sdo_cmd(sdo_cmd);
+        }
+
+        // switch to NMT OP
+        self.request_nmt_command(NmtCommandSpecifier::StartRemoteNode)
+            .map_err(|e| MotorError::PdoRemapping(e))?;
     }
 }
 

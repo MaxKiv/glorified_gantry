@@ -17,6 +17,21 @@ pub enum NmtCommandSpecifier {
     ResetCommunication = 0x82,
 }
 
+impl TryFrom<u8> for NmtCommandSpecifier {
+    type Error = u8;
+
+    fn try_from(value: u8) -> Result<Self, Self::Error> {
+        match value {
+            0x01 => Ok(Self::StartRemoteNode),
+            0x02 => Ok(Self::StopRemoteNode),
+            0x80 => Ok(Self::EnterPreOperational),
+            0x81 => Ok(Self::ResetNode),
+            0x82 => Ok(Self::ResetCommunication),
+            other => Err(other),
+        }
+    }
+}
+
 impl NmtCommandSpecifier {
     pub fn as_u8(&self) -> u8 {
         *self as u8

@@ -5,6 +5,7 @@ use crate::{
     canopen::{
         EMCY, EmergencyMessage, MessageType, NmtControlMessage, NmtMonitorMessage, NmtState,
         SyncMessage,
+        nmt::NmtCommandSpecifier,
         od::entry::ODEntry,
         pdo::message::RawPdoMessage,
         sdo::{SdoRequest, SdoResponse},
@@ -89,12 +90,15 @@ impl CanOpenFrame {
                 let msg = match cob_id.0 {
                     // 0x000 -> NMT Command
                     0x000 => {
-                        let requested_state = NmtState::from_nmt_command_frame(&frame_data);
+                        let Ok(requested_command) = NmtCommandSpecifier::try_from(frame_data[0])
+                        else {
+                            return Err(CanOpenParseError::SdoInvalidData(frame));
+                        };
                         let node_id = NodeId(frame_data[1]);
 
                         MessageType::NmtControl(NmtControlMessage {
-                            requested_state,
                             node_id,
+                            requested_command,
                         })
                     }
 
@@ -129,15 +133,8 @@ impl CanOpenFrame {
 
                     // 0x600–0x67F -> RSDO
                     0x600..=0x67F => {
-                        let od_entry = ODEntry::from_sdo_download(frame_data, frame_dlc);
-                        let mut data = [0u8; 8];
-                        data.copy_from_slice(frame_data);
-
-                        MessageType::RSDO(SdoRequest {
-                            data,
-                            dlc: frame_dlc,
-                            value: od_entry,
-                        })
+                        let request = SdoRequest::from_frame(cob_id, &frame);
+                        MessageType::RSDO(request)
                     }
 
                     // 0x700–0x77F -> Heartbeat / Node Monitoring

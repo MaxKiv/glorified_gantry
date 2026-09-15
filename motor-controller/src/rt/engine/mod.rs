@@ -11,14 +11,7 @@ use socketcan::{CanSocket, EmbeddedFrame, Frame, Socket};
 use tracing::{error, info, trace, warn};
 
 use crate::{
-    axis::GantryAxis,
-    canopen::{CanOpen, MessageType, frame::CanOpenFrame, nmt::NmtCommandSpecifier, pdo::PdoType},
-    cia402::Cia402Identifier,
-    consts::{MAX_NODE_ID, RT_CONFIG},
-    fifo::Fifo,
-    frontend::{GantryCommand, GantrySetpoint},
-    oms::OperationMode,
-    rt::{
+    axis::GantryAxis, canopen::{CanOpen, MessageType, frame::CanOpenFrame, nmt::NmtCommandSpecifier, pdo::PdoType, sdo::manager::SdoManager}, cia402::Cia402Identifier, consts::{MAX_NODE_ID, RT_CONFIG}, fifo::Fifo, frontend::{GantryCommand, GantrySetpoint}, oms::{OperationMode, home::HomingSetpoint, setpoint::Setpoint}, rt::{
         MotorFeedback, RtError,
         cmd::channel::CmdReceiver,
         engine::{
@@ -66,6 +59,8 @@ pub struct RtEngine {
     can_interface: String,
     can: CanSocket,
     canopen: CanOpen,
+
+    sdo_manager: SdoManager,
 
     /// Bridges frontend -> RT FIFO
     cmd_channel_rx: CmdReceiver<CMD_CHANNEL_SIZE>,
@@ -201,10 +196,11 @@ impl RtEngine {
 
             // Drain new available inputs
             if self.can_frame_received() {
-                //
+                // CAN
                 self.process_can_rx();
             }
             if self.cmd_received() {
+                // Frontend CMDs
                 self.process_cmd_rx();
             }
 
@@ -212,7 +208,9 @@ impl RtEngine {
             // TODO: if CyclePhase::SdoWindow???
             // TODO: how does this work with our main SDO work: drive pdo remapping?
             // TODO: without condition on right cyclephase this seems to increase rt cycle latency no?
-            self.progress_protocol_tasks()?;
+            if self.cycle_state.phase == CyclePhase::SdoWindow {
+            self.progress_protocol_tasks();
+            }
 
             // Handle timing events.
             if self.cycle_state.is_all_cycle_feedback_received() {
@@ -254,22 +252,25 @@ impl RtEngine {
 
         self.sync_timer.reset().map_err(|_| RtError::Timer)?;
 
-        // Process cmds
+        // Process cmds, drains internal command queue
+        // TODO
         if !self.cmd_queue.is_empty() {
             let cmd = self
                 .cmd_queue
                 .pop()
                 .expect("CMD Queue checks out to be non-empty, but pop() returns Error");
 
-            match cmd {
-                GantryCommand::CyclicSetpoint(gantry_setpoint) | GantryCommand::Setpoint(gantry_setpoint) => {
+            match cmd.clone() {
+                GantryCommand::CyclicSetpoint(gantry_setpoint) |
+                    GantryCommand::Setpoint(gantry_setpoint) => {
                     self.new_gantry_setpoint(gantry_setpoint);
                 }
                 GantryCommand::Home => {
+                    self.new_gantry_setpoint(GantrySetpoint::new_home_all_axis());
                     self.set_rt_state(RtState::SingleCycle);
                 }
                 GantryCommand::Idle => {
-                    //empty
+                    // TODO: Transition to cia402 disabled?
                     self.set_rt_state(RtState::Idle);
                 }
             }
@@ -363,6 +364,12 @@ impl RtEngine {
                                 }
                             }
                         }
+                        MessageType::RSDO(s) => {
+                            self.sdo_manager.on_rsdo(s);
+                        }
+                        MessageType::TSDO(s) => {
+                            self.sdo_manager.on_tsdo(s);
+                        }
                         _ => {
                             error!("TODO: impl logic for this CAN RX {:?}", parsed);
                         }
@@ -385,6 +392,8 @@ impl RtEngine {
     fn process_cmd_rx(&mut self) {
         info!("process_cmd_rx");
         // Drain command queue into internal state transition queue
+        // the commands in the internal queue will be drained and and acted upon at the start of a
+        // SYNC cycle
         match self.cmd_channel_rx.drain() {
             Ok(drain) => {
                 trace!("Drain success");
@@ -493,20 +502,13 @@ impl RtEngine {
     // Startup?
     // Set NMT OP?
     // parametrise_motor?
-    fn startup_drives(&self) -> Result<(), RtError> {
-        // NMT PreOp
-
-        // Default parametrisation
-
-        // Switch motors into default operationmode
-        for axis in &self.axi {
-            if let Some(axis) = axis.as_ref() {
-                axis.master
-                    .switch_operation_mode(&OperationMode::default())?;
-                if let Some(slave) = axis.slave.as_ref() {
-                    slave.switch_operation_mode(&OperationMode::default())?;
-                }
-            }
+    fn startup_drives(&mut self) -> Result<(), RtError> {
+        // Each axis:
+        // - Default parametrise
+        // - Default operationmode
+        for axis in self.axi.as_mut().iter().flatten() {
+            axis.default_parametrisation()?;
+            axis.switch_opmode(&OperationMode::default()).map_err(|_| RtError::Startup)?;
         }
 
         // Drives end in NMT Op + Cia402 disabled
@@ -545,5 +547,9 @@ impl RtEngine {
         {
             axis.new_axis_setpoint(setpoint)
         }
+    }
+
+    fn progress_protocol_tasks(&mut self) {
+        self.sdo_manager.tick();
     }
 }
