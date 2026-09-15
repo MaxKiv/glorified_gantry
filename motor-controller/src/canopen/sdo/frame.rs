@@ -48,7 +48,7 @@ pub struct SdoFrame {
 
 impl SdoFrame {
     /// Build an expedited SDO download (write) request, 1–4 data bytes
-    pub fn new_write(sdo: SdoDownload) -> Self {
+    pub fn new_write(sdo: &SdoDownload) -> Self {
         let mut data = [0u8; 8];
         let len = sdo.value.to_le_bytes(&mut data);
         let cmd = SdoCommandSpecifier::expedited_download(len)
@@ -64,7 +64,7 @@ impl SdoFrame {
     }
 
     /// Build an SDO upload (read) request
-    pub fn new_read(sdo: SdoUpload) -> Self {
+    pub fn new_read(sdo: &SdoUpload) -> Self {
         Self::new_raw_request(
             sdo.node,
             SdoCommandSpecifier::Upload,

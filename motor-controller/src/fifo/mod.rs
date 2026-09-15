@@ -13,7 +13,7 @@ pub struct Fifo<T, const N: usize> {
     read: usize,
 }
 
-impl<T, const N: usize> Fifo<T, N> {
+impl<'a, T, const N: usize> Fifo<T, N> {
     pub fn new() -> Self {
         Self {
             buff: [const { MaybeUninit::uninit() }; N],
@@ -39,6 +39,15 @@ impl<T, const N: usize> Fifo<T, N> {
         Ok(self.write)
     }
 
+    pub fn peek(&'a self) -> Result<&'a T, FifoError<T>> {
+        if self.is_empty() {
+            return Err(FifoError::Empty);
+        }
+
+        let out = unsafe { self.buff[self.read % N].assume_init_ref() };
+        Ok(out)
+    }
+
     pub fn pop(&mut self) -> Result<T, FifoError<T>> {
         if self.is_empty() {
             return Err(FifoError::Empty);
@@ -49,6 +58,19 @@ impl<T, const N: usize> Fifo<T, N> {
         self.read += 1;
 
         Ok(out)
+    }
+
+    pub fn clear(&mut self) {
+        self.read = 0;
+        self.write = 0;
+    }
+}
+
+impl<T, const N: usize> Iterator for Fifo<T, N> {
+    type Item = T;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.pop().ok()
     }
 }
 

@@ -1,4 +1,5 @@
 pub mod frame;
+pub mod manager;
 
 use socketcan::{CanDataFrame, EmbeddedFrame};
 
@@ -10,14 +11,14 @@ use crate::{
     cia402::Cia402Identifier,
 };
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct SdoUpload {
     pub node: &'static Cia402Identifier,
     pub od_entry: &'static ODEntry,
     pub result: Option<SdoUploadResult>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct SdoDownload {
     pub node: &'static Cia402Identifier,
     pub od_entry: &'static ODEntry,
@@ -42,11 +43,49 @@ pub struct SdoUploadResult {
     pub data: [u8; 4],
 }
 
+impl SdoUploadResult {
+    pub fn new(from: NodeId, dlc: u8, index: u16, sub_index: u8, data: [u8; 4]) -> Self {
+        Self {
+            from,
+            dlc,
+            index,
+            sub_index,
+            data,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct SdoDownloadConfirmed {
     pub from: NodeId,
     pub index: u16,
     pub sub_index: u8,
+}
+
+#[derive(Debug)]
+pub struct SdoRequest {
+    pub to: NodeId,
+    pub data: [u8; 8],
+    pub dlc: usize,
+    pub value: Option<ODEntry>,
+}
+
+impl SdoRequest {
+    pub fn from_frame(cob_id: CobId, frame: &CanDataFrame) -> Self {
+        let to = NodeId((cob_id.0 - 0x600) as u8);
+        let dlc = frame.dlc();
+        let value = ODEntry::from_sdo_download(frame.data(), dlc);
+
+        let mut data = [0u8; 8];
+        data.copy_from_slice(frame.data());
+
+        SdoRequest {
+            to,
+            data,
+            dlc,
+            value,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

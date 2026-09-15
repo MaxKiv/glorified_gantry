@@ -4,20 +4,29 @@
 
 ## To Figure out:
 
-1. Think very hard how to Impl Cia402Motor
+Now:
+
+1. Create some sort of CanOpen structure with 2 sides, 1 tx side:
+   - accepts CanOpen concepts (nmt send, sdo cmd enqueue, etc)
+   - holds these in some internal queue?
+   - can poll rx side for milestones?
+     and another rx side that:
+   - drains internal queue, sends out canframes
+   - tracks milestones, like sdo download confirms?
+
+This allows us to schedule the canopen traffic at some deterministic point in
+the sync cycle, and allows us to yield and wait for sdo/nmt commands to confirm.
+
+Later:
+
 2. Should Profile modes RPDO transmission type be "onchange" or "onsync"?
 3. Validate TEST/DEMOSTRATOR HGantryNodeMap
-4. Move gantry specific stuff to its own crate
 
 ## Improvements
 
 ### Add feedback to NMT system
 
 Currently I assume the drives always switch into the requested state
-
-### Move Gantry specific stuff to its own crate
-
-Yea that
 
 ### Heartbeat / Node guarding protocol
 

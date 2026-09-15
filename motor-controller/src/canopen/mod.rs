@@ -9,7 +9,7 @@ pub mod sync;
 use crate::{
     canopen::{
         nmt::{NmtCommandSpecifier, NmtControlMessage, NmtFrame, NmtMonitorMessage},
-        sdo::{SdoDownload, SdoUpload, frame::SdoFrame},
+        sdo::{SdoDownload, SdoRequest, SdoUpload, frame::SdoFrame},
         sync::SyncMessage,
     },
     cia402::Cia402Identifier,
@@ -74,7 +74,7 @@ impl CanOpen {
         Ok(())
     }
 
-    pub fn send_sdo_download(&self, sdo: SdoDownload) -> Result<(), CanOpenError> {
+    pub fn send_sdo_download(&self, sdo: &SdoDownload) -> Result<(), CanOpenError> {
         let node = sdo.node;
         let frame = SdoFrame::new_write(sdo);
 
@@ -85,7 +85,7 @@ impl CanOpen {
         Ok(())
     }
 
-    pub fn send_sdo_upload(&self, sdo: SdoUpload) -> Result<(), CanOpenError> {
+    pub fn send_sdo_upload(&self, sdo: &SdoUpload) -> Result<(), CanOpenError> {
         let node = sdo.node;
         let frame = SdoFrame::new_read(sdo);
 

@@ -7,6 +7,7 @@ use uom::si::f64::Torque;
 use uom::si::f64::Velocity;
 
 use crate::consts::RT_CONFIG;
+use crate::oms::home::HomingSetpoint;
 use crate::oms::setpoint::Setpoint;
 use crate::rt::cmd::channel::CmdSender;
 
@@ -40,6 +41,16 @@ pub struct GantrySetpoint {
     pub x: Option<Setpoint>,
     pub y: Option<Setpoint>,
     pub z: Option<Setpoint>,
+}
+
+impl GantrySetpoint {
+    pub fn new_home_all_axis() -> Self {
+        GantrySetpoint {
+            x: Some(Setpoint::Home(HomingSetpoint::default())),
+            y: Some(Setpoint::Home(HomingSetpoint::default())),
+            z: Some(Setpoint::Home(HomingSetpoint::default())),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Default)]
