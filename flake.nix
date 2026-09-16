@@ -123,7 +123,7 @@
               # ros crap
               colcon
 
-              openssl
+              # openssl
               pkg-config
 
               # GUI libs

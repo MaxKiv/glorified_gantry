@@ -5,26 +5,17 @@ use tracing::*;
 #[cfg(test)]
 mod tests {
 
+    use gantry_axis::command::GantryCommand;
     use gantry_axis::{
-        axis::{
-            Axis,
-            setpoint::{AxisSetpoint, PositionSetpoint},
-        },
-        command::GantryCommand,
-        event::{
-            GantryMotorEventContent,
-            util::{
-                TargetQuantity, send_cmd_and_wait_until_gantry_command_completed,
-                wait_for_axis_setpoint_complete, wait_until_event_matches,
-            },
-        },
+        axis::setpoint::{AxisSetpoint, PositionSetpoint},
+        event::util::send_cmd_and_wait_until_gantry_command_completed,
         gantry::Gantry,
     };
     use std::time::Duration;
-    use tokio::{signal, time::sleep};
+    use tokio::time::sleep;
     use uom::si::{
         f64::{Length, Velocity},
-        length::{decimeter, millimeter},
+        length::millimeter,
         velocity::meter_per_second,
     };
 
@@ -123,7 +114,7 @@ mod tests {
         // )
         // .await?;
 
-        let pos_zero = Length::new::<millimeter>(0.0);
+        let _pos_zero = Length::new::<millimeter>(0.0);
 
         for _num in 1..u64::MAX {
             for setpoint_idx in 0..TEST_SETPOINTS_LEN {
@@ -131,7 +122,7 @@ mod tests {
                 let target_y = Length::new::<millimeter>(TEST_SETPOINTS[setpoint_idx].1);
                 let target_z = Length::new::<millimeter>(TEST_SETPOINTS[setpoint_idx].2);
 
-                let event_rx = gantry.get_event_rx();
+                let _event_rx = gantry.get_event_rx();
                 let setpoint = GantryCommand::Setpoint {
                     x: Some(AxisSetpoint::AbsolutePosition(PositionSetpoint {
                         target: target_x,
