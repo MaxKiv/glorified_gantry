@@ -49,6 +49,8 @@ impl GantryAxis {
         }
     }
 
+    /// Get mutable ref to motors that make up this axis
+    /// NOTE: always yields &[master, slave] in order
     fn get_axis_motors_mut(&mut self) -> impl Iterator<Item = &mut Cia402Motor> {
         [Some(&mut self.master), self.slave.as_mut()]
             .into_iter()
@@ -87,5 +89,11 @@ impl GantryAxis {
         }
 
         Ok(())
+    }
+
+    pub fn tick(&self) {
+        for motor in self.get_axis_motors_mut() {
+            motor.tick();
+        }
     }
 }

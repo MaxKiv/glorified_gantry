@@ -205,10 +205,3 @@ async fn set_pdo_mapping(
 
     Ok(())
 }
-
-/// Calculates pdo index offset from given base and pdo mapping number
-/// For example SDO for Node Id 3 = 0x500 + 3 = 0x503
-pub fn calculate_pdo_index_offset(base: u16, pdo_mapping_number: u8) -> u16 {
-    base.checked_add((pdo_mapping_number - 1).into())
-        .expect("Overflow in RPDO mapping parameter index calculation")
-}

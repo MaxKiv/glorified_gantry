@@ -2,10 +2,13 @@ use access::AccessType;
 use once_cell::sync::Lazy;
 
 use crate::{
-    canopen::od::{
-        entry::{ODEntry, PdoSemantic},
-        mappable::MappableType,
-        value::ODValue,
+    canopen::{
+        od::{
+            entry::{ODEntry, PdoSemantic},
+            mappable::MappableType::{self, RPDO},
+            value::ODValue,
+        },
+        pdo::PdoType,
     },
     oms::home::HomingMethods,
 };
@@ -518,7 +521,6 @@ pub const TORQUE_SLOPE: ODEntry = ODEntry::new(
 );
 
 // PDO related (datasheet page 118)
-// NOTE: these only work when in NMT::PreOperational
 
 /// Base index for the RPDO configuration
 /// e.g. to configure RPDO #3 communication take base + (3-1) = 0x1402
@@ -526,6 +528,88 @@ pub const RPDO_COMMUNICATION_PARAMETER_BASE_INDEX: u16 = 0x1400;
 pub const RPDO_MAPPING_PARAMETER_BASE_INDEX: u16 = 0x1600;
 pub const TPDO_COMMUNICATION_PARAMETER_BASE_INDEX: u16 = 0x1800;
 pub const TPDO_MAPPING_PARAMETER_BASE_INDEX: u16 = 0x1A00;
+
+/// Get od entry for pdo communication parameter
+const fn construct_pdo_communication_param(kind: PdoType, pdo_num: u8, sub_index: u8) -> ODEntry {
+    /// Calculates pdo index offset from given base and pdo mapping number
+    /// For example SDO for Node Id 3 = 0x500 + 3 = 0x503
+    const fn calculate_pdo_index_offset(base: u16, pdo_mapping_number: u8) -> u16 {
+        base.checked_add((pdo_mapping_number - 1) as u16)
+            .expect("Overflow in RPDO mapping parameter index calculation")
+    }
+
+    let communication_index = match kind {
+        PdoType::RPDO => {
+            calculate_pdo_index_offset(RPDO_COMMUNICATION_PARAMETER_BASE_INDEX, pdo_num)
+        }
+        PdoType::TPDO => {
+            calculate_pdo_index_offset(TPDO_COMMUNICATION_PARAMETER_BASE_INDEX, pdo_num)
+        }
+    };
+
+    ODEntry {
+        index: communication_index,
+        sub_index,
+        default: ODValue::U8(0),
+        access: AccessType::ReadWrite,
+        pdo_mappable: MappableType::None,
+        semantic: PdoSemantic::Other,
+    }
+}
+
+/// Macro to generate a const array of ODEntry for various PDO communication parameters
+macro_rules! define_pdo_communication_param_array {
+    ($name:ident, $pdo_type: expr, $sub_index:literal, $($num: literal),+ $(,)?) => {
+        pub const $name: &[ODEntry] = &[
+            $(
+                construct_pdo_communication_param(
+                    $pdo_type,
+                    $num,
+                    0x1,
+                ),
+            )+
+        ];
+    };
+}
+
+define_pdo_communication_param_array!(
+    RPDO_COMMUNICATION_PARAMETER_DEACTIVATE_PDO,
+    PdoType::RPDO,
+    0x1,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8
+);
+
+define_pdo_communication_param_array!(
+    TPDO_COMMUNICATION_PARAMETER_DEACTIVATE_PDO,
+    PdoType::TPDO,
+    0x1,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8
+);
+
+pub const fn pdo_num_to_idx(pdo_num: u8) -> usize {
+    (pdo_num.saturating_sub(1)) as usize
+}
+
+pub const fn get_pdo_deactivation_od_entry(kind: PdoType, num: u8) -> &'static ODEntry {
+    match kind {
+        PdoType::TPDO => &TPDO_COMMUNICATION_PARAMETER_DEACTIVATE_PDO[pdo_num_to_idx(num)],
+        PdoType::RPDO => &RPDO_COMMUNICATION_PARAMETER_DEACTIVATE_PDO[pdo_num_to_idx(num)],
+    }
+}
 
 // Unit related
 

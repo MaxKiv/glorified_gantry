@@ -11,7 +11,17 @@ use socketcan::{CanSocket, EmbeddedFrame, Frame, Socket};
 use tracing::{error, info, trace, warn};
 
 use crate::{
-    axis::GantryAxis, canopen::{CanOpen, MessageType, frame::CanOpenFrame, nmt::NmtCommandSpecifier, pdo::PdoType, sdo::manager::SdoManager}, cia402::Cia402Identifier, consts::{MAX_NODE_ID, RT_CONFIG}, fifo::Fifo, frontend::{GantryCommand, GantrySetpoint}, oms::{OperationMode, home::HomingSetpoint, setpoint::Setpoint}, rt::{
+    axis::GantryAxis,
+    canopen::{
+        CanOpen, MessageType, frame::CanOpenFrame, nmt::NmtCommandSpecifier, pdo::PdoType,
+        sdo::manager::SdoManager,
+    },
+    cia402::Cia402Identifier,
+    consts::{MAX_NODE_ID, RT_CONFIG},
+    fifo::Fifo,
+    frontend::{GantryCommand, GantrySetpoint},
+    oms::{OperationMode, home::HomingSetpoint, setpoint::Setpoint},
+    rt::{
         MotorFeedback, RtError,
         cmd::channel::CmdReceiver,
         engine::{
@@ -209,8 +219,9 @@ impl RtEngine {
             // TODO: how does this work with our main SDO work: drive pdo remapping?
             // TODO: without condition on right cyclephase this seems to increase rt cycle latency no?
             if self.cycle_state.phase == CyclePhase::SdoWindow {
-            self.progress_protocol_tasks();
+                self.progress_protocol_tasks();
             }
+            self.progress_axi();
 
             // Handle timing events.
             if self.cycle_state.is_all_cycle_feedback_received() {
@@ -261,8 +272,8 @@ impl RtEngine {
                 .expect("CMD Queue checks out to be non-empty, but pop() returns Error");
 
             match cmd.clone() {
-                GantryCommand::CyclicSetpoint(gantry_setpoint) |
-                    GantryCommand::Setpoint(gantry_setpoint) => {
+                GantryCommand::CyclicSetpoint(gantry_setpoint)
+                | GantryCommand::Setpoint(gantry_setpoint) => {
                     self.new_gantry_setpoint(gantry_setpoint);
                 }
                 GantryCommand::Home => {
@@ -457,7 +468,7 @@ impl RtEngine {
         }
 
         // Transmit PDO
-        let rpdos = 
+        let rpdos = ();
 
         // Construct CycleFeedback
         // Notify tokio of it somehow
@@ -508,7 +519,8 @@ impl RtEngine {
         // - Default operationmode
         for axis in self.axi.as_mut().iter().flatten() {
             axis.default_parametrisation()?;
-            axis.switch_opmode(&OperationMode::default()).map_err(|_| RtError::Startup)?;
+            axis.switch_opmode(&OperationMode::default())
+                .map_err(|_| RtError::Startup)?;
         }
 
         // Drives end in NMT Op + Cia402 disabled
@@ -528,7 +540,7 @@ impl RtEngine {
         Ok(())
     }
 
-    /// Push a new setpoint to each of the gantry axis
+    /// Push a newly received setpoint to each of the gantry axis
     fn new_gantry_setpoint(&mut self, gantry_setpoint: GantrySetpoint) {
         if let Some(axis) = &mut self.axi[X_AXIS]
             && let Some(setpoint) = gantry_setpoint.x
@@ -551,5 +563,11 @@ impl RtEngine {
 
     fn progress_protocol_tasks(&mut self) {
         self.sdo_manager.tick();
+    }
+
+    fn progress_axi(&self) -> _ {
+        for axis in self.axi.as_ref().iter().flatten() {
+            axis.tick();
+        }
     }
 }

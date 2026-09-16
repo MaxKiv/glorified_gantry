@@ -53,6 +53,16 @@ impl SdoUploadResult {
             data,
         }
     }
+
+    fn new_from_od_entry(from: NodeId, od_entry: &'static ODEntry) -> Self {
+        Self {
+            from,
+            dlc: od_entry.get_num_bytes() as u8,
+            index: od_entry.index,
+            sub_index: od_entry.sub_index,
+            data: [0u8; 4],
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -60,6 +70,16 @@ pub struct SdoDownloadConfirmed {
     pub from: NodeId,
     pub index: u16,
     pub sub_index: u8,
+}
+
+impl SdoDownloadConfirmed {
+    pub fn new_from_od_entry(from: NodeId, od_entry: &'static ODEntry) -> Self {
+        Self {
+            from,
+            index: od_entry.index,
+            sub_index: od_entry.sub_index,
+        }
+    }
 }
 
 #[derive(Debug)]

@@ -3,7 +3,7 @@ use tracing::{error, info, warn};
 use crate::{
     canopen::{
         CanOpen,
-        od::entry::ODEntry,
+        od::{entry::ODEntry, value::ODValue},
         sdo::{
             SdoDownload, SdoDownloadConfirmed, SdoRequest, SdoResponse, SdoUpload, SdoUploadResult,
         },
@@ -41,6 +41,58 @@ pub enum SdoManagerEvent {
 pub struct SdoCommand {
     request: SdoManagerRequest,
     expected_answer: SdoResponse,
+}
+
+impl SdoCommand {
+    pub fn upload(node: &'static Cia402Identifier, od_entry: &'static ODEntry) -> Self {
+        let request = SdoManagerRequest::Upload(SdoUpload {
+            node,
+            od_entry,
+            result: None,
+        });
+        let result = SdoUploadResult::new_from_od_entry(node.node_id, od_entry);
+        let expected_answer = SdoResponse::UploadConfirm(result);
+
+        SdoCommand {
+            request,
+            expected_answer,
+        }
+    }
+
+    pub fn upload_raw(node: &'static Cia402Identifier) -> Self {
+        let request = SdoManagerRequest::Upload(SdoUpload {
+            node,
+            od_entry,
+            result: None,
+        });
+        let result = SdoUploadResult::new_from_od_entry(node.node_id, od_entry);
+        let expected_answer = SdoResponse::UploadConfirm(result);
+
+        SdoCommand {
+            request,
+            expected_answer,
+        }
+    }
+
+    pub fn download(
+        node: &'static Cia402Identifier,
+        od_entry: &'static ODEntry,
+        value: ODValue,
+    ) -> Self {
+        let request = SdoManagerRequest::Download(SdoDownload {
+            node,
+            od_entry,
+            result: None,
+            value,
+        });
+        let result = SdoDownloadConfirmed::new_from_od_entry(node.node_id, od_entry);
+        let expected_answer = SdoResponse::DownloadConfirm(result);
+
+        SdoCommand {
+            request,
+            expected_answer,
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -86,7 +138,7 @@ impl SdoManager {
     }
 
     /// Progress SDO manager state machine
-    /// NOTE: keep this quick, this is called every loop
+    /// NOTE: keep this quick, this is called every RT loop
     pub fn tick(&mut self) {
         match self.state {
             // What to do in idle

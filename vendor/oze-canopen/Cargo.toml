@@ -7,6 +7,7 @@ authors = ["OZON TECH", "Aleksandr Lutsai <s.lyra@ya.ru>"]
 license = "Apache-2.0"
 exclude = ["docker/", ".*", "python/"]
 documentation = "https://docs.rs/oze-canopen"
+homepage = "https://github.com/ozontech/oze-canopen"
 repository = "https://github.com/ozontech/oze-canopen"
 readme = "readme.md"
 rust-version = "1.85.0"
