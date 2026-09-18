@@ -205,12 +205,12 @@ impl RtEngine {
             }
 
             // Drain new available inputs
+            // CAN
             if self.can_frame_received() {
-                // CAN
                 self.process_can_rx();
             }
+            // Frontend CMDs
             if self.cmd_received() {
-                // Frontend CMDs
                 self.process_cmd_rx();
             }
 

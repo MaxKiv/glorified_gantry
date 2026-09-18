@@ -6,11 +6,13 @@ use tracing::{info, trace};
 use crate::{
     canopen::{
         CanOpen, CanOpenError,
-        nmt::{NmtCommandSpecifier, NmtMonitorMessage, NmtState},
+        nmt::{
+            NmtCommandSpecifier, NmtMonitorMessage,
+            NmtState::{self, PreOperational},
+        },
         od::{
             RPDO_COMMUNICATION_PARAMETER_BASE_INDEX, RPDO_COMMUNICATION_PARAMETER_DEACTIVATE_PDO,
-            TPDO_COMMUNICATION_PARAMETER_BASE_INDEX, get_pdo_communication_param,
-            get_pdo_deactivation_od_entry,
+            TPDO_COMMUNICATION_PARAMETER_BASE_INDEX, get_pdo_deactivation_od_entry,
         },
         pdo::{
             PdoType,
@@ -21,18 +23,36 @@ use crate::{
     cia402::{Cia402Identifier, Cia402State},
     consts::pdo::NodePdoConfig,
     oms::{OperationMode, setpoint::Setpoint},
-    rt::motor::{error::MotorError, pdo::calculate_pdo_index_offset},
+    rt::motor::error::MotorError,
 };
 
-enum Cia402MotorState {
+enum MotorState {
+    Idle,
+    Operating,
+    Reconfiguring(ReconfigState),
+}
+
+enum ReconfigState {
+    Start,
     WaitingForNmtPreOp,
     WaitingForNmtOp,
-    Operating,
+    Parametrising(ParametrisingState),
+}
+
+enum SdoState {
+    SendingNextSdo(SdoCommand),
+    WaitingForSdoCmd(SdoCommand),
+}
+
+struct ParametrisingState {
+    parameters: &'static [SdoCommand],
+    currently_doing: usize,
+    sdo_state: SdoState,
 }
 
 pub struct Cia402Motor {
     sdo: SdoManager,
-    state: Cia402MotorState,
+    state: MotorState,
     pub id: Cia402Identifier,
     cia402_state: Cia402State,
     nmt: NmtState,
@@ -66,6 +86,9 @@ impl Cia402Motor {
             cia402_state,
             pdo_cfg,
             active_cfg,
+            sdo: todo!(),
+            state: MotorState::Idle,
+            default_parameters,
         }
     }
 
@@ -145,10 +168,57 @@ impl Cia402Motor {
         // switch to NMT OP
         self.request_nmt_command(NmtCommandSpecifier::StartRemoteNode)
             .map_err(|e| MotorError::PdoRemapping(e))?;
+
+        Ok(())
     }
 
     pub fn tick(&mut self) {
-        ()
+        match &mut self.state {
+            MotorState::Idle => {
+                // Nothing to do?
+                todo!()
+            }
+
+            MotorState::Operating => {
+                // ?
+                todo!()
+            }
+
+            MotorState::Reconfiguring(reconfig_state) => match reconfig_state {
+                ReconfigState::Start => {
+                    //
+                    self.canopen
+                        .send_nmt(NmtCommandSpecifier::EnterPreOperational, &self.id);
+                    self.state = MotorState::Reconfiguring(ReconfigState::WaitingForNmtPreOp);
+                }
+
+                ReconfigState::WaitingForNmtPreOp => {
+                    if self.nmt == PreOperational {
+                        let param_state = ParametrisingState {
+                            parameters: self.default_parameters,
+                            currently_doing: 0,
+                            sdo_state: SdoState::SendingNextSdo(self.default_parameters[0].clone()),
+                        };
+                        self.state =
+                            MotorState::Reconfiguring(ReconfigState::Parametrising(param_state));
+                    }
+                }
+
+                ReconfigState::Parametrising(parametrising_state) => {
+                    match &parametrising_state.sdo_state {
+                        SdoState::SendingNextSdo(sdo_command) => {
+                            self.sdo.new_cmd(sdo_command.clone());
+                            parametrising_state.sdo_state =
+                                SdoState::WaitingForSdoCmd(sdo_command.clone());
+                        }
+
+                        SdoState::WaitingForSdoCmd(sdo_command) => todo!(),
+                    }
+                }
+
+                ReconfigState::WaitingForNmtOp => todo!(),
+            },
+        }
     }
 
     fn remap_pdo(&self, num: u8, pdo_mapping: &PdoMapping) {

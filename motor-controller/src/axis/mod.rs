@@ -91,7 +91,7 @@ impl GantryAxis {
         Ok(())
     }
 
-    pub fn tick(&self) {
+    pub fn tick(&mut self) {
         for motor in self.get_axis_motors_mut() {
             motor.tick();
         }
