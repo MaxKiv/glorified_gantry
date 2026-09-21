@@ -1,5 +1,6 @@
 pub mod error;
 pub mod pdo;
+pub mod state;
 
 use tracing::{info, trace};
 
@@ -23,10 +24,25 @@ use crate::{
     cia402::{Cia402Identifier, Cia402State},
     consts::pdo::NodePdoConfig,
     oms::{OperationMode, setpoint::Setpoint},
-    rt::motor::error::MotorError,
+    rt::motor::{error::MotorError, state::MotorState},
 };
 
-enum MotorState {
+pub struct Cia402Motor {
+    sdo: SdoManager,
+    controller_state: ControllerState,
+    pub motor_state: MotorState,
+    pub id: Cia402Identifier,
+    cia402_state: Cia402State,
+    nmt: NmtState,
+    canopen: CanOpen,
+    opmode: OperationMode,
+    setpoint: Setpoint,
+    pdo_cfg: &'static NodePdoConfig,
+    active_cfg: &'static OMSNodePdoConfig,
+    default_parameters: &'static [SdoCommand],
+}
+
+enum ControllerState {
     Idle,
     Operating,
     Reconfiguring(ReconfigState),
@@ -48,20 +64,6 @@ struct ParametrisingState {
     parameters: &'static [SdoCommand],
     currently_doing: usize,
     sdo_state: SdoState,
-}
-
-pub struct Cia402Motor {
-    sdo: SdoManager,
-    state: MotorState,
-    pub id: Cia402Identifier,
-    cia402_state: Cia402State,
-    nmt: NmtState,
-    canopen: CanOpen,
-    opmode: OperationMode,
-    setpoint: Setpoint,
-    pdo_cfg: &'static NodePdoConfig,
-    active_cfg: &'static OMSNodePdoConfig,
-    default_parameters: &'static [SdoCommand],
 }
 
 impl Cia402Motor {
@@ -87,8 +89,9 @@ impl Cia402Motor {
             pdo_cfg,
             active_cfg,
             sdo: todo!(),
-            state: MotorState::Idle,
+            controller_state: ControllerState::Idle,
             default_parameters,
+            motor_state: MotorState::new(),
         }
     }
 
@@ -173,23 +176,24 @@ impl Cia402Motor {
     }
 
     pub fn tick(&mut self) {
-        match &mut self.state {
-            MotorState::Idle => {
+        match &mut self.controller_state {
+            ControllerState::Idle => {
                 // Nothing to do?
                 todo!()
             }
 
-            MotorState::Operating => {
+            ControllerState::Operating => {
                 // ?
                 todo!()
             }
 
-            MotorState::Reconfiguring(reconfig_state) => match reconfig_state {
+            ControllerState::Reconfiguring(reconfig_state) => match reconfig_state {
                 ReconfigState::Start => {
                     //
                     self.canopen
                         .send_nmt(NmtCommandSpecifier::EnterPreOperational, &self.id);
-                    self.state = MotorState::Reconfiguring(ReconfigState::WaitingForNmtPreOp);
+                    self.controller_state =
+                        ControllerState::Reconfiguring(ReconfigState::WaitingForNmtPreOp);
                 }
 
                 ReconfigState::WaitingForNmtPreOp => {
@@ -199,8 +203,9 @@ impl Cia402Motor {
                             currently_doing: 0,
                             sdo_state: SdoState::SendingNextSdo(self.default_parameters[0].clone()),
                         };
-                        self.state =
-                            MotorState::Reconfiguring(ReconfigState::Parametrising(param_state));
+                        self.controller_state = ControllerState::Reconfiguring(
+                            ReconfigState::Parametrising(param_state),
+                        );
                     }
                 }
 
@@ -410,6 +415,10 @@ impl Cia402Motor {
             .map_err(DriveError::CanOpen)?;
 
         Ok(())
+    }
+
+    pub fn on_sync_feedback(&mut self) {
+        todo!()
     }
 }
 

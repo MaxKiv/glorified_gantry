@@ -9,6 +9,7 @@ use std::{
 use libc::pollfd;
 use socketcan::{CanSocket, EmbeddedFrame, Frame, Socket};
 use tracing::{error, info, trace, warn};
+use uom::si::length::millimeter;
 
 use crate::{
     axis::GantryAxis,
@@ -110,7 +111,7 @@ impl RtEngine {
             TimerFd::from_period_monotonic(RT_CONFIG.cycle_period, TimerType::Absolute)
                 .expect("Failed to create RT timer");
 
-        // Construccts a new feedback timer
+        // Constructs a new feedback timer
         // implemented as relative monotonic clock
         let feedback_timer =
             TimerFd::from_period_monotonic(RT_CONFIG.feedback_period, TimerType::Relative)
@@ -134,7 +135,7 @@ impl RtEngine {
                 revents: 0,
             },
             libc::pollfd {
-                fd: can.as_fd().as_raw_fd(),
+                fd: canopen.raw_fd(),
                 events: libc::POLLIN,
                 revents: 0,
             },
@@ -167,6 +168,8 @@ impl RtEngine {
             motor_feedback,
             motor_setpoint,
             current_cmd: GantryCommand::default(),
+            sdo_manager: todo!(),
+            axi: todo!(),
         };
 
         // Spawn RT engine thread
@@ -214,14 +217,20 @@ impl RtEngine {
                 self.process_cmd_rx();
             }
 
-            // Advance protocol/long-running operations like SDO traffic
-            // TODO: if CyclePhase::SdoWindow???
-            // TODO: how does this work with our main SDO work: drive pdo remapping?
-            // TODO: without condition on right cyclephase this seems to increase rt cycle latency no?
-            if self.cycle_state.phase == CyclePhase::SdoWindow {
-                self.progress_protocol_tasks();
+            // Advance SDO state machine
+            // This sends at most 1 SDO call out to a device, in an attempt to guarantee never
+            // exceeding the synchronisation window
+            if self.state == RtState::Cyclic {
+                // Only send out SDO messages during the SDO Window in cyclic modes
+                if self.cycle_state.phase == CyclePhase::SdoWindow {
+                    self.sdo_manager.tick();
+                }
+            } else {
+                // In other modes we can send out SDO messages whenever
+                self.sdo_manager.tick();
             }
-            self.progress_axi();
+
+            self.tick();
 
             // Handle timing events.
             if self.cycle_state.is_all_cycle_feedback_received() {
@@ -450,15 +459,17 @@ impl RtEngine {
         self.timekeeper.end_feedback();
         self.cycle_state.transition_to(CyclePhase::SendingRpdoS);
 
-        // CAN_RX should have parsed TPDO and dispatched to each Cia402Motor (or axis?) state update
-        // This means we assume each motor/axis to contain the latest version of its state
-        // (else we would not be here, but in feedback_deadline_elapsed())
-
         //   if (x-axis skew > large) -> ESTOP
         for axis in self.axi.as_ref().iter().flatten() {
-            if axis.skew() > LARGE {
-                self.do_e_stop();
+            if let Some(skew) = axis.skew().map(|skew| skew.get::<millimeter>()) {
+                if skew > RT_CONFIG.max_axis_skew_mm {
+                    self.do_e_stop();
+                }
             }
+        }
+
+        for axis in self.axi.iter_mut().flatten() {
+            axis.on_sync_feedback();
         }
 
         for axis in self.axi.as_ref().iter().flatten() {
@@ -467,11 +478,20 @@ impl RtEngine {
             }
         }
 
+        let rpdos = [[[[0u8; 8]; 4]; 2]; Axis::COUNT];
+
+        for (axis, axis_rpdo) in self.axi.iter_mut().zip(rpdos) {
+            if let Some(axis) = axis {
+                axis_rpdos = axis.calculate_rpdo();
+            }
+        }
+
         // Transmit PDO
-        let rpdos = ();
 
         // Construct CycleFeedback
+        todo!();
         // Notify tokio of it somehow
+        todo!();
 
         // Enter "SDO window" cycle phase
         self.cycle_state.transition_to(CyclePhase::SdoWindow);
@@ -561,12 +581,8 @@ impl RtEngine {
         }
     }
 
-    fn progress_protocol_tasks(&mut self) {
-        self.sdo_manager.tick();
-    }
-
-    fn progress_axi(&self) -> _ {
-        for axis in self.axi.as_ref().iter().flatten() {
+    fn tick(&mut self) {
+        for axis in self.axi.iter_mut().flatten() {
             axis.tick();
         }
     }

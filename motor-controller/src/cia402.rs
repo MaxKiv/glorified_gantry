@@ -53,6 +53,13 @@ pub struct Cia402Identifier {
     pub device_name: &'static str,               // Device name given by manufacturer
 }
 
+pub const BS_NODE: Cia402Identifier = Cia402Identifier {
+    node_id: crate::canopen::frame::NodeId(0),
+    device_profile_number: crate::cia402::CiaProfileNumber::Bad,
+    motor_type: crate::cia402::MotorType::Both,
+    device_name: "Fake",
+};
+
 impl std::fmt::Display for Cia402Identifier {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::result::Result<(), std::fmt::Error> {
         write!(f, "{} - node_id: {}", self.device_name, self.node_id.0)

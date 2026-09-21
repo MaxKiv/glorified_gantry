@@ -1,3 +1,5 @@
+use uom::si::f64::Length;
+
 use crate::{
     axis::{error::AxisError, scaling::AxisScaling},
     canopen::{CanOpen, sdo::manager::SdoCommand},
@@ -95,5 +97,24 @@ impl GantryAxis {
         for motor in self.get_axis_motors_mut() {
             motor.tick();
         }
+    }
+
+    pub fn on_sync_feedback(&mut self) {
+        for motor in self.get_axis_motors_mut() {
+            motor.on_sync_feedback();
+        }
+    }
+
+    pub fn skew(&self) -> Option<Length> {
+        self.slave.as_ref().map(|s| {
+            let master_pos = self.master.motor_state.pos;
+            let slave_pos = s.motor_state.pos;
+
+            if master_pos > slave_pos {
+                master_pos - slave_pos
+            } else {
+                slave_pos - master_pos
+            }
+        })
     }
 }

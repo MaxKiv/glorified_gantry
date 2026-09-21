@@ -23,6 +23,9 @@ pub struct RtConfig {
     /// always returns io::error::WouldBlock after 1 call when
     /// CAN.set_nonblocking(true)
     pub can_frames_per_poll: usize,
+
+    /// Maximum tolerated axis skew
+    pub max_axis_skew_mm: f64,
 }
 
 // --- Tunable constants ---
@@ -33,4 +36,5 @@ pub const RT_CONFIG: RtConfig = RtConfig {
     // cmd_channel_size: 64,
     cmd_channel_size: 8,
     can_frames_per_poll: 1,
+    max_axis_skew_mm: 1.0,
 };

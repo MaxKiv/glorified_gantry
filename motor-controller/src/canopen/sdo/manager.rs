@@ -1,3 +1,5 @@
+use std::time::{Duration, Instant};
+
 use tracing::{error, info, warn};
 
 use crate::{
@@ -15,6 +17,7 @@ use crate::{
 const SDO_EVENT_Q_SIZE: usize = 64;
 const SDO_CMD_Q_SIZE: usize = 64;
 const MAX_EVENTS_PER_TICK: usize = 16;
+const SDO_TIMEOUT: Duration = Duration::from_millis(500);
 
 #[derive(Debug, thiserror::Error)]
 pub enum SdoManagerError {
@@ -93,6 +96,22 @@ impl SdoCommand {
             expected_answer,
         }
     }
+
+    pub fn bullshit() -> Self {
+        Self {
+            request: SdoManagerRequest::Upload(SdoUpload {
+                node: &crate::cia402::BS_NODE,
+                od_entry: &crate::canopen::od::DEVICE_TYPE,
+                result: None,
+            }),
+            expected_answer: SdoResponse::Error(super::SdoError {
+                from: crate::cia402::BS_NODE.node_id,
+                index: 0,
+                sub_index: 0,
+                code: 0,
+            }),
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -107,7 +126,11 @@ pub enum SdoManagerState {
     Idle,
     Uploading(SdoUpload),
     Downloading(SdoDownload),
-    WaitingForResponse(SdoResponse),
+    WaitingForResponse {
+        expected: SdoResponse,
+        deadline: Instant,
+    },
+    Failed(SdoCommand),
 }
 
 impl SdoManager {
@@ -161,10 +184,19 @@ impl SdoManager {
             }
 
             // What to do when waiting for up/download response
-            SdoManagerState::WaitingForResponse(expected) => {
+            SdoManagerState::WaitingForResponse { expected, deadline } => {
                 // SDO Manager waiting for response, check if event is response
                 // Consumes a few even per tick
-                self.on_waiting_for_response(expected);
+                self.on_waiting_for_response(&expected, &deadline);
+            }
+
+            SdoManagerState::Failed(ref sdo_manager_request) => {
+                error!(
+                    system = "SdoManager",
+                    "Transitioned to FAILED state due to recent failure of {:?}, resetting to idle",
+                    sdo_manager_request
+                );
+                self.state = SdoManagerState::Idle;
             }
         };
     }
@@ -198,13 +230,18 @@ impl SdoManager {
                                 if *value == *od_entry {
                                     // Correct RSDO appeared on bus, nice!
                                     if let Some(current_cmd) = &self.current_cmd {
-                                        self.state = SdoManagerState::WaitingForResponse(
-                                            current_cmd.expected_answer,
-                                        );
+                                        let deadline = Instant::now() + SDO_TIMEOUT;
+                                        self.state = SdoManagerState::WaitingForResponse {
+                                            expected: current_cmd.expected_answer,
+                                            deadline,
+                                        };
                                         info!(
                                             "RSDO for {:?} detected, waiting for TSDO {:?}",
                                             self.state, current_cmd.expected_answer
                                         );
+
+                                        // Process rest of events another tick
+                                        break;
                                     } else {
                                         error!(
                                             system = "SdoManager",
@@ -236,7 +273,25 @@ impl SdoManager {
         }
     }
 
-    fn on_waiting_for_response(&mut self, expected: SdoResponse) {
+    fn on_waiting_for_response(&mut self, expected: &SdoResponse, deadline: &Instant) {
+        // Check for deadline expiration
+        if *deadline <= Instant::now() {
+            error!(
+                system = "SdoManager",
+                "SDO Deadline expired for {:?}!", self.current_cmd
+            );
+            // deadline expired
+            let cmd = self.current_cmd.unwrap_or_else(|| {
+                error!(
+                    system = "SdoManager",
+                    "SDO Deadline expired, but no current command, invalid state"
+                );
+                SdoCommand::bullshit()
+            });
+            self.state = SdoManagerState::Failed(cmd);
+            return;
+        }
+
         // Drain MAX_EVENTS_PER_TICK events per tick
         for _ in 0..MAX_EVENTS_PER_TICK {
             if let Ok(event) = self.events.pop() {
@@ -255,9 +310,11 @@ impl SdoManager {
                                 SdoResponse::DownloadConfirm(rx_download),
                                 SdoResponse::DownloadConfirm(expected_download),
                             ) => {
-                                if rx_download == expected_download {
+                                if *rx_download == expected_download {
                                     info!(system = "SdoManager", "TSDO rx success");
                                     self.completed_cmd();
+                                    // Process the rest of the events another tick
+                                    break;
                                 } else {
                                     warn!(
                                         system = "SdoManager",
@@ -271,9 +328,11 @@ impl SdoManager {
                                 SdoResponse::UploadConfirm(rx_upload),
                                 SdoResponse::UploadConfirm(expected_upload),
                             ) => {
-                                if rx_upload == expected_upload {
+                                if *rx_upload == expected_upload {
                                     info!(system = "SdoManager", "TSDO rx success");
                                     self.completed_cmd();
+                                    // Process the rest of the events another tick
+                                    break;
                                 } else {
                                     warn!(
                                         system = "SdoManager",

@@ -6,6 +6,8 @@ pub mod pdo;
 pub mod sdo;
 pub mod sync;
 
+use std::os::fd::{AsRawFd, RawFd};
+
 use crate::{
     canopen::{
         nmt::{NmtCommandSpecifier, NmtControlMessage, NmtFrame, NmtMonitorMessage},
@@ -53,6 +55,10 @@ impl CanOpen {
             CanFrame::from_raw_id(SYNC_ID, &[]).expect("failed to construct SYNC frame");
 
         Self { can, sync_frame }
+    }
+
+    pub fn raw_fd(&self) -> RawFd {
+        self.can.as_raw_fd()
     }
 
     pub fn send_sync(&self) -> Result<(), CanOpenError> {
