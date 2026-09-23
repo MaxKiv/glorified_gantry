@@ -3,9 +3,9 @@ use tracing::error;
 
 use crate::{
     canopen::{
-        EMCY, EmergencyMessage, MessageType, NmtControlMessage, NmtMonitorMessage, NmtState,
-        SyncMessage,
-        nmt::NmtCommandSpecifier,
+        EmergencyMessage, MessageType, NmtControlMessage, NmtMonitorMessage, SyncMessage,
+        emcy::EMCY,
+        nmt::{NmtCommandSpecifier, NmtState},
         od::entry::ODEntry,
         pdo::message::RawPdoMessage,
         sdo::{SdoRequest, SdoResponse},
@@ -44,6 +44,7 @@ impl NodeId {
 pub struct CanOpenFrame {
     pub cob_id: CobId,
     pub msg: MessageType,
+    pub node_id: Option<NodeId>,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -87,7 +88,7 @@ impl CanOpenFrame {
                     return Err(CanOpenParseError::ExceededMaxDLC(frame_dlc));
                 }
 
-                let msg = match cob_id.0 {
+                let (msg, node_id) = match cob_id.0 {
                     // 0x000 -> NMT Command
                     0x000 => {
                         let Ok(requested_command) = NmtCommandSpecifier::try_from(frame_data[0])
@@ -96,14 +97,17 @@ impl CanOpenFrame {
                         };
                         let node_id = NodeId(frame_data[1]);
 
-                        MessageType::NmtControl(NmtControlMessage {
-                            node_id,
-                            requested_command,
-                        })
+                        (
+                            MessageType::NmtControl(NmtControlMessage {
+                                node_id,
+                                requested_command,
+                            }),
+                            Some(node_id),
+                        )
                     }
 
                     // 0x080 -> SYNC
-                    0x080 => MessageType::Sync(SyncMessage),
+                    0x080 => (MessageType::Sync(SyncMessage), None),
 
                     // 0x081–0x0FF -> EMCY (Emergency)
                     0x081..=0x0FF => {
@@ -116,25 +120,30 @@ impl CanOpenFrame {
 
                         let error = EMCY::from_error_code(error_code);
 
-                        MessageType::EMCY(EmergencyMessage { error, node_id })
+                        (
+                            MessageType::EMCY(EmergencyMessage { error, node_id }),
+                            Some(node_id),
+                        )
                     }
 
                     // T/RPDO1..4 (0x180 + n*0x200)
                     0x180..=0x57F => {
                         let msg = RawPdoMessage::try_from_can_frame(cob_id, frame)?;
-                        MessageType::PDO(msg)
+                        (MessageType::PDO(msg), Some(msg.node_id))
                     }
 
                     // 0x580–0x5FF -> TSDO
                     0x580..=0x5FF => {
                         let response = SdoResponse::try_from_frame(cob_id, &frame)?;
-                        MessageType::TSDO(response)
+                        let node_id = NodeId::new((cob_id.0 - 0x580) as u8);
+                        (MessageType::TSDO(response), Some(node_id))
                     }
 
                     // 0x600–0x67F -> RSDO
                     0x600..=0x67F => {
                         let request = SdoRequest::from_frame(cob_id, &frame);
-                        MessageType::RSDO(request)
+                        let node_id = NodeId::new((cob_id.0 - 0x600) as u8);
+                        (MessageType::RSDO(request), Some(node_id))
                     }
 
                     // 0x700–0x77F -> Heartbeat / Node Monitoring
@@ -143,16 +152,23 @@ impl CanOpenFrame {
 
                         let current_state = NmtState::from_node_monitoring_frame(&frame_data);
 
-                        MessageType::NmtMonitor(NmtMonitorMessage {
-                            current_state,
-                            node_id,
-                        })
+                        (
+                            MessageType::NmtMonitor(NmtMonitorMessage {
+                                current_state,
+                                node_id,
+                            }),
+                            Some(node_id),
+                        )
                     }
 
-                    _ => MessageType::Unknown(frame),
+                    _ => (MessageType::Unknown(frame), None),
                 };
 
-                Ok(Self { cob_id, msg })
+                Ok(Self {
+                    cob_id,
+                    msg,
+                    node_id,
+                })
             }
         }
     }

@@ -14,8 +14,8 @@ use crate::{
     fifo::{Fifo, error::FifoError},
 };
 
-const SDO_EVENT_Q_SIZE: usize = 64;
-const SDO_CMD_Q_SIZE: usize = 64;
+const SDO_EVENT_Q_SIZE: usize = 640;
+const SDO_CMD_Q_SIZE: usize = 640;
 const MAX_EVENTS_PER_TICK: usize = 16;
 const SDO_TIMEOUT: Duration = Duration::from_millis(500);
 
@@ -152,12 +152,48 @@ impl SdoManager {
         Ok(())
     }
 
-    pub fn on_rsdo(&mut self, sdo: SdoRequest) -> Result<usize, FifoError<SdoManagerEvent>> {
-        self.events.push(SdoManagerEvent::Request(sdo))
+    pub fn on_rsdo(&mut self, sdo: SdoRequest) {
+        if let Err(err) = self.events.push(SdoManagerEvent::Request(sdo)) {
+            match err {
+                FifoError::Full(event) => {
+                    let discarded_event = self.events.pop().expect("");
+                    error!(
+                        system = "SdoManager",
+                        "on_rsdo fail: SDO Fifo queue full - discarding last event in queue: {:?}",
+                        discarded_event
+                    );
+                    let _ = self.events.push(event);
+                }
+                FifoError::Empty => {
+                    error!(
+                        system = "SdoManager",
+                        "INVALID_STATE: on_rsdo fail: SDO Fifo queue empty - ignoring",
+                    );
+                }
+            }
+        }
     }
 
-    pub fn on_tsdo(&mut self, sdo: SdoResponse) -> Result<usize, FifoError<SdoManagerEvent>> {
-        self.events.push(SdoManagerEvent::Response(sdo))
+    pub fn on_tsdo(&mut self, sdo: SdoResponse) {
+        if let Err(err) = self.events.push(SdoManagerEvent::Response(sdo)) {
+            match err {
+                FifoError::Full(event) => {
+                    let discarded_event = self.events.pop().expect("");
+                    error!(
+                        system = "SdoManager",
+                        "on_tsdo fail: SDO Fifo queue full - discarding last event in queue: {:?}",
+                        discarded_event
+                    );
+                    let _ = self.events.push(event);
+                }
+                FifoError::Empty => {
+                    error!(
+                        system = "SdoManager",
+                        "INVALID_STATE: on_tsdo fail: SDO Fifo queue empty - ignoring",
+                    );
+                }
+            }
+        }
     }
 
     /// Progress SDO manager state machine
@@ -171,7 +207,9 @@ impl SdoManager {
                 {
                     // Ready to start new command
                     self.current_cmd = Some(req.clone());
-                    self.send_cmd(req);
+                    // Queue SDO with CANOpen system, this will send out the SDO whenever RT scheduling
+                    // deems it appropriate
+                    self.queue_sdo(req);
                 }
             }
 
@@ -201,21 +239,8 @@ impl SdoManager {
         };
     }
 
-    fn send_cmd(&mut self, SdoCommand { request, .. }: SdoCommand) {
-        match request {
-            SdoManagerRequest::Upload(sdo) => match self.canopen.send_sdo_upload(&sdo) {
-                Ok(_) => self.state = SdoManagerState::Uploading(sdo),
-                Err(e) => {
-                    error!(system = "SdoManager", "RSDO upload tx fail: {:?}", e);
-                }
-            },
-            SdoManagerRequest::Download(sdo) => match self.canopen.send_sdo_download(&sdo) {
-                Ok(_) => self.state = SdoManagerState::Downloading(sdo),
-                Err(e) => {
-                    error!(system = "SdoManager", "RSDO download tx fail: {:?}", e);
-                }
-            },
-        };
+    fn queue_sdo(&mut self, SdoCommand { request, .. }: SdoCommand) {
+        self.canopen.queue_sdo(request);
     }
 
     fn on_cmd_started(&mut self, node: &'static Cia402Identifier, od_entry: &'static ODEntry) {

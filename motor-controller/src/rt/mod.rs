@@ -18,6 +18,7 @@ use crate::{
 };
 use tracing::{debug, error, info, warn};
 
+#[derive(Clone, Copy, Debug)]
 pub struct RtSetpoint {
     generation: u64,
     controlword: ControlWord,
@@ -46,6 +47,18 @@ pub struct MotorFeedback {
     pub vel: i32,
     pub torque: i16,
     pub opmode: OperationMode,
+}
+
+impl MotorFeedback {
+    pub fn new() -> Self {
+        Self {
+            sw: StatusWord::default(),
+            pos: 0,
+            vel: 0,
+            torque: 0,
+            opmode: OperationMode::default(),
+        }
+    }
 }
 
 struct RtFeedback<const N: usize> {

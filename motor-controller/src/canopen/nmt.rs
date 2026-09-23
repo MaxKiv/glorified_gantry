@@ -59,7 +59,7 @@ pub enum NmtState {
 }
 
 impl NmtState {
-    fn from_nmt_command_frame(frame_data: &[u8]) -> Self {
+    pub fn from_nmt_command_frame(frame_data: &[u8]) -> Self {
         match frame_data[0] {
             0x01 => NmtState::Operational,
             0x02 => NmtState::Stopped,
@@ -68,7 +68,7 @@ impl NmtState {
         }
     }
 
-    fn from_node_monitoring_frame(frame_data: &[u8]) -> Self {
+    pub fn from_node_monitoring_frame(frame_data: &[u8]) -> Self {
         match frame_data[0] {
             0x00 => NmtState::Bootup,
             0x04 => NmtState::Stopped,

@@ -1,3 +1,5 @@
+use crate::canopen::frame::NodeId;
+
 #[derive(Debug)]
 pub struct EmergencyMessage {
     pub node_id: NodeId,
@@ -32,7 +34,7 @@ pub enum EMCY {
 }
 
 impl EMCY {
-    fn from_error_code(error_code: u16) -> EMCY {
+    pub fn from_error_code(error_code: u16) -> EMCY {
         match error_code {
             0x0 => EMCY::NoFurtherPendingErrors,
             0x3100 => EMCY::Undervoltage,

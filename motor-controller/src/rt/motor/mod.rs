@@ -2,18 +2,23 @@ pub mod error;
 pub mod pdo;
 pub mod state;
 
-use tracing::{info, trace};
+use crate::canopen::od::RPDO_MAPPING_PARAMETER_BASE_INDEX;
+use crate::canopen::od::TPDO_MAPPING_PARAMETER_BASE_INDEX;
+use crate::rt::MotorFeedback;
+use crate::rt::TransmissionType;
+use tracing::{error, info, trace, warn};
 
 use crate::{
     canopen::{
-        CanOpen, CanOpenError,
+        CanOpen, CanOpenError, MessageType,
+        frame::CanOpenFrame,
         nmt::{
             NmtCommandSpecifier, NmtMonitorMessage,
             NmtState::{self, PreOperational},
         },
         od::{
-            RPDO_COMMUNICATION_PARAMETER_BASE_INDEX, RPDO_COMMUNICATION_PARAMETER_DEACTIVATE_PDO,
-            TPDO_COMMUNICATION_PARAMETER_BASE_INDEX, get_pdo_deactivation_od_entry,
+            RPDO_COMMUNICATION_PARAMETER_BASE_INDEX, TPDO_COMMUNICATION_PARAMETER_BASE_INDEX,
+            get_pdo_deactivation_od_entry,
         },
         pdo::{
             PdoType,
@@ -28,15 +33,18 @@ use crate::{
 };
 
 pub struct Cia402Motor {
+    pub id: Cia402Identifier,
+
     sdo: SdoManager,
     controller_state: ControllerState,
     pub motor_state: MotorState,
-    pub id: Cia402Identifier,
+    rpdo_rx: [bool; 4],
+    feedback: MotorFeedback,
+    setpoint: Setpoint,
     cia402_state: Cia402State,
     nmt: NmtState,
     canopen: CanOpen,
     opmode: OperationMode,
-    setpoint: Setpoint,
     pdo_cfg: &'static NodePdoConfig,
     active_cfg: &'static OMSNodePdoConfig,
     default_parameters: &'static [SdoCommand],
@@ -92,6 +100,8 @@ impl Cia402Motor {
             controller_state: ControllerState::Idle,
             default_parameters,
             motor_state: MotorState::new(),
+            feedback: MotorFeedback::new(),
+            rpdo_rx: [false; 4],
         }
     }
 
@@ -165,7 +175,17 @@ impl Cia402Motor {
 
         // Parametrise using SDO
         for sdo_cmd in self.default_parameters {
-            self.canopen_tx.enqueue_sdo_cmd(sdo_cmd);
+            if let Err(e) = self.sdo.new_cmd(sdo_cmd.clone()) {
+                error!(
+                    system = "Cia402Motor",
+                    "Failed to default parametrise motor {} - {:?}", self.id, e
+                );
+                assert!(
+                    false,
+                    "Failed to default parametrise motor {} - {:?}",
+                    self.id, e
+                )
+            }
         }
 
         // switch to NMT OP
@@ -419,6 +439,110 @@ impl Cia402Motor {
 
     pub fn on_sync_feedback(&mut self) {
         todo!()
+    }
+
+    pub fn process_canopen_msg(&mut self, parsed: CanOpenFrame) {
+        assert!(
+            parsed
+                .node_id
+                .map(|id| id == self.id.node_id)
+                .is_some_and(|out| out),
+            "Cia402Motor::process_canopen_msg called msg that contains no node_id: {:?}",
+            parsed
+        );
+
+        match parsed.msg {
+            MessageType::EMCY(emcy) => {
+                warn!(system = "Cia402Motor", "Got EMCY msg: {:?}", emcy);
+            }
+
+            MessageType::NmtControl(nmt_ctl) => {
+                info!(
+                    system = "Cia402Motor",
+                    "Got  NMT CONTROL MSG: {:?}", nmt_ctl
+                );
+            }
+
+            MessageType::NmtMonitor(nmt_mon) => {
+                info!(
+                    system = "Cia402Motor",
+                    "Got  NMT MONITOR MSG: {:?}", nmt_mon
+                );
+
+                self.nmt = nmt_mon.current_state;
+            }
+
+            MessageType::RSDO(s) => {
+                self.sdo.on_rsdo(s);
+                self.sdo.tick();
+            }
+
+            MessageType::TSDO(s) => {
+                self.sdo.on_tsdo(s);
+                self.sdo.tick();
+            }
+
+            MessageType::PDO(pdo) => {
+                // We only care about RPDO
+                if pdo.pdo_type == PdoType::RPDO {
+                    assert!(
+                        pdo.node_id == self.id.node_id,
+                        "Cia402Motor::process_canopen_msg on RPDO with wrong node id {}",
+                        pdo.node_id.u8()
+                    );
+
+                    assert!(
+                        self.active_cfg.rpdo[pdo.num].is_some(),
+                        "Cia402Motor::process_canopen_msg on unexpected PRDO num {}",
+                        pdo.num
+                    );
+
+                    // Attempt to parse RPDO
+                    match self.active_cfg.parse_rpdo(&pdo, &mut self.feedback) {
+                        Ok(_) => {
+                            info!(
+                                system = "Cia402Motor",
+                                "RPDO parsing & feedback update success for motor: {}",
+                                self.id.node_id.u8()
+                            );
+
+                            // Mark this RPDO as received for this cycle
+                            self.rpdo_rx[pdo.num] = true;
+                        }
+                        Err(e) => {
+                            error!(system = "Cia402Motor", "Failed to parse RPDO: {}", e)
+                        }
+                    }
+                }
+            }
+
+            MessageType::Sync(_) => {
+                // Intentionally empty
+                trace!(system = "Cia402Motor", "saw SYNC");
+            }
+            MessageType::Unknown(msg) => {
+                warn!(
+                    system = "Cia402Motor",
+                    "Unknown CAN dataframe: {:?} - ignoring", msg
+                );
+            }
+        }
+    }
+
+    pub fn on_cycle_start(&mut self) {
+        // Reset rdpo rx
+        self.rpdo_rx = [false; 4];
+    }
+
+    pub fn all_cycle_rpdo_received(&mut self) -> bool {
+        for (i, pdo_mapping) in self.active_cfg.rpdo.iter().enumerate() {
+            if pdo_mapping.is_some() {
+                if !self.rpdo_rx[i] {
+                    return false;
+                }
+            }
+        }
+        true
     }
 }
 

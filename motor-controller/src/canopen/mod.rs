@@ -6,8 +6,10 @@ pub mod pdo;
 pub mod sdo;
 pub mod sync;
 
-use std::os::fd::{AsRawFd, RawFd};
-
+use crate::canopen::sdo::manager::SdoManagerRequest;
+use crate::canopen::{emcy::EmergencyMessage, pdo::message::RawPdoMessage, sdo::SdoResponse};
+use crate::fifo::Fifo;
+use crate::fifo::error::FifoError;
 use crate::{
     canopen::{
         nmt::{NmtCommandSpecifier, NmtControlMessage, NmtFrame, NmtMonitorMessage},
@@ -17,8 +19,10 @@ use crate::{
     cia402::Cia402Identifier,
 };
 use socketcan::{CanDataFrame, CanFrame, CanSocket, Frame, Socket};
+use std::os::fd::{AsRawFd, RawFd};
+use tracing::{error, info};
 
-use crate::canopen::{emcy::EmergencyMessage, pdo::message::RawPdoMessage, sdo::SdoResponse};
+const SDO_EVENT_Q_SIZE: usize = 64;
 
 #[derive(Debug)]
 pub enum MessageType {
@@ -46,6 +50,7 @@ pub enum CanOpenError {
 pub struct CanOpen {
     can: socketcan::CanSocket,
     sync_frame: CanFrame,
+    pending_sdo: Fifo<SdoManagerRequest, SDO_EVENT_Q_SIZE>,
 }
 
 impl CanOpen {
@@ -54,7 +59,16 @@ impl CanOpen {
         let sync_frame: CanFrame =
             CanFrame::from_raw_id(SYNC_ID, &[]).expect("failed to construct SYNC frame");
 
-        Self { can, sync_frame }
+        Self {
+            can,
+            sync_frame,
+            pending_sdo: Fifo::new(),
+        }
+    }
+
+    pub fn read_raw_frame(&self) -> socketcan::IoResult<CanFrame> {
+        let frame = self.can.read_raw_frame()?;
+        Ok(frame.into())
     }
 
     pub fn raw_fd(&self) -> RawFd {
@@ -80,7 +94,7 @@ impl CanOpen {
         Ok(())
     }
 
-    pub fn send_sdo_download(&self, sdo: &SdoDownload) -> Result<(), CanOpenError> {
+    fn send_sdo_download(&self, sdo: &SdoDownload) -> Result<(), CanOpenError> {
         let node = sdo.node;
         let frame = SdoFrame::new_write(sdo);
 
@@ -91,7 +105,7 @@ impl CanOpen {
         Ok(())
     }
 
-    pub fn send_sdo_upload(&self, sdo: &SdoUpload) -> Result<(), CanOpenError> {
+    fn send_sdo_upload(&self, sdo: &SdoUpload) -> Result<(), CanOpenError> {
         let node = sdo.node;
         let frame = SdoFrame::new_read(sdo);
 
@@ -100,5 +114,24 @@ impl CanOpen {
             .map_err(|_| CanOpenError::Sdo(frame, node.clone()))?;
 
         Ok(())
+    }
+
+    pub fn send_single_sdo(&mut self) {
+        if let Ok(sdo) = self.pending_sdo.pop() {
+            match sdo {
+                SdoManagerRequest::Upload(sdo_upload) => self.send_sdo_upload(&sdo_upload),
+                SdoManagerRequest::Download(sdo_download) => self.send_sdo_download(&sdo_download),
+            };
+        }
+    }
+
+    pub fn queue_sdo(&mut self, request: SdoManagerRequest) {
+        info!(system = "CANOpen", "pushing SDO request: {:?}", request);
+        if let Err(e) = self.pending_sdo.push(request) {
+            error!(
+                system = "CANOpen",
+                "Unable to push CANOpen SDO Request: {:?}", e
+            );
+        }
     }
 }

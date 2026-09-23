@@ -223,14 +223,13 @@ impl RtEngine {
             if self.state == RtState::Cyclic {
                 // Only send out SDO messages during the SDO Window in cyclic modes
                 if self.cycle_state.phase == CyclePhase::SdoWindow {
-                    self.sdo_manager.tick();
+                    // TODO: check against time left in SDO window?
+                    self.canopen.send_single_sdo();
                 }
             } else {
                 // In other modes we can send out SDO messages whenever
-                self.sdo_manager.tick();
+                self.canopen.send_single_sdo();
             }
-
-            self.tick();
 
             // Handle timing events.
             if self.cycle_state.is_all_cycle_feedback_received() {
@@ -238,7 +237,6 @@ impl RtEngine {
             } else if self.feedback_deadline_elapsed() {
                 self.feedback_deadline_exceeded();
             }
-
             if self.sync_timer_elapsed() {
                 self.start_sync_cycle()?;
             }
@@ -313,7 +311,7 @@ impl RtEngine {
     fn process_can_rx(&mut self) {
         for _ in 0..RT_CONFIG.can_frames_per_poll {
             // Read raw can frame
-            match self.can.read_frame() {
+            match self.canopen.read_raw_frame() {
                 Ok(frame) => {
                     info!(
                         "CAN RX id={:#x} data={:?}",
@@ -332,78 +330,27 @@ impl RtEngine {
                     };
                     info!("CAN RX Parsed: {:?}", frame);
 
-                    // Process parsed CANOpen dataframe
-                    match parsed.msg {
-                        MessageType::PDO(pdo) => {
-                            // What type of PDO is this?
-                            if pdo.pdo_type == PdoType::RPDO {
-                                // Match rpdo msg node id to a managed motor
-                                if let Some((_, motor)) = self
-                                    .const_rt_cfg
-                                    .axis_cfg
-                                    .motors()
-                                    .find(|(_, m)| m.node_id == pdo.node_id)
-                                {
-                                    let i = motor.node_id.idx();
-                                    // RPDO matched, parse into [`MotorFeedback`]
-                                    let state = self.motor_state[i].as_ref().unwrap();
-                                    let feedback = self.motor_feedback[i].as_mut().unwrap();
-
-                                    // Was this RPDO num expected for this motor?
-                                    if let Some(_) = state.pdo_cfg.rpdo[pdo.num] {
-                                        // if self.cycle_state.pdo_state[motor_idx][pdo.num].expected {
-                                        // Try to update motor feedback for this motor
-                                        match state.pdo_cfg.parse_rpdo(&pdo, feedback) {
-                                            Ok(_) => {
-                                                info!(
-                                                    "RPDO parsing & feedback update success for motor: {}",
-                                                    motor.node_id.u8()
-                                                );
-
-                                                // Update cycle state feedback processed for this motor
-                                                self.cycle_state.process_rpdo_received(&pdo, i);
-                                            }
-                                            Err(e) => {
-                                                error!("Failed to parse RPDO: {}", e)
-                                            }
-                                        }
-                                    } else {
-                                        error!(
-                                            "RPDO parse error - unable to match {:?} to any managed
-                                            motor, ignoring...",
-                                            pdo
-                                        );
-                                    }
-                                } else {
-                                    // this RPDO num was not expected for this motor
-                                    warn!(
-                                        "Node {} Unexpected RPDO {} Received!, ignoring",
-                                        pdo.node_id.u8(),
-                                        pdo.num
-                                    );
-                                }
+                    // Dispatch adressed messages to their recipient
+                    if let Some(msg_id) = parsed.node_id {
+                        for axis in self.axi.iter_mut().flatten() {
+                            if axis
+                                .managed_node_ids()
+                                .find(|node| *node == msg_id)
+                                .is_some()
+                            {
+                                axis.process_canopen_msg(parsed);
+                                break;
                             }
                         }
-                        MessageType::RSDO(s) => {
-                            self.sdo_manager.on_rsdo(s);
-                        }
-                        MessageType::TSDO(s) => {
-                            self.sdo_manager.on_tsdo(s);
-                        }
-                        _ => {
-                            error!("TODO: impl logic for this CAN RX {:?}", parsed);
-                        }
+                    } else {
+                        // Broadcast CANOpen frame
                     }
                 }
 
-                Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
-                    trace!("would block");
-                    break;
-                }
-
                 Err(error) => {
-                    error!("CAN RX error: {error}");
-                    break;
+                    if error.kind() != std::io::ErrorKind::WouldBlock {
+                        error!("CAN RX error: {error}");
+                    }
                 }
             }
         }

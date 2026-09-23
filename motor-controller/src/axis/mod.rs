@@ -2,14 +2,15 @@ use uom::si::f64::Length;
 
 use crate::{
     axis::{error::AxisError, scaling::AxisScaling},
-    canopen::{CanOpen, sdo::manager::SdoCommand},
+    canopen::{
+        CanOpen,
+        frame::{CanOpenFrame, NodeId},
+        sdo::manager::SdoCommand,
+    },
     cia402::Cia402Identifier,
     consts::pdo::NodePdoConfig,
     oms::{OperationMode, setpoint::Setpoint},
-    rt::{
-        engine::cfg::{Axis, AxisConfig},
-        motor::Cia402Motor,
-    },
+    rt::{engine::cfg::Axis, motor::Cia402Motor},
 };
 
 pub mod error;
@@ -116,5 +117,37 @@ impl GantryAxis {
                 slave_pos - master_pos
             }
         })
+    }
+
+    pub fn managed_node_ids(&self) -> impl Iterator<Item = NodeId> {
+        [
+            Some(self.master.id.node_id),
+            self.slave.as_ref().map(|s| s.id.node_id),
+        ]
+        .into_iter()
+        .flatten()
+    }
+
+    pub fn process_canopen_msg(&mut self, msg: CanOpenFrame) {
+        let Some(msg_id) = msg.node_id else {
+            tracing::error!(
+                system = "Axis",
+                "GantryAxis::process_canopen_msg called msg that contains no node_id: {:?}",
+                msg
+            );
+            assert!(
+                false,
+                "GantryAxis::process_canopen_msg called msg that contains no node_id: {:?}",
+                msg
+            );
+            return;
+        };
+
+        for motor in self.get_axis_motors_mut() {
+            if motor.id.node_id == msg_id {
+                motor.process_canopen_msg(msg);
+                return;
+            }
+        }
     }
 }
