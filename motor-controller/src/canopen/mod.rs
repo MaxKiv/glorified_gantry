@@ -20,7 +20,7 @@ use crate::{
 };
 use socketcan::{CanDataFrame, CanFrame, CanSocket, Frame, Socket};
 use std::os::fd::{AsRawFd, RawFd};
-use tracing::{error, info};
+use tracing::{debug, error, info};
 
 const SDO_EVENT_Q_SIZE: usize = 64;
 
@@ -76,6 +76,7 @@ impl CanOpen {
     }
 
     pub fn send_sync(&self) -> Result<(), CanOpenError> {
+        debug!(system = "CANOpen", "SYNC");
         self.can
             .write_frame(&self.sync_frame)
             .map_err(|_| CanOpenError::Sync)

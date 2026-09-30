@@ -1,6 +1,7 @@
 use libc::timespec;
+use tracing::error;
 
-use crate::consts::RT_CONFIG;
+use crate::{consts::RT_CONFIG, rt::engine::cycle_rx::CyclePhase};
 
 #[derive(Debug, Clone, Copy)]
 pub struct CycleTiming {
@@ -13,21 +14,25 @@ pub struct CycleTiming {
 }
 
 pub struct TimeKeeper {
+    state: CyclePhase,
     start_cycle: libc::timespec,
     start_feedback: libc::timespec,
     end_feedback: libc::timespec,
-    end_sync: libc::timespec,
+    sent_motor_setpoints: libc::timespec,
+    start_sdo_window: libc::timespec,
+    end_cycle: libc::timespec,
     prev_start: Option<libc::timespec>,
 }
 
 impl TimeKeeper {
     pub fn new() -> Self {
         Self {
+            state: CyclePhase::SendingSync,
             start_cycle: timespec {
                 tv_sec: 0,
                 tv_nsec: 0,
             },
-            end_sync: timespec {
+            sent_motor_setpoints: timespec {
                 tv_sec: 0,
                 tv_nsec: 0,
             },
@@ -39,14 +44,23 @@ impl TimeKeeper {
                 tv_sec: 0,
                 tv_nsec: 0,
             },
+            start_sdo_window: timespec {
+                tv_sec: 0,
+                tv_nsec: 0,
+            },
+            end_cycle: timespec {
+                tv_sec: 0,
+                tv_nsec: 0,
+            },
             prev_start: None,
         }
     }
 
     /// Produces timing stats from the current timekeeper stats
     pub fn get_cycle_timing(&self, cycle: u64) -> CycleTiming {
-        let execution_ns = 1_000_000_000i64 * (self.end_sync.tv_sec - self.start_cycle.tv_sec)
-            + (self.end_sync.tv_nsec - self.start_cycle.tv_nsec);
+        let execution_ns = 1_000_000_000i64
+            * (self.sent_motor_setpoints.tv_sec - self.start_cycle.tv_sec)
+            + (self.sent_motor_setpoints.tv_nsec - self.start_cycle.tv_nsec);
 
         let actual_ns = if let Some(prev_start) = &self.prev_start {
             (1_000_000_000i64 * (self.start_cycle.tv_sec - prev_start.tv_sec)
@@ -74,21 +88,6 @@ impl TimeKeeper {
         cycle_timing
     }
 
-    pub fn on_sync_cycle_start(&mut self) {
-        TimeKeeper::time(&mut self.start_cycle)
-    }
-
-    fn time_end_sync(&mut self) {
-        TimeKeeper::time(&mut self.end_sync)
-    }
-
-    pub fn end_cycle(&mut self, cycle: u64) -> CycleTiming {
-        self.time_end_sync();
-        let cycle_timing = self.get_cycle_timing(cycle);
-        self.prev_start = Some(self.start_cycle);
-        cycle_timing
-    }
-
     fn time(timespec: &mut timespec) {
         if unsafe {
             libc::clock_gettime(
@@ -102,11 +101,32 @@ impl TimeKeeper {
         }
     }
 
-    pub fn start_feedback(&mut self) {
+    pub fn on_sync_cycle_start(&mut self) {
+        TimeKeeper::time(&mut self.start_cycle)
+    }
+
+    pub fn on_motor_setpoints_sent(&mut self) {
+        TimeKeeper::time(&mut self.sent_motor_setpoints)
+    }
+
+    pub fn on_sdo_window_start(&mut self) {
+        TimeKeeper::time(&mut self.start_sdo_window)
+    }
+
+    fn time_cycle_end(&mut self) {
+        TimeKeeper::time(&mut self.end_cycle);
+        self.prev_start = Some(self.start_cycle);
+    }
+
+    pub fn on_cycle_end(&mut self) {
+        self.time_cycle_end();
+    }
+
+    pub fn on_start_waiting_for_feedback(&mut self) {
         TimeKeeper::time(&mut self.start_feedback)
     }
 
-    pub fn end_feedback(&mut self) {
+    pub fn on_receive_feedback(&mut self) {
         TimeKeeper::time(&mut self.end_feedback)
     }
 }

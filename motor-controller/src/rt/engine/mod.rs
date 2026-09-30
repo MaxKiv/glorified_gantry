@@ -7,7 +7,7 @@ use std::{
 };
 
 use libc::pollfd;
-use socketcan::{CanSocket, EmbeddedFrame, Frame, Socket};
+use socketcan::{CanSocket, EmbeddedFrame, Frame, Socket, SocketOptions};
 use tracing::{error, info, trace, warn};
 use uom::si::length::millimeter;
 
@@ -90,12 +90,10 @@ pub struct RtEngine {
 
     current_cmd: GantryCommand,
 
-    cycle_state: CycleState,
-
     poll_fds: [pollfd; 4],
     sync_timer: TimerFd,
     feedback_timer: TimerFd,
-    timekeeper: TimeKeeper,
+    cycle_state: CycleState,
 }
 
 impl RtEngine {
@@ -264,50 +262,6 @@ impl RtEngine {
         self.poll_fds[SYNC_TIMER_FD].revents & libc::POLLIN != 0
     }
 
-    fn start_sync_cycle(&mut self) -> Result<(), RtError> {
-        // Time cycle
-        self.timekeeper.on_sync_cycle_start();
-
-        self.sync_timer.reset().map_err(|_| RtError::Timer)?;
-
-        // Process cmds, drains internal command queue
-        // TODO
-        if !self.cmd_queue.is_empty() {
-            let cmd = self
-                .cmd_queue
-                .pop()
-                .expect("CMD Queue checks out to be non-empty, but pop() returns Error");
-
-            match cmd.clone() {
-                GantryCommand::CyclicSetpoint(gantry_setpoint)
-                | GantryCommand::Setpoint(gantry_setpoint) => {
-                    self.new_gantry_setpoint(gantry_setpoint);
-                }
-                GantryCommand::Home => {
-                    self.new_gantry_setpoint(GantrySetpoint::new_home_all_axis());
-                    self.set_rt_state(RtState::SingleCycle);
-                }
-                GantryCommand::Idle => {
-                    // TODO: Transition to cia402 disabled?
-                    self.set_rt_state(RtState::Idle);
-                }
-            }
-            self.current_cmd = cmd;
-        }
-
-        // Write SYNC
-        self.canopen.send_sync().map_err(|e| RtError::CanOpen(e))?;
-
-        // Setup feedback timer
-        self.feedback_timer.arm_once().map_err(|_| RtError::Timer)?;
-        self.timekeeper.start_feedback();
-
-        // Bookkeeping
-        self.cycle_state.transition_to(CyclePhase::WaitingForTpdos);
-
-        Ok(())
-    }
-
     fn process_can_rx(&mut self) {
         for _ in 0..RT_CONFIG.can_frames_per_poll {
             // Read raw can frame
@@ -343,11 +297,12 @@ impl RtEngine {
                             }
                         }
                     } else {
-                        // Broadcast CANOpen frame
+                        // Ignore broadcast CANOpen frame
                     }
                 }
 
                 Err(error) => {
+                    // Ignore WouldBlock
                     if error.kind() != std::io::ErrorKind::WouldBlock {
                         error!("CAN RX error: {error}");
                     }
@@ -378,6 +333,59 @@ impl RtEngine {
         }
     }
 
+    fn start_sync_cycle(&mut self) -> Result<(), RtError> {
+        // Reset SYNC timer
+        self.sync_timer.reset().map_err(|_| RtError::Timer)?;
+
+        // Calculate timing metrics for previous cycle
+        self.cycle_state
+            .transition_cycle_phase(CyclePhase::CycleEnd);
+
+        // Start new SYNC cycle
+        self.cycle_state
+            .transition_cycle_phase(CyclePhase::SendingSync);
+
+        // Process cmds, drains internal command queue
+        // TODO
+        if !self.cmd_queue.is_empty() {
+            let cmd = self
+                .cmd_queue
+                .pop()
+                .expect("CMD Queue checks out to be non-empty, but pop() returns Error");
+
+            match cmd.clone() {
+                GantryCommand::CyclicSetpoint(gantry_setpoint)
+                | GantryCommand::Setpoint(gantry_setpoint) => {
+                    self.new_gantry_setpoint(gantry_setpoint);
+                }
+                GantryCommand::Home => {
+                    self.new_gantry_setpoint(GantrySetpoint::new_home_all_axis());
+                    self.set_rt_state(RtState::SingleCycle);
+                }
+                GantryCommand::Idle => {
+                    // TODO: Transition to cia402 disabled?
+                    self.set_rt_state(RtState::Idle);
+                }
+            }
+            self.current_cmd = cmd;
+        }
+
+        // Write SYNC
+        self.canopen.send_sync().map_err(|e| RtError::CanOpen(e))?;
+
+        // Setup feedback timer
+        self.feedback_timer.arm_once().map_err(|_| RtError::Timer)?;
+
+        // Bookkeeping
+        self.cycle_state
+            .transition_cycle_phase(CyclePhase::WaitingForTpdo);
+
+        // Control flow continues in on_sync_feedback(), or feedback_deadline_exceeded(), depending
+        // on whether feedback actually arrived
+
+        Ok(())
+    }
+
     fn feedback_deadline_exceeded(&mut self) {
         // Check timer expirations
         let expirations = self
@@ -390,21 +398,20 @@ impl RtEngine {
             error!("RT overrun: {} feedback timer expirations", expirations);
         }
 
-        self.timekeeper.end_feedback();
-        let ct = self.timekeeper.end_cycle(self.cycle_state.cycle);
-        error!("Device feedback did not arrive in time! - {:?}", ct);
+        let cycle_timing = self.cycle_state.get_cycle_timing();
+        error!(
+            "Device feedback did not arrive in time! - {:?}",
+            cycle_timing
+        );
 
         // TODO: what to do here?
-        // Transition to ErrorState?
-        // Accept a single feedback delayed cycle and restart?
-        self.cycle_state.phase = CyclePhase::SendingSync; // TODO: remove
-        self.timekeeper.end_cycle(self.cycle_state.cycle);
+        self.cycle_state.on_feedback_deadline_elapsed();
     }
 
     fn sync_feedback_received(&mut self) {
         // TPDOs are in, bookkeeping
-        self.timekeeper.end_feedback();
-        self.cycle_state.transition_to(CyclePhase::SendingRpdoS);
+        self.cycle_state
+            .transition_cycle_phase(CyclePhase::ReceivedTpdo);
 
         //   if (x-axis skew > large) -> ESTOP
         for axis in self.axi.as_ref().iter().flatten() {
@@ -434,6 +441,10 @@ impl RtEngine {
         }
 
         // Transmit PDO
+        self.canopen.transmit_pdo();
+
+        self.cycle_state
+            .transition_cycle_phase(CyclePhase::SentRpdo);
 
         // Construct CycleFeedback
         todo!();
@@ -441,15 +452,10 @@ impl RtEngine {
         todo!();
 
         // Enter "SDO window" cycle phase
-        self.cycle_state.transition_to(CyclePhase::SdoWindow);
+        self.cycle_state
+            .transition_cycle_phase(CyclePhase::SdoWindow);
 
-        // Fetch pending SDO from Tokio somehow
-        // Add those to a list, poll these in main polling loop as lowest priority and send
-        // conditioned on cycle_state.phase = CyclePhase::SdoWindow
-
-        self.cycle_state.transition_to(CyclePhase::SendingSync);
-        let cycle_timing = self.timekeeper.end_cycle(self.cycle_state.cycle);
-        info!("{:?} - SYNC", cycle_timing);
+        // The SDO window is further picked up in the main RT loop
     }
 
     fn poll(&mut self) -> i32 {
