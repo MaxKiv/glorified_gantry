@@ -4,6 +4,7 @@ pub mod state;
 
 use crate::canopen::od::RPDO_MAPPING_PARAMETER_BASE_INDEX;
 use crate::canopen::od::TPDO_MAPPING_PARAMETER_BASE_INDEX;
+use crate::canopen::pdo::RawRpdo;
 use crate::rt::MotorFeedback;
 use crate::rt::TransmissionType;
 use tracing::{error, info, trace, warn};
@@ -193,6 +194,29 @@ impl Cia402Motor {
             .map_err(|e| MotorError::PdoRemapping(e))?;
 
         Ok(())
+    }
+
+    pub fn get_rpdo(&self) -> [Option<RawRpdo>; 4] {
+        let out = [None; 4];
+
+        for (num, rpdo) in self.active_cfg.rpdo.iter().enumerate() {
+            if let Some(rpdo) = rpdo {
+                assert!(
+                    rpdo.pdo == PdoType::RPDO,
+                    "Non-RPDO mapping in self.active_cfg.rpdos.iter()",
+                );
+
+                let semantics = rpdo.get_required_semantics();
+                for semantic in semantics.iter().flatten() {}
+
+                let dest = 0u64;
+
+                rpdo.encode(values, &mut dest);
+                out[num] = Some(dest);
+            }
+        }
+
+        out
     }
 
     pub fn tick(&mut self) {
@@ -438,7 +462,7 @@ impl Cia402Motor {
     }
 
     pub fn on_sync_feedback(&mut self) {
-        todo!()
+        info!(system = "Cia402Motor", "on_sync_feedback");
     }
 
     pub fn process_canopen_msg(&mut self, parsed: CanOpenFrame) {
@@ -534,7 +558,8 @@ impl Cia402Motor {
         self.rpdo_rx = [false; 4];
     }
 
-    pub fn all_cycle_rpdo_received(&mut self) -> bool {
+    // Are all current cycle RPDO received for this motor
+    pub fn all_cycle_rpdo_received(&self) -> bool {
         for (i, pdo_mapping) in self.active_cfg.rpdo.iter().enumerate() {
             if pdo_mapping.is_some() {
                 if !self.rpdo_rx[i] {

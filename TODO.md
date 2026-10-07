@@ -4,7 +4,13 @@
 
 ## To Figure out:
 
-Now:
+First:
+
+1. Figure out how to do `rpdo.encode()`?
+   - Use `PdoMapping.get_required_semantics()` & track a map [semantic ->
+     value] in motor?
+
+Then:
 
 1. Create some sort of CanOpen structure with 2 sides, 1 tx side:
    - accepts CanOpen concepts (nmt send, sdo cmd enqueue, etc)

@@ -44,6 +44,10 @@ impl PdoMapping {
             let val = values[i].as_ref().expect(
                 "provide &[`PdoValue`] with the same order and semantic meaning as defined in this mapping",
             );
+            assert!(
+                src.entry.semantic == val.semantic,
+                "provide &[`PdoValue`] with the same order and semantic meaning as defined in this mapping"
+            );
 
             let mask = (src.start as u64) << src.len;
             *data &= val.as_raw() & mask;
@@ -58,6 +62,17 @@ impl PdoMapping {
             let raw = data & mask >> src.len;
             let val = PdoValue::from_raw_semantic(&raw, src.entry.semantic);
             out[i] = Some(val);
+        }
+
+        out
+    }
+
+    pub fn get_required_semantics(&self) -> [Option<PdoSemantic>; 4] {
+        let mut out = [const { None }; 4];
+
+        for (i, src) in self.sources.iter().enumerate() {
+            let semantic = src.entry.semantic;
+            out[i] = Some(semantic);
         }
 
         out

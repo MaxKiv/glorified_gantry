@@ -8,7 +8,7 @@ use std::{
 
 use libc::pollfd;
 use socketcan::{CanSocket, EmbeddedFrame, Frame, Socket, SocketOptions};
-use tracing::{error, info, trace, warn};
+use tracing::{debug, error, info, trace, warn};
 use uom::si::length::millimeter;
 
 use crate::{
@@ -68,7 +68,6 @@ pub struct MotorSetpoint {
 /// N = Number of Managed Motors
 pub struct RtEngine {
     can_interface: String,
-    can: CanSocket,
     canopen: CanOpen,
 
     sdo_manager: SdoManager,
@@ -101,8 +100,6 @@ impl RtEngine {
         can_interface: String,
         cmd_rx: CmdReceiver<CMD_CHANNEL_SIZE>,
     ) -> JoinHandle<Result<(), RtError>> {
-        let timekeeper = TimeKeeper::new();
-
         // Constructs a new sync cycle timer
         // implemented as absolute monotonic clock
         let sync_timer =
@@ -155,9 +152,7 @@ impl RtEngine {
             cmd_channel_rx: cmd_rx,
             state: RtState::default(),
             cmd_queue: Fifo::<GantryCommand, CMD_QUEUE_SIZE>::new(),
-            can,
             poll_fds,
-            timekeeper,
             sync_timer,
             feedback_timer,
             const_rt_cfg: TEST_CONST_RT_ENGINE_CFG,
@@ -205,14 +200,23 @@ impl RtEngine {
                 self.to_error_state("poll failed");
             }
 
-            // Drain new available inputs
-            // CAN
+            // Drain CAN
             if self.can_frame_received() {
                 self.process_can_rx();
             }
-            // Frontend CMDs
+            // Drain Frontend CMDs
             if self.cmd_received() {
                 self.process_cmd_rx();
+            }
+
+            // Handle timing events.
+            if self.all_cycle_rpdo_received() {
+                self.sync_feedback_received();
+            } else if self.feedback_deadline_elapsed() {
+                self.feedback_deadline_exceeded();
+            }
+            if self.sync_timer_elapsed() {
+                self.start_sync_cycle()?;
             }
 
             // Advance SDO state machine
@@ -227,16 +231,6 @@ impl RtEngine {
             } else {
                 // In other modes we can send out SDO messages whenever
                 self.canopen.send_single_sdo();
-            }
-
-            // Handle timing events.
-            if self.cycle_state.is_all_cycle_feedback_received() {
-                self.sync_feedback_received();
-            } else if self.feedback_deadline_elapsed() {
-                self.feedback_deadline_exceeded();
-            }
-            if self.sync_timer_elapsed() {
-                self.start_sync_cycle()?;
             }
 
             trace!("RT engine looping\n");
@@ -409,14 +403,23 @@ impl RtEngine {
     }
 
     fn sync_feedback_received(&mut self) {
+        debug!(system = "RtEngine", "sync_feedback_received",);
+
         // TPDOs are in, bookkeeping
         self.cycle_state
             .transition_cycle_phase(CyclePhase::ReceivedTpdo);
 
         //   if (x-axis skew > large) -> ESTOP
         for axis in self.axi.as_ref().iter().flatten() {
-            if let Some(skew) = axis.skew().map(|skew| skew.get::<millimeter>()) {
-                if skew > RT_CONFIG.max_axis_skew_mm {
+            if let Some(skew_mm) = axis.skew().map(|skew| skew.get::<millimeter>()) {
+                if skew_mm > RT_CONFIG.max_axis_skew_mm {
+                    error!(
+                        system = "RtEngine",
+                        "Excessive axis skew detected: {:?}mm > {:?}mm",
+                        skew_mm,
+                        RT_CONFIG.max_axis_skew_mm,
+                    );
+
                     self.do_e_stop();
                 }
             }
@@ -424,12 +427,6 @@ impl RtEngine {
 
         for axis in self.axi.iter_mut().flatten() {
             axis.on_sync_feedback();
-        }
-
-        for axis in self.axi.as_ref().iter().flatten() {
-            if axis.opmode.is_torque_mode() {
-                axis.compensate_skew();
-            }
         }
 
         let rpdos = [[[[0u8; 8]; 4]; 2]; Axis::COUNT];
@@ -474,8 +471,8 @@ impl RtEngine {
     }
 
     fn to_safe_state(&mut self) {
-        // TODO: Move motors to safe setpoint / state
-        todo!("Move motors to safe setpoint / state -> E/QUICK STOP drives?");
+        self.do_e_stop();
+
         self.set_rt_state(RtState::Shutdown);
     }
 
@@ -538,5 +535,36 @@ impl RtEngine {
         for axis in self.axi.iter_mut().flatten() {
             axis.tick();
         }
+    }
+
+    fn all_cycle_rpdo_received(&self) -> bool {
+        for axis in self.axi.iter().flatten() {
+            if !axis.all_cycle_rpdo_received() {
+                return false;
+            }
+        }
+
+        true
+    }
+
+    /// Performs an Emergency Stop of the gantry
+    fn do_e_stop(&mut self) {
+        warn!(
+            system = "RtEngine",
+            "ESTOP triggered, setting safe setpoint & NMT::PreOP",
+        );
+
+        self.new_gantry_setpoint(GantrySetpoint::estop_setpoint());
+
+        for axis in self.axi.iter_mut().flatten() {
+            if let Err(err) = axis.request_nmt_command(NmtCommandSpecifier::EnterPreOperational) {
+                error!(
+                    "ESTOP - FATAL: unable to set NMT PreOp for {:?} axis: {:?}",
+                    axis.axis, err
+                )
+            }
+        }
+
+        self.state = RtState::Faulted;
     }
 }

@@ -1,4 +1,4 @@
-use tracing::{info, warn};
+use tracing::{debug, info, warn};
 
 use crate::{
     canopen::pdo::message::RawPdoMessage,
@@ -65,6 +65,7 @@ impl CycleState {
     }
 
     pub fn transition_cycle_phase(&mut self, to: CyclePhase) {
+        debug!(system = "RtEngine", "transition_cycle_phase to {:?}", to);
         assert!(
             to == self.phase.next(),
             "Invalid cycle phase transition from {:?} -> {:?}",

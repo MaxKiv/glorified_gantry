@@ -104,18 +104,10 @@ mod tests {
                 loop {
                     tokio::time::sleep(std::time::Duration::from_secs(2)).await;
 
-                    info!("tokio sending shutdown");
+                    info!("tokio sending gantry cmd");
                     cmd_tx
-                        .send(RtCommand::SingleCycle)
+                        .send(&crate::frontend::GantryCommand::Idle)
                         .expect("failed to notify RT");
-
-                    // tokio::time::sleep(std::time::Duration::from_millis(10)).await;
-                    // cmd_tx
-                    //     .send(RtCommand::Reconfigure)
-                    //     .expect("failed to notify RT");
-                    // cmd_tx
-                    //     .send(RtCommand::Shutdown)
-                    //     .expect("failed to notify RT");
                 }
             });
         });

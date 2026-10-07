@@ -1,10 +1,12 @@
+use tracing::info;
 use uom::si::f64::Length;
 
 use crate::{
     axis::{error::AxisError, scaling::AxisScaling},
     canopen::{
-        CanOpen,
+        CanOpen, CanOpenError,
         frame::{CanOpenFrame, NodeId},
+        nmt::NmtCommandSpecifier,
         sdo::manager::SdoCommand,
     },
     cia402::Cia402Identifier,
@@ -60,6 +62,14 @@ impl GantryAxis {
             .flatten()
     }
 
+    /// Get immutable ref to motors that make up this axis
+    /// NOTE: always yields &[master, slave] in order
+    fn get_axis_motors_ref(&self) -> impl Iterator<Item = &Cia402Motor> {
+        [Some(&self.master), self.slave.as_ref()]
+            .into_iter()
+            .flatten()
+    }
+
     pub fn switch_opmode(&mut self, new_opmode: &OperationMode) -> Result<(), AxisError> {
         for motor in self.get_axis_motors_mut() {
             motor
@@ -68,6 +78,16 @@ impl GantryAxis {
         }
 
         self.opmode = *new_opmode;
+        Ok(())
+    }
+
+    pub fn request_nmt_command(&mut self, cmd: NmtCommandSpecifier) -> Result<(), AxisError> {
+        for motor in self.get_axis_motors_mut() {
+            motor
+                .request_nmt_command(cmd)
+                .map_err(|e| AxisError::NmtCommandFailed(cmd, motor.id.clone(), e))?;
+        }
+
         Ok(())
     }
 
@@ -101,6 +121,7 @@ impl GantryAxis {
     }
 
     pub fn on_sync_feedback(&mut self) {
+        info!(system = "Axis", "on_sync_feedback");
         for motor in self.get_axis_motors_mut() {
             motor.on_sync_feedback();
         }
@@ -149,5 +170,16 @@ impl GantryAxis {
                 return;
             }
         }
+    }
+
+    // Are all current cycle RPDO received for this axis
+    pub fn all_cycle_rpdo_received(&self) -> bool {
+        for motor in self.get_axis_motors_ref() {
+            if !motor.all_cycle_rpdo_received() {
+                return false;
+            }
+        }
+
+        true
     }
 }

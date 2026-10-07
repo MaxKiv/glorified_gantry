@@ -1,6 +1,9 @@
 pub mod mapping;
 pub mod message;
 
+/// Binary representation of a RPDO
+pub type RawRpdo = u64;
+
 #[derive(Debug, PartialEq, Eq)]
 pub enum PdoType {
     TPDO,
