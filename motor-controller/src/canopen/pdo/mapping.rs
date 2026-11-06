@@ -6,7 +6,7 @@ use crate::{
             entry::{ODEntry, PdoSemantic},
             value::ODValue,
         },
-        pdo::{PdoType, TransmissionType, message::RawPdoMessage},
+        pdo::{PdoType, RawRpdo, TransmissionType, message::RawPdoMessage},
     },
     oms::OperationMode,
     rt::MotorFeedback,
@@ -39,7 +39,8 @@ impl PdoMapping {
     // Encodes the given values into the given buffer, ready to be sent over the wire
     // NOTE: this opportunistically encodes values, it is the users responsibility to
     // provide &[`PdoValue`] with the same order and semantic meaning as defined in this mapping
-    pub fn encode(&self, values: &[Option<PdoValue>; 4], data: &mut u64) {
+    pub fn encode(&self, values: &[Option<PdoValue>; 4]) -> RawRpdo {
+        let mut raw: RawRpdo = 0;
         for (i, src) in self.sources.iter().enumerate() {
             let val = values[i].as_ref().expect(
                 "provide &[`PdoValue`] with the same order and semantic meaning as defined in this mapping",
@@ -50,16 +51,18 @@ impl PdoMapping {
             );
 
             let mask = (src.start as u64) << src.len;
-            *data &= val.as_raw() & mask;
+            raw &= val.as_raw() & mask;
         }
+
+        raw
     }
 
-    pub fn decode(&self, data: u64) -> [Option<PdoValue>; 4] {
+    pub fn decode(&self, raw: RawRpdo) -> [Option<PdoValue>; 4] {
         let mut out = [const { None }; 4];
 
         for (i, src) in self.sources.iter().enumerate() {
             let mask = (src.start as u64) << src.len;
-            let raw = data & mask >> src.len;
+            let raw = raw & mask >> src.len;
             let val = PdoValue::from_raw_semantic(&raw, src.entry.semantic);
             out[i] = Some(val);
         }

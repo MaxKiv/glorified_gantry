@@ -94,6 +94,12 @@ impl TryFrom<i8> for OperationMode {
     }
 }
 
+impl From<OperationMode> for i8 {
+    fn from(value: OperationMode) -> Self {
+        value as i8 // works because of #[repr(i8)] 
+    }
+}
+
 impl OperationMode {
     pub fn is_cyclic_synchronous(&self) -> bool {
         matches!(

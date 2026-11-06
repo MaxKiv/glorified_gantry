@@ -6,10 +6,13 @@ pub mod pdo;
 pub mod sdo;
 pub mod sync;
 
+use crate::canopen::pdo::RawRpdo;
+use crate::canopen::pdo::frame::RpdoFrame;
 use crate::canopen::sdo::manager::SdoManagerRequest;
 use crate::canopen::{emcy::EmergencyMessage, pdo::message::RawPdoMessage, sdo::SdoResponse};
 use crate::fifo::Fifo;
 use crate::fifo::error::FifoError;
+use crate::rt::motor::MotorRpdoSet;
 use crate::{
     canopen::{
         nmt::{NmtCommandSpecifier, NmtControlMessage, NmtFrame, NmtMonitorMessage},
@@ -44,6 +47,8 @@ pub enum CanOpenError {
     Nmt(NmtCommandSpecifier, Cia402Identifier),
     #[error("Unable to send Sdo Frame {0:?} to {1:?}")]
     Sdo(SdoFrame, Cia402Identifier),
+    #[error("Unable to send Rpdo Frame {0:?} to {1:?}")]
+    Rpdo(RpdoFrame, Cia402Identifier),
 }
 
 /// Thin socketcan wrapper for CANOpen primitives
@@ -91,6 +96,41 @@ impl CanOpen {
         self.can
             .write_frame(&frame.inner)
             .map_err(|_| CanOpenError::Nmt(cmd, motor.clone()))?;
+
+        Ok(())
+    }
+
+    pub fn send_motor_rpdoset(
+        &self,
+        rpdoset: MotorRpdoSet,
+        motor: &Cia402Identifier,
+    ) -> Result<(), CanOpenError> {
+        debug!(
+            system = "CANOpen",
+            "transmit_rpdoset() - rpdoset {:?} - node {}",
+            rpdoset,
+            motor.node_id.u8()
+        );
+        for (num, raw_rpdo) in rpdoset.iter().enumerate() {
+            if let Some(raw_rpdo) = raw_rpdo {
+                self.send_single_rpdo(*raw_rpdo, num as u16, motor)?;
+            }
+        }
+
+        Ok(())
+    }
+
+    fn send_single_rpdo(
+        &self,
+        raw_rpdo: RawRpdo,
+        num: u16,
+        motor: &Cia402Identifier,
+    ) -> Result<(), CanOpenError> {
+        let frame = RpdoFrame::new_from_raw_rpdo(raw_rpdo, num as u16, motor);
+
+        self.can
+            .write_frame(&frame.inner)
+            .map_err(|_| CanOpenError::Rpdo(frame, motor.clone()))?;
 
         Ok(())
     }

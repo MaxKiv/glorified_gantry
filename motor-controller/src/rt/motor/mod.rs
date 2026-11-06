@@ -1,13 +1,27 @@
 pub mod error;
+pub mod limits;
 pub mod pdo;
 pub mod state;
 
 use crate::canopen::od::RPDO_MAPPING_PARAMETER_BASE_INDEX;
 use crate::canopen::od::TPDO_MAPPING_PARAMETER_BASE_INDEX;
+use crate::canopen::od::entry::PdoSemantic;
+use crate::canopen::od::value::ODValue;
 use crate::canopen::pdo::RawRpdo;
+use crate::canopen::pdo::mapping::PdoValue;
+use crate::cw::ControlWord;
 use crate::rt::MotorFeedback;
 use crate::rt::TransmissionType;
+use crate::rt::motor::limits::Cia402MotorLimits;
+use crate::sw::StatusWord;
+use tracing::debug;
 use tracing::{error, info, trace, warn};
+use uom::si::length::millimeter;
+use uom::si::torque::newton_meter;
+use uom::si::velocity::meter_per_second;
+
+/// Collection of up to 4 motor specific RPDO
+pub type MotorRpdoSet = [Option<RawRpdo>; 4];
 
 use crate::{
     canopen::{
@@ -33,24 +47,6 @@ use crate::{
     rt::motor::{error::MotorError, state::MotorState},
 };
 
-pub struct Cia402Motor {
-    pub id: Cia402Identifier,
-
-    sdo: SdoManager,
-    controller_state: ControllerState,
-    pub motor_state: MotorState,
-    rpdo_rx: [bool; 4],
-    feedback: MotorFeedback,
-    setpoint: Setpoint,
-    cia402_state: Cia402State,
-    nmt: NmtState,
-    canopen: CanOpen,
-    opmode: OperationMode,
-    pdo_cfg: &'static NodePdoConfig,
-    active_cfg: &'static OMSNodePdoConfig,
-    default_parameters: &'static [SdoCommand],
-}
-
 enum ControllerState {
     Idle,
     Operating,
@@ -75,6 +71,37 @@ struct ParametrisingState {
     sdo_state: SdoState,
 }
 
+pub struct Cia402Motor {
+    pub id: Cia402Identifier,
+
+    canopen: CanOpen,
+    sdo: SdoManager,
+    controller_state: ControllerState,
+    rpdo_rx: [bool; 4],
+
+    // TODO, these 2 seem similar?
+    pub motor_state: MotorState,
+    feedback: MotorFeedback,
+
+    cia402_state: Cia402State,
+    nmt: NmtState,
+    opmode: OperationMode, // Active operation mode
+    pdo_cfg: &'static NodePdoConfig,
+    active_cfg: &'static OMSNodePdoConfig,
+
+    active_setpoint: Setpoint, // Active motor setpoint
+    controlword: ControlWord,  // Active controlword
+    statusword: StatusWord,    // Last received statusword
+
+    // Collection of latest setpoint per relevant mode
+    target_position: i32,
+    target_velocity: i32,
+    target_torque: i16,
+
+    limits: Cia402MotorLimits,                 // Profile limits
+    default_parameters: &'static [SdoCommand], // All configuration parameters
+}
+
 impl Cia402Motor {
     pub fn new(
         id: Cia402Identifier,
@@ -84,7 +111,7 @@ impl Cia402Motor {
     ) -> Self {
         let nmt = NmtState::Bootup;
         let opmode = OperationMode::default();
-        let setpoint = Setpoint::default();
+        let active_setpoint = Setpoint::default();
         let cia402_state = Cia402State::default();
         let active_cfg = pdo_cfg.get_cfg_for_opmode(&opmode);
 
@@ -93,16 +120,20 @@ impl Cia402Motor {
             nmt,
             canopen,
             opmode,
-            setpoint,
+            active_setpoint,
             cia402_state,
             pdo_cfg,
             active_cfg,
-            sdo: todo!(),
             controller_state: ControllerState::Idle,
             default_parameters,
             motor_state: MotorState::new(),
             feedback: MotorFeedback::new(),
             rpdo_rx: [false; 4],
+            sdo: todo!(),
+            target_position: todo!(),
+            target_velocity: todo!(),
+            target_torque: todo!(),
+            limits: todo!(),
         }
     }
 
@@ -139,7 +170,7 @@ impl Cia402Motor {
         let required_opmode = new_sp.required_opmode();
         self.switch_operation_mode(&required_opmode);
 
-        self.setpoint = new_sp.clone();
+        self.active_setpoint = new_sp.clone();
     }
 
     fn switch_pdo_config(&mut self, new: &OperationMode) -> Result<(), MotorError> {
@@ -196,23 +227,36 @@ impl Cia402Motor {
         Ok(())
     }
 
-    pub fn get_rpdo(&self) -> [Option<RawRpdo>; 4] {
-        let out = [None; 4];
+    pub fn get_rpdo(&self) -> MotorRpdoSet {
+        debug!(system = "Cia402Motor", "get_rpdo");
+        let mut out = [None; 4];
 
+        // Iterate active rpdo mappings
         for (num, rpdo) in self.active_cfg.rpdo.iter().enumerate() {
             if let Some(rpdo) = rpdo {
+                trace!(system = "Cia402Motor", "get_rpdo - rpdo #{} mapped", num);
                 assert!(
                     rpdo.pdo == PdoType::RPDO,
                     "Non-RPDO mapping in self.active_cfg.rpdos.iter()",
                 );
 
+                // Iterate RPDO mapping semantics, fetch active value for each
                 let semantics = rpdo.get_required_semantics();
-                for semantic in semantics.iter().flatten() {}
+                trace!(
+                    system = "Cia402Motor",
+                    "get_rpdo - required_semantics #{}: {:?}", num, semantics
+                );
+                let mut values: [Option<PdoValue>; 4] = [const { None }; 4];
+                for semantic in semantics.iter().flatten() {
+                    let value = self.get_value_from_semantic(semantic);
+                    values[num] = Some(value);
+                }
 
-                let dest = 0u64;
-
-                rpdo.encode(values, &mut dest);
-                out[num] = Some(dest);
+                // Encoded active values into a raw rpdo (u64)
+                let encoded = rpdo.encode(&values);
+                out[num] = Some(encoded);
+            } else {
+                trace!(system = "Cia402Motor", "get_rpdo - rpdo #{} unmapped", num);
             }
         }
 
@@ -481,17 +525,11 @@ impl Cia402Motor {
             }
 
             MessageType::NmtControl(nmt_ctl) => {
-                info!(
-                    system = "Cia402Motor",
-                    "Got  NMT CONTROL MSG: {:?}", nmt_ctl
-                );
+                info!(system = "Cia402Motor", "Got NMT CONTROL MSG: {:?}", nmt_ctl);
             }
 
             MessageType::NmtMonitor(nmt_mon) => {
-                info!(
-                    system = "Cia402Motor",
-                    "Got  NMT MONITOR MSG: {:?}", nmt_mon
-                );
+                info!(system = "Cia402Motor", "Got NMT MONITOR MSG: {:?}", nmt_mon);
 
                 self.nmt = nmt_mon.current_state;
             }
@@ -568,6 +606,89 @@ impl Cia402Motor {
             }
         }
         true
+    }
+
+    fn get_value_from_semantic(&self, semantic: &PdoSemantic) -> PdoValue {
+        let out = match semantic {
+            PdoSemantic::DeviceType => PdoValue {
+                semantic: semantic.clone(),
+                value: ODValue::U32(0x0004_0192), // CiA 402 drive hardcoded
+            },
+            PdoSemantic::DeviceName => {
+                let mut out = [0u8; 8];
+                out.copy_from_slice(&self.id.device_name.as_bytes()[..8]);
+                PdoValue {
+                    semantic: semantic.clone(),
+                    value: ODValue::VisibleString(out),
+                }
+            }
+            PdoSemantic::Statusword => PdoValue {
+                semantic: semantic.clone(),
+                value: ODValue::U16(self.statusword.bits()),
+            },
+            PdoSemantic::Controlword => PdoValue {
+                semantic: semantic.clone(),
+                value: ODValue::U16(self.controlword.bits()),
+            },
+            PdoSemantic::ActualPosition => PdoValue {
+                semantic: semantic.clone(),
+                value: ODValue::I32(self.motor_state.pos.get::<millimeter>() as i32),
+            },
+            PdoSemantic::ActualVelocity => PdoValue {
+                semantic: semantic.clone(),
+                value: ODValue::I32(self.motor_state.vel.get::<meter_per_second>() as i32),
+            },
+            PdoSemantic::ActualTorque => PdoValue {
+                semantic: semantic.clone(),
+                value: ODValue::I16(self.motor_state.torque.get::<newton_meter>() as i16),
+            },
+            PdoSemantic::ActualOperationMode => PdoValue {
+                semantic: semantic.clone(),
+                value: ODValue::I8(self.opmode.into()),
+            },
+            PdoSemantic::TargetOperationMode => PdoValue {
+                semantic: semantic.clone(),
+                value: ODValue::I8(self.active_setpoint.required_opmode().into()),
+            },
+            PdoSemantic::TargetPosition => PdoValue {
+                semantic: semantic.clone(),
+                value: ODValue::I32(self.target_position),
+            },
+            PdoSemantic::TargetVelocity => PdoValue {
+                semantic: semantic.clone(),
+                value: ODValue::I32(self.target_velocity),
+            },
+            PdoSemantic::TargetTorque => PdoValue {
+                semantic: semantic.clone(),
+                value: ODValue::I16(self.target_torque),
+            },
+            PdoSemantic::ProfileVelocity => PdoValue {
+                semantic: semantic.clone(),
+                value: ODValue::U32(self.limits.profile_velocity),
+            },
+
+            PdoSemantic::ProfileAcceleration => PdoValue {
+                semantic: semantic.clone(),
+                value: ODValue::U32(self.limits.profile_acceleration),
+            },
+            PdoSemantic::ProfileDecceleration => PdoValue {
+                semantic: semantic.clone(),
+                value: ODValue::U32(self.limits.profile_decceleration),
+            },
+            PdoSemantic::Other => {
+                warn!(
+                    system = "Cia402Motor",
+                    "get_value_from_semantic() for PdoSemantic::Other"
+                );
+                panic!("get_value_from_semantic() for PdoSemantic::Other");
+            }
+        };
+
+        trace!(
+            system = "Cia402Motor",
+            "get_value_from_semantic() for {:?} returns {:?}", semantic, out
+        );
+        out
     }
 }
 

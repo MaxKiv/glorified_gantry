@@ -12,7 +12,7 @@ use tracing::{debug, error, info, trace, warn};
 use uom::si::length::millimeter;
 
 use crate::{
-    axis::GantryAxis,
+    axis::{GantryAxis, GantryAxisRpdo},
     canopen::{
         CanOpen, MessageType, frame::CanOpenFrame, nmt::NmtCommandSpecifier, pdo::PdoType,
         sdo::manager::SdoManager,
@@ -410,7 +410,8 @@ impl RtEngine {
             .transition_cycle_phase(CyclePhase::ReceivedTpdo);
 
         //   if (x-axis skew > large) -> ESTOP
-        for axis in self.axi.as_ref().iter().flatten() {
+        debug!(system = "RtEngine", "Checking axis skew",);
+        for axis in self.axi.iter_mut().flatten() {
             if let Some(skew_mm) = axis.skew().map(|skew| skew.get::<millimeter>()) {
                 if skew_mm > RT_CONFIG.max_axis_skew_mm {
                     error!(
@@ -421,6 +422,14 @@ impl RtEngine {
                     );
 
                     self.do_e_stop();
+
+                    // TODO: is this transition right?
+                    self.cycle_state
+                        .transition_cycle_phase(CyclePhase::SdoWindow);
+                    // I have to return here, else double &mut self in outer loop
+                    // I probably also want to return, estop should put the system in some known
+                    // fail state
+                    return;
                 }
             }
         }
@@ -429,16 +438,27 @@ impl RtEngine {
             axis.on_sync_feedback();
         }
 
-        let rpdos = [[[[0u8; 8]; 4]; 2]; Axis::COUNT];
+        // Collect RPDO for each motor in the gantry
+        debug!(system = "RtEngine", "Collect & Transmit RPDO",);
+        for axis in self.axi.as_ref().iter().flatten() {
+            let axis_rpdos = axis.get_rpdos();
 
-        for (axis, axis_rpdo) in self.axi.iter_mut().zip(rpdos) {
-            if let Some(axis) = axis {
-                axis_rpdos = axis.calculate_rpdo();
+            // Send each RPDO over can,
+            // NOTE: regarding timing, this means setpoints arrive sequentially
+            // at the motors within 1-5ms delay.
+            // In profile modes motors act immediately on new setpoints
+            // In cyclic modes the motors wait for the next SYNC
+            self.canopen
+                .send_motor_rpdoset(axis_rpdos.master, &axis.master.id);
+            if let Some(ref slave) = axis.slave {
+                assert!(
+                    axis_rpdos.slave.is_some(),
+                    "RtEngine - axis.get_rpdos() returns None for slave axis, but axis.slave is_some()"
+                );
+                self.canopen
+                    .send_motor_rpdoset(axis_rpdos.slave.unwrap(), &slave.id);
             }
         }
-
-        // Transmit PDO
-        self.canopen.transmit_pdo();
 
         self.cycle_state
             .transition_cycle_phase(CyclePhase::SentRpdo);
@@ -483,6 +503,7 @@ impl RtEngine {
     // Startup?
     // Set NMT OP?
     // parametrise_motor?
+    //TODO:
     fn startup_drives(&mut self) -> Result<(), RtError> {
         // Each axis:
         // - Default parametrise
@@ -498,6 +519,7 @@ impl RtEngine {
         Ok(())
     }
 
+    // TODO:
     fn mode_switch(&self, motor: &Cia402Identifier) -> Result<(), RtError> {
         // NMT PreOp
         self.canopen

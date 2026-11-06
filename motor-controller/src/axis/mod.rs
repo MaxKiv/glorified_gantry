@@ -4,7 +4,7 @@ use uom::si::f64::Length;
 use crate::{
     axis::{error::AxisError, scaling::AxisScaling},
     canopen::{
-        CanOpen, CanOpenError,
+        CanOpen,
         frame::{CanOpenFrame, NodeId},
         nmt::NmtCommandSpecifier,
         sdo::manager::SdoCommand,
@@ -12,11 +12,19 @@ use crate::{
     cia402::Cia402Identifier,
     consts::pdo::NodePdoConfig,
     oms::{OperationMode, setpoint::Setpoint},
-    rt::{engine::cfg::Axis, motor::Cia402Motor},
+    rt::{
+        engine::cfg::Axis,
+        motor::{Cia402Motor, MotorRpdoSet},
+    },
 };
 
 pub mod error;
 pub mod scaling;
+
+pub struct GantryAxisRpdo {
+    pub master: MotorRpdoSet,
+    pub slave: Option<MotorRpdoSet>,
+}
 
 pub struct GantryAxis {
     pub axis: Axis,
@@ -40,7 +48,9 @@ impl GantryAxis {
     ) -> Self {
         // Start master
         let master = Cia402Motor::new(master, canopen, pdo_cfg, default_parameters);
-        let slave = slave.map(|s| Cia402Motor::new(s, canopen, pdo_cfg, default_parameters));
+        let slave = slave
+            .as_ref()
+            .map(|s| Cia402Motor::new(s.clone(), canopen, pdo_cfg, default_parameters));
         let opmode = OperationMode::default();
 
         Self {
@@ -181,5 +191,12 @@ impl GantryAxis {
         }
 
         true
+    }
+
+    pub fn get_rpdos(&self) -> GantryAxisRpdo {
+        GantryAxisRpdo {
+            master: self.master.get_rpdo(),
+            slave: self.slave.as_ref().map(|s| s.get_rpdo()),
+        }
     }
 }

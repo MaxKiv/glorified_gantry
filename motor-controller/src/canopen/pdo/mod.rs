@@ -1,3 +1,4 @@
+pub mod frame;
 pub mod mapping;
 pub mod message;
 
@@ -8,6 +9,25 @@ pub type RawRpdo = u64;
 pub enum PdoType {
     TPDO,
     RPDO,
+}
+
+impl PdoType {
+    /// Returns the COB Id for the given pdo num and type
+    /// See https://en.wikipedia.org/wiki/CANopen#Process_Data_Object_(PDO)_protocol
+    pub fn get_pdo_cob_id(&self, num: u16, node_id: u8) -> Option<u16> {
+        Some(match self {
+            Self::TPDO => {
+                const BASE: u16 = 0x80;
+                let node_id = node_id as u16;
+                BASE + (0x100 * num) + node_id
+            }
+            Self::RPDO => {
+                const BASE: u16 = 0x100;
+                let node_id = node_id as u16;
+                BASE + (0x100 * num) + node_id
+            }
+        })
+    }
 }
 
 #[derive(Debug, PartialEq, Eq)]
