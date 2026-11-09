@@ -82,11 +82,6 @@ pub struct RtEngine {
 
     axi: [Option<GantryAxis>; Axis::COUNT],
 
-    // TODO move this state into GantryAxis (& its internal Cia402Motor) above
-    motor_state: [Option<MotorState>; MAX_NODE_ID],
-    motor_feedback: [Option<MotorFeedback>; MAX_NODE_ID],
-    motor_setpoint: [Option<MotorSetpoint>; MAX_NODE_ID],
-
     current_cmd: GantryCommand,
 
     poll_fds: [pollfd; 4],
@@ -141,9 +136,6 @@ impl RtEngine {
             },
         ];
 
-        let motor_state = [const { None }; MAX_NODE_ID];
-        let motor_feedback = [const { None }; MAX_NODE_ID];
-        let motor_setpoint = [const { None }; MAX_NODE_ID];
         let cycle_state = CycleState::new();
 
         let mut rt = Self {
@@ -157,9 +149,6 @@ impl RtEngine {
             feedback_timer,
             const_rt_cfg: TEST_CONST_RT_ENGINE_CFG,
             cycle_state,
-            motor_state,
-            motor_feedback,
-            motor_setpoint,
             current_cmd: GantryCommand::default(),
             sdo_manager: todo!(),
             axi: todo!(),
@@ -262,6 +251,7 @@ impl RtEngine {
             match self.canopen.read_raw_frame() {
                 Ok(frame) => {
                     info!(
+                        system = "CAN",
                         "CAN RX id={:#x} data={:?}",
                         frame.raw_id(),
                         &frame.data()[..frame.data().len()]
@@ -270,13 +260,14 @@ impl RtEngine {
                     // Try parse into CANOpen data frame
                     let Ok(parsed) = CanOpenFrame::from_canframe(frame) else {
                         error!(
+                            system = "CAN",
                             "Unable to parse CAN RX id={:#x} data={:?}",
                             frame.raw_id(),
                             &frame.data()
                         );
                         continue;
                     };
-                    info!("CAN RX Parsed: {:?}", frame);
+                    info!(system = "CAN", "CAN RX Parsed: {:?}", frame);
 
                     // Dispatch adressed messages to their recipient
                     if let Some(msg_id) = parsed.node_id {
@@ -508,8 +499,10 @@ impl RtEngine {
         // Each axis:
         // - Default parametrise
         // - Default operationmode
+        // TODO: nicer errors
         for axis in self.axi.as_mut().iter().flatten() {
-            axis.default_parametrisation()?;
+            axis.default_parametrisation()
+                .map_err(|_| RtError::Startup)?;
             axis.switch_opmode(&OperationMode::default())
                 .map_err(|_| RtError::Startup)?;
         }

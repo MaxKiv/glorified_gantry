@@ -11,11 +11,9 @@ use crate::{
     },
     cia402::Cia402Identifier,
     consts::pdo::NodePdoConfig,
+    motor::{Cia402Motor, MotorRpdoSet},
     oms::{OperationMode, setpoint::Setpoint},
-    rt::{
-        engine::cfg::Axis,
-        motor::{Cia402Motor, MotorRpdoSet},
-    },
+    rt::engine::cfg::Axis,
 };
 
 pub mod error;
@@ -137,6 +135,9 @@ impl GantryAxis {
         }
     }
 
+    // Returns skew distance between master & slave motors for this axis
+    // Skew is only calculated for axi with both master & slave
+    // Single motor axi return None
     pub fn skew(&self) -> Option<Length> {
         self.slave.as_ref().map(|s| {
             let master_pos = self.master.motor_state.pos;
@@ -160,6 +161,7 @@ impl GantryAxis {
     }
 
     pub fn process_canopen_msg(&mut self, msg: CanOpenFrame) {
+        tracing::trace!(system = "Axis", "process_canopen_msg({:?})", msg);
         let Some(msg_id) = msg.node_id else {
             tracing::error!(
                 system = "Axis",

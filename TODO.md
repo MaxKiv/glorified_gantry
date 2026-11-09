@@ -1,16 +1,15 @@
-### Left off:
-
-/home/max/git/saxion/glorified_gantry/motor-controller/src/canopen/pdo/mapping.rs:35
-
 ## To Figure out:
+
+/home/max/git/saxion/glorified_gantry/motor-controller/src/rt/engine/mod.rs:459
 
 First:
 
-1. Figure out how to do `rpdo.encode()`?
-   - Use `PdoMapping.get_required_semantics()` & track a map [semantic ->
-     value] in motor?
+- [x] Cia402Motor TPDO -> MotorState parsing
+- [ ] Compile this shit
+- [ ] Construct CycleFeedback
+- [ ] Start testing, start small -> single drive bringup
 
-Then:
+Should i?
 
 1. Create some sort of CanOpen structure with 2 sides, 1 tx side:
    - accepts CanOpen concepts (nmt send, sdo cmd enqueue, etc)
@@ -23,10 +22,12 @@ Then:
 This allows us to schedule the canopen traffic at some deterministic point in
 the sync cycle, and allows us to yield and wait for sdo/nmt commands to confirm.
 
+-> So far it seems writing CAN oportunistically is fine, Meh
+
 Later:
 
-2. Should Profile modes RPDO transmission type be "onchange" or "onsync"?
-3. Validate TEST/DEMOSTRATOR HGantryNodeMap
+1. Should Profile modes RPDO transmission type be "onchange" or "onsync"?
+1. Validate TEST/DEMOSTRATOR HGantryNodeMap
 
 ## Improvements
 

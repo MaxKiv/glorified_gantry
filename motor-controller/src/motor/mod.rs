@@ -10,9 +10,8 @@ use crate::canopen::od::value::ODValue;
 use crate::canopen::pdo::RawRpdo;
 use crate::canopen::pdo::mapping::PdoValue;
 use crate::cw::ControlWord;
+use crate::motor::limits::Cia402MotorLimits;
 use crate::rt::MotorFeedback;
-use crate::rt::TransmissionType;
-use crate::rt::motor::limits::Cia402MotorLimits;
 use crate::sw::StatusWord;
 use tracing::debug;
 use tracing::{error, info, trace, warn};
@@ -43,8 +42,8 @@ use crate::{
     },
     cia402::{Cia402Identifier, Cia402State},
     consts::pdo::NodePdoConfig,
+    motor::{error::MotorError, state::MotorState},
     oms::{OperationMode, setpoint::Setpoint},
-    rt::motor::{error::MotorError, state::MotorState},
 };
 
 enum ControllerState {
@@ -79,15 +78,15 @@ pub struct Cia402Motor {
     controller_state: ControllerState,
     rpdo_rx: [bool; 4],
 
-    // TODO, these 2 seem similar?
-    pub motor_state: MotorState,
-    feedback: MotorFeedback,
-
     cia402_state: Cia402State,
     nmt: NmtState,
     opmode: OperationMode, // Active operation mode
     pdo_cfg: &'static NodePdoConfig,
     active_cfg: &'static OMSNodePdoConfig,
+
+    // TODO, these 2 seem similar?
+    pub motor_state: MotorState,
+    feedback: MotorFeedback,
 
     active_setpoint: Setpoint, // Active motor setpoint
     controlword: ControlWord,  // Active controlword
@@ -134,6 +133,8 @@ impl Cia402Motor {
             target_velocity: todo!(),
             target_torque: todo!(),
             limits: todo!(),
+            controlword: todo!(),
+            statusword: todo!(),
         }
     }
 
@@ -510,6 +511,7 @@ impl Cia402Motor {
     }
 
     pub fn process_canopen_msg(&mut self, parsed: CanOpenFrame) {
+        tracing::trace!(system = "Cia402Motor", "process_canopen_msg({:?})", parsed);
         assert!(
             parsed
                 .node_id
@@ -536,12 +538,10 @@ impl Cia402Motor {
 
             MessageType::RSDO(s) => {
                 self.sdo.on_rsdo(s);
-                self.sdo.tick();
             }
 
             MessageType::TSDO(s) => {
                 self.sdo.on_tsdo(s);
-                self.sdo.tick();
             }
 
             MessageType::PDO(pdo) => {

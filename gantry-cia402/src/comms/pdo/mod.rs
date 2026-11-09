@@ -87,6 +87,7 @@ impl Pdo {
             pdo_rx,
             pdo_table,
             current_pdo_set_rx,
+            current_operationmode: todo!(),
         };
 
         // Run the PDO communication task

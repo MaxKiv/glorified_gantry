@@ -1,7 +1,6 @@
 pub mod cmd;
 pub mod engine;
 pub mod eventfd;
-pub mod motor;
 pub mod timekeeper;
 pub mod timerfd;
 

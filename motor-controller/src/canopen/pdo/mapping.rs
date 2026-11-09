@@ -92,7 +92,7 @@ impl PdoMappingSource {
     }
 }
 
-/// Operation Mode specific pdo mapping for a single node
+/// Operation Mode Specific pdo mapping for a single node
 #[derive(Default)]
 pub struct OMSNodePdoConfig {
     pub tpdo: [Option<PdoMapping>; 4],

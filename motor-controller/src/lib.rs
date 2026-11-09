@@ -10,6 +10,7 @@ pub mod event;
 pub mod fifo;
 pub mod frontend;
 pub mod handshake;
+pub mod motor;
 pub mod oms;
 pub mod rt;
 pub mod setpoint;
