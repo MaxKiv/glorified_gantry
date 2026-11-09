@@ -1,6 +1,6 @@
 use std::time::{Duration, Instant};
 
-use tracing::{error, info, warn};
+use tracing::{debug, error, info, warn};
 
 use crate::{
     canopen::{
@@ -202,15 +202,7 @@ impl SdoManager {
         match self.state {
             // What to do in idle
             SdoManagerState::Idle => {
-                if self.current_cmd.is_none()
-                    && let Ok(req) = self.cmd_queue.pop()
-                {
-                    // Ready to start new command
-                    self.current_cmd = Some(req.clone());
-                    // Queue SDO with CANOpen system, this will send out the SDO whenever RT scheduling
-                    // deems it appropriate
-                    self.queue_sdo(req);
-                }
+                self.start_cmd();
             }
 
             // What to do when an up/download recently started
@@ -239,8 +231,21 @@ impl SdoManager {
         };
     }
 
-    fn queue_sdo(&mut self, SdoCommand { request, .. }: SdoCommand) {
-        self.canopen.queue_sdo(request);
+    fn queue_sdo(&mut self, cmd: SdoCommand) {
+        let request = cmd.request.clone();
+        if let Err(_) = self.canopen.queue_sdo(request.clone()) {
+            error!(
+                system = "SdoManager",
+                "Transitioned to FAILED state due to recent failure of {:?}, resetting to idle",
+                request
+            );
+            self.state = SdoManagerState::Failed(cmd);
+        }
+
+        self.state = match request {
+            SdoManagerRequest::Upload(sdo_upload) => SdoManagerState::Uploading(sdo_upload),
+            SdoManagerRequest::Download(sdo_download) => SdoManagerState::Downloading(sdo_download),
+        };
     }
 
     fn on_cmd_started(&mut self, node: &'static Cia402Identifier, od_entry: &'static ODEntry) {
@@ -306,84 +311,121 @@ impl SdoManager {
                 "SDO Deadline expired for {:?}!", self.current_cmd
             );
             // deadline expired
-            let cmd = self.current_cmd.unwrap_or_else(|| {
+            let cmd = if let Some(current_cmd) = self.current_cmd.clone() {
+                current_cmd
+            } else {
                 error!(
                     system = "SdoManager",
                     "SDO Deadline expired, but no current command, invalid state"
                 );
                 SdoCommand::bullshit()
-            });
+            };
             self.state = SdoManagerState::Failed(cmd);
             return;
         }
 
+        // Deadline not expired
         // Drain MAX_EVENTS_PER_TICK events per tick
         for _ in 0..MAX_EVENTS_PER_TICK {
-            if let Ok(event) = self.events.pop() {
-                match event {
-                    SdoManagerEvent::Request(_) => {
-                        warn!(
-                            system = "SdoManager",
-                            "Unexpected event {:?} for state {:?}", event, self.state
-                        );
-                    }
+            if self.check_if_next_event_matches(expected) {
+                debug!(
+                    system = "SdoManager",
+                    "Witnessed expected event - enqueuing next event"
+                );
 
-                    SdoManagerEvent::Response(response) => {
-                        // Event is response
-                        match (expected, response) {
-                            (
-                                SdoResponse::DownloadConfirm(rx_download),
-                                SdoResponse::DownloadConfirm(expected_download),
-                            ) => {
-                                if *rx_download == expected_download {
-                                    info!(system = "SdoManager", "TSDO rx success");
-                                    self.completed_cmd();
-                                    // Process the rest of the events another tick
-                                    break;
-                                } else {
-                                    warn!(
-                                        system = "SdoManager",
-                                        "TSDO rx fail: {:?} != {:?}",
-                                        rx_download,
-                                        expected_download
-                                    );
-                                }
-                            }
-                            (
-                                SdoResponse::UploadConfirm(rx_upload),
-                                SdoResponse::UploadConfirm(expected_upload),
-                            ) => {
-                                if *rx_upload == expected_upload {
-                                    info!(system = "SdoManager", "TSDO rx success");
-                                    self.completed_cmd();
-                                    // Process the rest of the events another tick
-                                    break;
-                                } else {
-                                    warn!(
-                                        system = "SdoManager",
-                                        "TSDO rx fail: {:?} != {:?}", rx_upload, expected_upload
-                                    );
-                                }
-                            }
-                            _ => {
-                                warn!(
-                                    system = "SdoManager",
-                                    "Wrong SDO response, expected {:?} got {:?}",
-                                    expected,
-                                    response
-                                );
-                            }
-                        }
-                    }
-                };
-            } else {
+                self.start_cmd();
                 break;
             }
         }
+
+        warn!(
+            system = "SdoManager",
+            "Still waiting for {:?} - retrying next tick()", self.state
+        );
     }
 
     fn completed_cmd(&mut self) {
         self.state = SdoManagerState::Idle;
         self.current_cmd = None;
+    }
+
+    fn check_if_next_event_matches(&mut self, expected: &SdoResponse) -> bool {
+        if let Ok(event) = self.events.pop() {
+            match event {
+                SdoManagerEvent::Request(_) => {
+                    error!(
+                        system = "SdoManager",
+                        "Unexpected event {:?} for state {:?}", event, self.state
+                    );
+                    panic!("Unexpected event {:?} for state {:?}", event, self.state);
+                }
+
+                SdoManagerEvent::Response(response) => {
+                    // Event is response
+                    match (expected, response) {
+                        (
+                            SdoResponse::DownloadConfirm(rx_download),
+                            SdoResponse::DownloadConfirm(expected_download),
+                        ) => {
+                            if *rx_download == expected_download {
+                                info!(system = "SdoManager", "TSDO rx success");
+                                self.completed_cmd();
+                                // Process the rest of the events another tick
+                                return true;
+                            } else {
+                                warn!(
+                                    system = "SdoManager",
+                                    "TSDO rx fail: {:?} != {:?}", rx_download, expected_download
+                                );
+                                panic!("TSDO rx fail: {:?} != {:?}", rx_download, expected_download)
+                            }
+                        }
+                        (
+                            SdoResponse::UploadConfirm(rx_upload),
+                            SdoResponse::UploadConfirm(expected_upload),
+                        ) => {
+                            if *rx_upload == expected_upload {
+                                info!(system = "SdoManager", "TSDO rx success");
+                                self.completed_cmd();
+                                // Process the rest of the events another tick
+                                return true;
+                            } else {
+                                error!(
+                                    system = "SdoManager",
+                                    "TSDO rx fail: {:?} != {:?}", rx_upload, expected_upload
+                                );
+                                panic!("TSDO rx fail: {:?} != {:?}", rx_upload, expected_upload)
+                            }
+                        }
+                        _ => {
+                            error!(
+                                system = "SdoManager",
+                                "Wrong SDO response, expected {:?} got {:?}", expected, response
+                            );
+                            panic!(
+                                "Wrong SDO response, expected {:?} got {:?}",
+                                expected, response
+                            )
+                        }
+                    }
+                }
+            };
+        }
+
+        false
+    }
+
+    fn start_cmd(&mut self) {
+        if self.current_cmd.is_none()
+            && let Ok(request) = self.cmd_queue.pop()
+        {
+            // Ready to start new command
+            self.current_cmd = Some(request.clone());
+            // Queue SDO with CANOpen system, this will send out the SDO whenever RT scheduling
+            // deems it appropriate
+            self.queue_sdo(request);
+        } else {
+            self.state = SdoManagerState::Idle;
+        }
     }
 }

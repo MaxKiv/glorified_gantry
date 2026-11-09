@@ -5,19 +5,21 @@
 First:
 
 - [x] Cia402Motor TPDO -> MotorState parsing
+- [ ] Figure out the CANOpen struct:
+
+        Create some sort of CanOpen structure with 2 sides, 1 tx side:
+
+        - accepts CanOpen concepts (nmt send, sdo cmd enqueue, etc)
+        - holds these in some internal queue?
+        - can poll rx side for milestones?
+          and another rx side that:
+        - drains internal queue, sends out canframes
+        - tracks milestones, like sdo download confirms?
+
+- [ ] Refactor out Sdo from CANopen -> SdoManager (1 per node)
 - [ ] Compile this shit
 - [ ] Construct CycleFeedback
 - [ ] Start testing, start small -> single drive bringup
-
-Should i?
-
-1. Create some sort of CanOpen structure with 2 sides, 1 tx side:
-   - accepts CanOpen concepts (nmt send, sdo cmd enqueue, etc)
-   - holds these in some internal queue?
-   - can poll rx side for milestones?
-     and another rx side that:
-   - drains internal queue, sends out canframes
-   - tracks milestones, like sdo download confirms?
 
 This allows us to schedule the canopen traffic at some deterministic point in
 the sync cycle, and allows us to yield and wait for sdo/nmt commands to confirm.
@@ -30,6 +32,18 @@ Later:
 1. Validate TEST/DEMOSTRATOR HGantryNodeMap
 
 ## Improvements
+
+### Add motor scaling
+
+Currently I assume
+
+````rust
+    pub fn update_from_motor_feedback(&mut self, feedback: &MotorFeedback) {
+        self.pos = Length::new::<millimeter>(feedback.pos as f64);
+        self.vel = Velocity::new::<millimeter_per_second>(feedback.vel as f64);
+        self.torque = Torque::new::<newton_meter>(feedback.torque as f64);
+    }
+    ```
 
 ### Add feedback to NMT system
 
@@ -44,17 +58,19 @@ fault policy if drive fails.
 
 Document expected costs per phase:
 
-```
+````
+
 1kHz cycle budget (1000µs total):
-  • timerfd wake       5µs
-  • poll() dispatch    10µs
-  • CAN RX processing  20µs
-  • TPDO decode        15µs
-  • setpoint snapshot  5µs
-  • RPDO encode        15µs
-  • CAN TX dispatch    20µs
-  • feedback publish   10µs
-  • headroom           500µs  ← critical!
+• timerfd wake 5µs
+• poll() dispatch 10µs
+• CAN RX processing 20µs
+• TPDO decode 15µs
+• setpoint snapshot 5µs
+• RPDO encode 15µs
+• CAN TX dispatch 20µs
+• feedback publish 10µs
+• headroom 500µs ← critical!
+
 ```
 
 Measure these at runtime, output these as part of feedback. Perhaps Error on
@@ -69,3 +85,4 @@ eventfd in default (non-EFD_SEMAPHORE) mode coalesces notifications — one wake
 ### Testability
 
 Nothing about abstracting the CAN transport for testing. Recommend a trait around the socket so you can run the RT loop against vcan (or an in-memory fake bus) in CI without hardware — useful for exercising the Reconfiguring/WaitingForTpdos/timeout paths deterministically.
+```

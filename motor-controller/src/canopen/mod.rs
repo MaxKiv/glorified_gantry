@@ -11,8 +11,7 @@ use crate::canopen::pdo::frame::RpdoFrame;
 use crate::canopen::sdo::manager::SdoManagerRequest;
 use crate::canopen::{emcy::EmergencyMessage, pdo::message::RawPdoMessage, sdo::SdoResponse};
 use crate::fifo::Fifo;
-use crate::fifo::error::FifoError;
-use crate::rt::motor::MotorRpdoSet;
+use crate::motor::MotorRpdoSet;
 use crate::{
     canopen::{
         nmt::{NmtCommandSpecifier, NmtControlMessage, NmtFrame, NmtMonitorMessage},
@@ -46,7 +45,9 @@ pub enum CanOpenError {
     #[error("Unable to send NMT cmd {0:?} to {1:?}")]
     Nmt(NmtCommandSpecifier, Cia402Identifier),
     #[error("Unable to send Sdo Frame {0:?} to {1:?}")]
-    Sdo(SdoFrame, Cia402Identifier),
+    SdoSend(SdoFrame, Cia402Identifier),
+    #[error("Unable to enqueue Sdo Manager Request {0:?}")]
+    SdoQueue(SdoManagerRequest),
     #[error("Unable to send Rpdo Frame {0:?} to {1:?}")]
     Rpdo(RpdoFrame, Cia402Identifier),
 }
@@ -141,7 +142,7 @@ impl CanOpen {
 
         self.can
             .write_frame(&frame.inner)
-            .map_err(|_| CanOpenError::Sdo(frame, node.clone()))?;
+            .map_err(|_| CanOpenError::SdoQueue(frame, node.clone()))?;
 
         Ok(())
     }
@@ -152,7 +153,7 @@ impl CanOpen {
 
         self.can
             .write_frame(&frame.inner)
-            .map_err(|_| CanOpenError::Sdo(frame, node.clone()))?;
+            .map_err(|_| CanOpenError::SdoQueue(frame, node.clone()))?;
 
         Ok(())
     }
@@ -166,13 +167,17 @@ impl CanOpen {
         }
     }
 
-    pub fn queue_sdo(&mut self, request: SdoManagerRequest) {
+    pub fn queue_sdo(&mut self, request: SdoManagerRequest) -> Result<(), CanOpenError> {
         info!(system = "CANOpen", "pushing SDO request: {:?}", request);
-        if let Err(e) = self.pending_sdo.push(request) {
+        if let Err(e) = self.pending_sdo.push(request.clone()) {
             error!(
                 system = "CANOpen",
                 "Unable to push CANOpen SDO Request: {:?}", e
             );
+
+            return Err(CanOpenError::SdoQueue(request));
         }
+
+        Ok(())
     }
 }

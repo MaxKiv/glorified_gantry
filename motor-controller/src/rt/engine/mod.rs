@@ -1,35 +1,28 @@
 pub mod cfg;
 pub mod cycle_rx;
 
-use std::{
-    os::fd::{AsFd, AsRawFd},
-    thread::JoinHandle,
-};
+use std::thread::JoinHandle;
 
 use libc::pollfd;
-use socketcan::{CanSocket, EmbeddedFrame, Frame, Socket, SocketOptions};
+use socketcan::{CanSocket, EmbeddedFrame, Frame, Socket};
 use tracing::{debug, error, info, trace, warn};
 use uom::si::length::millimeter;
 
 use crate::{
-    axis::{GantryAxis, GantryAxisRpdo},
-    canopen::{
-        CanOpen, MessageType, frame::CanOpenFrame, nmt::NmtCommandSpecifier, pdo::PdoType,
-        sdo::manager::SdoManager,
-    },
+    axis::GantryAxis,
+    canopen::{CanOpen, frame::CanOpenFrame, nmt::NmtCommandSpecifier, sdo::manager::SdoManager},
     cia402::Cia402Identifier,
-    consts::{MAX_NODE_ID, RT_CONFIG},
+    consts::RT_CONFIG,
     fifo::Fifo,
     frontend::{GantryCommand, GantrySetpoint},
-    oms::{OperationMode, home::HomingSetpoint, setpoint::Setpoint},
+    oms::OperationMode,
     rt::{
-        MotorFeedback, RtError,
+        RtError,
         cmd::channel::CmdReceiver,
         engine::{
-            cfg::{Axis, ConstRtEngineConfig, MotorState, TEST_CONST_RT_ENGINE_CFG},
+            cfg::{Axis, ConstRtEngineConfig, TEST_CONST_RT_ENGINE_CFG},
             cycle_rx::{CyclePhase, CycleState},
         },
-        timekeeper::TimeKeeper,
         timerfd::{TimerFd, TimerType},
     },
 };
@@ -44,13 +37,14 @@ const X_AXIS: usize = 1;
 const Y_AXIS: usize = 2;
 const Z_AXIS: usize = 3;
 
-#[derive(Default, PartialEq)]
+#[derive(Debug, Default, PartialEq)]
 enum RtState {
     #[default]
     Idle,
     SingleCycle,
     Cyclic,
     Reconfiguring,
+    StartingUp,
     Faulted,
     Shutdown,
 }
@@ -172,11 +166,28 @@ impl RtEngine {
             // So after CAN RX, Timer expirations, CMD RX, etc
 
             // Error condition
-            if self.state == RtState::Faulted {
-                self.to_safe_state();
-            }
-            if self.state == RtState::Shutdown {
-                break; // Exit from main rt loop
+            debug!(
+                system = "RtEngine",
+                "RT loop start in state: {:?}", self.state
+            );
+            match self.state {
+                RtState::StartingUp => {
+                    // Gantry Starting up
+                    // TODO:? Handle here or in cia402motor?
+                }
+                RtState::Reconfiguring => {
+                    // Gantry Reconfiguring
+                    // TODO:? Handle here or in cia402motor?
+                }
+                RtState::Faulted => {
+                    self.to_safe_state();
+                }
+                RtState::Shutdown => {
+                    break; // Exit from main rt loop
+                }
+                _ => {
+                    // Intentionally empty
+                }
             }
 
             // Wait for event to happen: Poll FDs
@@ -500,7 +511,7 @@ impl RtEngine {
         // - Default parametrise
         // - Default operationmode
         // TODO: nicer errors
-        for axis in self.axi.as_mut().iter().flatten() {
+        for axis in self.axi.iter_mut().as_mut_slice.flatten() {
             axis.default_parametrisation()
                 .map_err(|_| RtError::Startup)?;
             axis.switch_opmode(&OperationMode::default())

@@ -527,11 +527,17 @@ impl Cia402Motor {
             }
 
             MessageType::NmtControl(nmt_ctl) => {
-                info!(system = "Cia402Motor", "Got NMT CONTROL MSG: {:?}", nmt_ctl);
+                info!(
+                    system = "Cia402Motor",
+                    "Got NMT CONTROL (setpoint) MSG: {:?}", nmt_ctl
+                );
             }
 
             MessageType::NmtMonitor(nmt_mon) => {
-                info!(system = "Cia402Motor", "Got NMT MONITOR MSG: {:?}", nmt_mon);
+                info!(
+                    system = "Cia402Motor",
+                    "Got NMT MONITOR (feedback) MSG: {:?}", nmt_mon
+                );
 
                 self.nmt = nmt_mon.current_state;
             }
@@ -568,8 +574,12 @@ impl Cia402Motor {
                                 self.id.node_id.u8()
                             );
 
-                            // Mark this RPDO as received for this cycle
-                            self.rpdo_rx[pdo.num] = true;
+                            self.motor_state.update_from_motor_feedback(&self.feedback);
+
+                            if self.opmode.is_cyclic_synchronous() {
+                                // Mark this RPDO as received for this cycle
+                                self.rpdo_rx[pdo.num] = true;
+                            }
                         }
                         Err(e) => {
                             error!(system = "Cia402Motor", "Failed to parse RPDO: {}", e)
@@ -580,7 +590,7 @@ impl Cia402Motor {
 
             MessageType::Sync(_) => {
                 // Intentionally empty
-                trace!(system = "Cia402Motor", "saw SYNC");
+                trace!(system = "Cia402Motor", "parsed SYNC");
             }
             MessageType::Unknown(msg) => {
                 warn!(
