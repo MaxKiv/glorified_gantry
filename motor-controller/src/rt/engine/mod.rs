@@ -102,7 +102,7 @@ impl RtEngine {
                 .expect("Failed to create RT timer");
 
         let can = CanSocket::open(&can_interface).expect("Unable to open CAN interface");
-        can.set_nonblocking(false)
+        can.set_nonblocking(true)
             .expect("Unable to set CAN socket nonblocking");
         let canopen = CanOpen::new(can);
 
@@ -210,11 +210,14 @@ impl RtEngine {
             }
 
             // Handle timing events.
-            if self.all_cycle_rpdo_received() {
-                self.sync_feedback_received();
-            } else if self.feedback_deadline_elapsed() {
-                self.feedback_deadline_exceeded();
+            if self.cycle_state.phase == CyclePhase::WaitingForTpdo {
+                if self.all_cycle_tpdo_received() {
+                    self.sync_feedback_received();
+                } else if self.feedback_deadline_elapsed() {
+                    self.feedback_deadline_exceeded();
+                }
             }
+
             if self.sync_timer_elapsed() {
                 self.start_sync_cycle()?;
             }
@@ -563,9 +566,9 @@ impl RtEngine {
         }
     }
 
-    fn all_cycle_rpdo_received(&self) -> bool {
+    fn all_cycle_tpdo_received(&self) -> bool {
         for axis in self.axi.iter().flatten() {
-            if !axis.all_cycle_rpdo_received() {
+            if !axis.all_cycle_tpdo_received() {
                 return false;
             }
         }
@@ -575,13 +578,15 @@ impl RtEngine {
 
     /// Performs an Emergency Stop of the gantry
     fn do_e_stop(&mut self) {
-        warn!(
-            system = "RtEngine",
-            "ESTOP triggered, setting safe setpoint & NMT::PreOP",
-        );
+        error!(system = "RtEngine", "ESTOP TRIGGERED",);
+
+        for axis in self.axi.as_mut().iter_mut().flatten() {
+            axis.do_e_stop();
+        }
 
         self.new_gantry_setpoint(GantrySetpoint::estop_setpoint());
 
+        // TODO:
         for axis in self.axi.iter_mut().flatten() {
             if let Err(err) = axis.request_nmt_command(NmtCommandSpecifier::EnterPreOperational) {
                 error!(

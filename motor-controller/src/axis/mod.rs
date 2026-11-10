@@ -185,9 +185,9 @@ impl GantryAxis {
     }
 
     // Are all current cycle RPDO received for this axis
-    pub fn all_cycle_rpdo_received(&self) -> bool {
+    pub fn all_cycle_tpdo_received(&self) -> bool {
         for motor in self.get_axis_motors_ref() {
-            if !motor.all_cycle_rpdo_received() {
+            if !motor.all_cycle_tpdo_received() {
                 return false;
             }
         }
@@ -199,6 +199,13 @@ impl GantryAxis {
         GantryAxisRpdo {
             master: self.master.get_rpdo(),
             slave: self.slave.as_ref().map(|s| s.get_rpdo()),
+        }
+    }
+
+    pub fn do_e_stop(&mut self) {
+        tracing::debug!(system = "Axis", "AXIS ESTOP TRIGGERED");
+        for motor in self.get_axis_motors_ref() {
+            motor.do_e_stop();
         }
     }
 }

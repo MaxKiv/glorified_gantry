@@ -1,9 +1,14 @@
 pub mod error;
 pub mod limits;
 pub mod pdo;
+pub mod script;
 pub mod state;
 
-use crate::canopen::od::RPDO_MAPPING_PARAMETER_BASE_INDEX;
+use std::time::Instant;
+
+use crate::canopen::nmt::NmtCommandSpecifier::EnterPreOperational;
+use crate::canopen::nmt::NmtCommandSpecifier::StartRemoteNode;
+use crate::canopen::nmt::NmtState::Operational;
 use crate::canopen::od::TPDO_MAPPING_PARAMETER_BASE_INDEX;
 use crate::canopen::od::entry::PdoSemantic;
 use crate::canopen::od::value::ODValue;
@@ -11,6 +16,10 @@ use crate::canopen::pdo::RawRpdo;
 use crate::canopen::pdo::mapping::PdoValue;
 use crate::cw::ControlWord;
 use crate::motor::limits::Cia402MotorLimits;
+use crate::motor::script::Purpose;
+use crate::motor::script::Script;
+use crate::motor::script::ScriptStep;
+use crate::motor::script::opmode_switch::get_pdo_remap_script;
 use crate::rt::MotorFeedback;
 use crate::sw::StatusWord;
 use tracing::debug;
@@ -45,44 +54,30 @@ use crate::{
     motor::{error::MotorError, state::MotorState},
     oms::{OperationMode, setpoint::Setpoint},
 };
-
+/// State of the Cia402Motor Controller
 enum ControllerState {
     Idle,
     Operating,
-    Reconfiguring(ReconfigState),
-}
-
-enum ReconfigState {
-    Start,
-    WaitingForNmtPreOp,
-    WaitingForNmtOp,
-    Parametrising(ParametrisingState),
-}
-
-enum SdoState {
-    SendingNextSdo(SdoCommand),
-    WaitingForSdoCmd(SdoCommand),
-}
-
-struct ParametrisingState {
-    parameters: &'static [SdoCommand],
-    currently_doing: usize,
-    sdo_state: SdoState,
+    Configuring(Script, Purpose), // ie. Parametrising or Mode Switching
+    Faulted(MotorError),
 }
 
 pub struct Cia402Motor {
     pub id: Cia402Identifier,
 
+    // TODO: make this a reference
     canopen: CanOpen,
-    sdo: SdoManager,
-    controller_state: ControllerState,
-    rpdo_rx: [bool; 4],
 
-    cia402_state: Cia402State,
-    nmt: NmtState,
-    opmode: OperationMode, // Active operation mode
-    pdo_cfg: &'static NodePdoConfig,
-    active_cfg: &'static OMSNodePdoConfig,
+    sdo: SdoManager,
+
+    controller_state: ControllerState,
+    tpdo_rx: [bool; 4],
+
+    cia402_state: Cia402State,             // Current CiA402 state
+    nmt: NmtState,                         // Current NMT State
+    opmode: OperationMode,                 // Active operation mode
+    active_cfg: &'static OMSNodePdoConfig, // Current Pdo Mapping
+    pdo_cfg: &'static NodePdoConfig,       // Required Pdo mapping per node
 
     // TODO, these 2 seem similar?
     pub motor_state: MotorState,
@@ -99,6 +94,12 @@ pub struct Cia402Motor {
 
     limits: Cia402MotorLimits,                 // Profile limits
     default_parameters: &'static [SdoCommand], // All configuration parameters
+}
+
+pub struct TickCtx<'a> {
+    now: Instant,
+    io: &'a mut CanOpen,
+    sdo_slot_free: bool,
 }
 
 impl Cia402Motor {
@@ -127,7 +128,7 @@ impl Cia402Motor {
             default_parameters,
             motor_state: MotorState::new(),
             feedback: MotorFeedback::new(),
-            rpdo_rx: [false; 4],
+            tpdo_rx: [false; 4],
             sdo: todo!(),
             target_position: todo!(),
             target_velocity: todo!(),
@@ -140,7 +141,6 @@ impl Cia402Motor {
 
     pub fn request_nmt_command(&mut self, cmd: NmtCommandSpecifier) -> Result<(), CanOpenError> {
         self.canopen.send_nmt(cmd, &self.id)?;
-        self.nmt = NmtState::from_cmd(&cmd);
 
         Ok(())
     }
@@ -166,12 +166,42 @@ impl Cia402Motor {
         Ok(())
     }
 
-    /// Sets new motor setpoint, switches operation mode if required
+    /// Sets new motor setpoint
     pub fn new_motor_setpoint(&mut self, new_sp: Setpoint) {
-        let required_opmode = new_sp.required_opmode();
-        self.switch_operation_mode(&required_opmode);
+        self.active_setpoint = new_sp;
+    }
 
-        self.active_setpoint = new_sp.clone();
+    /// Build a script that contains all [`ScriptStep`] required to perform an opmode switch to the
+    /// given [`OperationMode`]
+    fn get_opmode_switch_script(&mut self, new: &OperationMode) -> Script {
+        let new_pdo_cfg = self.pdo_cfg.get_cfg_for_opmode(new);
+
+        let mut start = vec![
+            ScriptStep::QuickStop,
+            ScriptStep::Nmt {
+                cmd: EnterPreOperational,
+                expect: PreOperational,
+            },
+        ];
+
+        // TODO: Compute middle script
+        // Should consist of steps in remap_pdo()
+        // Everything should be known at compile time, precompute a script for every
+        // OMSNodePdoConfig?
+
+        let mut end = vec![
+            ScriptStep::Nmt {
+                cmd: StartRemoteNode,
+                expect: Operational,
+            },
+            ScriptStep::EnableOperation,
+        ];
+
+        Script {
+            steps: todo!(),
+            cursor: 0,
+            started: Instant::now(),
+        }
     }
 
     fn switch_pdo_config(&mut self, new: &OperationMode) -> Result<(), MotorError> {
@@ -264,246 +294,82 @@ impl Cia402Motor {
         out
     }
 
-    pub fn tick(&mut self) {
+    /// Central work scheduler for the Cia402Motor Controller state machine
+    pub fn tick(&mut self, ctx: &mut TickCtx) {
+        use ControllerState::*;
         match &mut self.controller_state {
-            ControllerState::Idle => {
-                // Nothing to do?
-                todo!()
+            Idle | Faulted(_) => {}
+
+            Operating => {
+                // Check if setpoint is new & requires opmode switch
+                let new_opmode = self.active_setpoint.required_opmode();
+                // Does this opmode switch warrant a PDO remapping?
+                if switching_opmode_requires_pdo_remapping(&self.opmode, &new_opmode) {
+                    // Get new opmode PDO mapping
+                    let new_pdo_cfg =
+                        self.pdo_cfg.get_cfg_for_opmode( &new_opmode);
+
+                    // Get script (==all action steps required) to switch opmode
+                    let script = get_pdo_remap_script(&self.id, self.active_cfg,
+                        new_pdo_cfg);
+
+                    self.run_script(script, Purpose::OpModeSwitch(new_opmode));
+                } else {
+                    // No PDO remap required, plain switch -> updated through RPDO later
+                    self.opmode = new_opmode;
+                }
             }
 
-            ControllerState::Operating => {
-                // ?
-                todo!()
-            }
-
-            ControllerState::Reconfiguring(reconfig_state) => match reconfig_state {
-                ReconfigState::Start => {
-                    //
-                    self.canopen
-                        .send_nmt(NmtCommandSpecifier::EnterPreOperational, &self.id);
-                    self.controller_state =
-                        ControllerState::Reconfiguring(ReconfigState::WaitingForNmtPreOp);
-                }
-
-                ReconfigState::WaitingForNmtPreOp => {
-                    if self.nmt == PreOperational {
-                        let param_state = ParametrisingState {
-                            parameters: self.default_parameters,
-                            currently_doing: 0,
-                            sdo_state: SdoState::SendingNextSdo(self.default_parameters[0].clone()),
-                        };
-                        self.controller_state = ControllerState::Reconfiguring(
-                            ReconfigState::Parametrising(param_state),
-                        );
-                    }
-                }
-
-                ReconfigState::Parametrising(parametrising_state) => {
-                    match &parametrising_state.sdo_state {
-                        SdoState::SendingNextSdo(sdo_command) => {
-                            self.sdo.new_cmd(sdo_command.clone());
-                            parametrising_state.sdo_state =
-                                SdoState::WaitingForSdoCmd(sdo_command.clone());
+            Configuring(script, purpose) => {
+                let step = &script.steps[script.cursor];
+                let done = match step {
+                    ScriptStep::QuickStop => self.cia402_state.is_quick_stopped(),
+                    ScriptStep::Nmt { expect, .. } => self.nmt_observed == *expect,
+                    ScriptStep::Sdo(_) => match self.sdo.poll() {
+                        // non-blocking
+                        SdoPoll::Done(Ok(_)) => true,
+                        SdoPoll::Done(Err(e)) => {
+                            self.fault(e.into());
+                            return;
                         }
-
-                        SdoState::WaitingForSdoCmd(sdo_command) => todo!(),
+                        SdoPoll::Busy => false,
+                        SdoPoll::Idle => false, // waiting for slot, see below
+                    },
+                    ScriptStep::EnableOperation => {
+                        self.cia402_state == Cia402State::OperationEnabled
                     }
-                }
+                    ScriptStep::DisableOperation => {
+                        self.cia402_state == Cia402State::SwitchOnDisabled
+                    }
+                    ScriptStep::Settle(d) => ctx.now - script.started >= *d,
+                };
 
-                ReconfigState::WaitingForNmtOp => todo!(),
-            },
+                if done {
+                    script.cursor += 1;
+                    if script.cursor == script.steps.len() {
+                        // Finish current script
+                        self.finish(purpose);
+                    } else {
+                        // fires the entry action of the new step
+                        self.enter_step(ctx);
+                    }
+                // Check for timeout
+                } else if ctx.now - script.started > step.timeout() {
+                    self.fault(MotorError::StepTimeout(script.cursor));
+                }
+            }
         }
     }
 
-    fn remap_pdo(&self, num: u8, pdo_mapping: &PdoMapping) {
-        let node = &self.id;
-        let node_id = node.node_id.u8();
-
-        // 1. Deactivate the PDO by setting the Valid Bit (bit 31) of subindex 01h of the corresponding communication parameter (e.g., 1400h:01h) to "1".
-        let communication_index = match pdo_mapping.pdo {
-            PdoType::RPDO => {
-                calculate_pdo_index_offset(RPDO_COMMUNICATION_PARAMETER_BASE_INDEX, num)
-            }
-            PdoType::TPDO => {
-                calculate_pdo_index_offset(TPDO_COMMUNICATION_PARAMETER_BASE_INDEX, num)
-            }
-        };
-        info!(
-            "Setting Pdo mapping {num}: {:?} for motor at node id {node_id}",
-            pdo_mapping
-        );
-
-        let deactivate_pdo_od_entry = get_pdo_deactivation_od_entry(pdo_mapping.pdo, num);
-
-        self.sdo
-            .new_cmd(SdoCommand::upload(node, deactivate_pdo_od_entry));
-
-        /// TODO: left of here
-        let validate_bytes = sdo
-            .lock()
-            .await
-            .upload(communication_index, 0x1)
-            .await
-            .map_err(DriveError::CanOpen)?;
-
-        let validate_pdo = u32::from_le_bytes(
-            validate_bytes
-                .clone()
-                .try_into()
-                .map_err(DriveError::Conversion)?,
-        );
-        trace!(
-            "0. Fetched current COB-ID: {:#0x} -> (node, RPDO base COB-ID): ({:#0x}, {:#0x})",
-            validate_pdo,
-            validate_pdo as u8,
-            (validate_pdo & !(u8::MAX as u32)) as u16,
-        );
-
-        let invalidate_pdo = validate_pdo | (1 << 31);
-
-        trace!(
-            "1. Deactivate the PDO by setting the Valid Bit (bit 31) of subindex 01h of the
-            corresponding PDO communication parameter ({}) to \"1\". -> Invalidation value: {:#0x}",
-            communication_index, invalidate_pdo
-        );
-        let invalidate_data = invalidate_pdo.to_le_bytes();
-        sdo.lock()
-            .await
-            .download(communication_index, 0x1, &invalidate_data)
-            .await
-            .map_err(DriveError::CanOpen)?;
-
-        trace!(
-            "1.B Set Transmission type to {:?}",
-            pdo_mapping.transmission_type
-        );
-        sdo.lock()
-            .await
-            .download(
-                communication_index,
-                0x2,
-                &[pdo_mapping.transmission_type.od_value()],
-            )
-            .await
-            .map_err(DriveError::CanOpen)?;
-
-        // Configure a periodic event to continously synchronise the driver with the latest device
-        // state
-        if let PdoType::TPDO(_) = pdo_mapping.pdo
-            && pdo_mapping.transmission_type == TransmissionType::OnChange
-        {
-            // NOTE: this is a critical communication parameter to tune in order to obtain maximum CAN
-            // bus bandwidth, see datasheet page 122 & 202
-            const SYNCHRONISATION_PERIOD_MS: u16 = 1;
-            const SYNCHRONISATION_SUB_IDX: u8 = 0x05;
-
-            trace!(
-                "1.C Transmission type is {:?} -> Configuring a periodic event to continously synchronise state in OD: {:#0x}:{} of val: {:x?}",
-                pdo_mapping.transmission_type,
-                communication_index,
-                SYNCHRONISATION_SUB_IDX,
-                SYNCHRONISATION_PERIOD_MS.to_le_bytes(),
-            );
-
-            sdo.lock()
-                .await
-                .download(
-                    communication_index,
-                    SYNCHRONISATION_SUB_IDX,
-                    &SYNCHRONISATION_PERIOD_MS.to_le_bytes(),
-                )
-                .await
-                .map_err(DriveError::CanOpen)?;
+    fn enter_step(&mut self, ctx: &mut TickCtx) {
+        // The ONLY place an action is performed, exactly once per step.
+        match self.current_step() {
+            ScriptStep::Nmt { cmd, .. } => { ctx.io.send_nmt(*cmd, &self.id).ok(); self.nmt_commanded = ... }
+            ScriptStep::Sdo(cmd) => self.sdo.new_cmd(cmd.clone()),      // sent when the SDO slot allows
+            ScriptStep::QuickStop | ScriptStep::EnableOperation | ScriptStep::DisableOperation => {} // via controlword, see below
+            ScriptStep::Settle(_) => {}
         }
-
-        // Configure the inhibit time during which the device is unable to send TPDO updates
-        // This prevents the devices from spamming the bus with constant updates (looking at u mr. torque)
-        if let PdoType::TPDO(_) = pdo_mapping.pdo
-            && pdo_mapping.transmission_type == TransmissionType::OnChange
-        {
-            // NOTE: this is a critical communication parameter to tune in order to obtain maximum CAN
-            // bus bandwidth, see datasheet page 122 & 202
-            const INHIBIT_TIME: u16 = 500; // = 50ms, this is in 100us blocks
-            const INHIBIT_TIME_SUB_IDX: u8 = 0x03;
-
-            trace!(
-                "1.D Transmission type is {:?} -> Configuring Inhibit time for OD: {:#0x}:{} of duration: {:x?}",
-                pdo_mapping.transmission_type,
-                communication_index,
-                INHIBIT_TIME_SUB_IDX,
-                INHIBIT_TIME.to_le_bytes(),
-            );
-
-            sdo.lock()
-                .await
-                .download(
-                    communication_index,
-                    INHIBIT_TIME_SUB_IDX,
-                    &INHIBIT_TIME.to_le_bytes(),
-                )
-                .await
-                .map_err(DriveError::CanOpen)?;
-        }
-
-        // 2. Deactivate the mapping by setting subindex 00h of the corresponding mapping parameter to \"0\".,
-        let mapping_index = match pdo_mapping.pdo {
-            PdoType::RPDO(_) => calculate_pdo_index_offset(RPDO_MAPPING_PARAMETER_BASE_INDEX, num),
-            PdoType::TPDO(_) => calculate_pdo_index_offset(TPDO_MAPPING_PARAMETER_BASE_INDEX, num),
-        };
-        trace!(
-            "2. Deactivate the mapping by setting subindex 00h of the corresponding mapping parameter ({}) to \"0\".",
-            mapping_index
-        );
-        let data = [0];
-        sdo.lock()
-            .await
-            .download(mapping_index, 0x0, &data)
-            .await
-            .map_err(DriveError::CanOpen)?;
-
-        trace!("3. Change the mapping in the desired subindices.");
-        for (number, source) in pdo_mapping.sources.iter().enumerate() {
-            let number = number + 1;
-
-            trace!("3. Mapping #{number} to {source:?}");
-            // Construct the payload: 2 bytes of OD entry to be mapped, 1 byte subindex, 1 byte with number of bits to be mapped
-            let index_bytes = source.entry.index.to_be_bytes();
-            let data: [u8; 4] = [
-                index_bytes[0],
-                index_bytes[1],
-                source.entry.sub_index,
-                source.bit_range.len,
-            ];
-            let vec: Vec<u8> = data.into_iter().rev().collect();
-
-            sdo.lock()
-                .await
-                .download(mapping_index, number as u8, &vec)
-                .await
-                .map_err(DriveError::CanOpen)?;
-        }
-
-        trace!(
-            "4. Activate the mapping by writing the number of objects that are to be mapped in subindex 00h of the corresponding mapping parameter (e.g., 1600h:00h)."
-        );
-        let data = [pdo_mapping.sources.len() as u8];
-        sdo.lock()
-            .await
-            .download(mapping_index, 0x0, &data)
-            .await
-            .map_err(DriveError::CanOpen)?;
-
-        trace!(
-            "5. Activate the PDO by setting bit 31 of subindex 01h of the corresponding communication parameter (e.g., 1400h:01h) to \"0\"."
-        );
-        let validate_pdo = invalidate_pdo & !(1 << 31);
-        sdo.lock()
-            .await
-            .download(communication_index, 0x1, &validate_pdo.to_le_bytes())
-            .await
-            .map_err(DriveError::CanOpen)?;
-
-        Ok(())
+        self.script.started = ctx.now;
     }
 
     pub fn on_sync_feedback(&mut self) {
@@ -543,30 +409,38 @@ impl Cia402Motor {
             }
 
             MessageType::RSDO(s) => {
-                self.sdo.on_rsdo(s);
+                info!(
+                    system = "Cia402Motor",
+                    "Got RSDO {:?}", s
+                );
             }
 
             MessageType::TSDO(s) => {
+                info!(
+                    system = "Cia402Motor",
+                    "Got TSDO {:?}", s
+                );
                 self.sdo.on_tsdo(s);
             }
 
             MessageType::PDO(pdo) => {
-                // We only care about RPDO
-                if pdo.pdo_type == PdoType::RPDO {
+                // TPDO are sent by the motors, RPDO are received by the motors
+                // When processing CANOpen messages, we only care about the motor feedback: TPDO
+                if pdo.pdo_type == PdoType::TPDO {
                     assert!(
                         pdo.node_id == self.id.node_id,
-                        "Cia402Motor::process_canopen_msg on RPDO with wrong node id {}",
+                        "Cia402Motor::process_canopen_msg on TPDO with wrong node id {}",
                         pdo.node_id.u8()
                     );
 
                     assert!(
-                        self.active_cfg.rpdo[pdo.num].is_some(),
-                        "Cia402Motor::process_canopen_msg on unexpected PRDO num {}",
+                        self.active_cfg.tpdo[pdo.num].is_some(),
+                        "Cia402Motor::process_canopen_msg on unexpected TRDO num {}",
                         pdo.num
                     );
 
-                    // Attempt to parse RPDO
-                    match self.active_cfg.parse_rpdo(&pdo, &mut self.feedback) {
+                    // Attempt to parse TPDO
+                    match self.active_cfg.parse_tpdo(&pdo, &mut self.feedback) {
                         Ok(_) => {
                             info!(
                                 system = "Cia402Motor",
@@ -578,7 +452,7 @@ impl Cia402Motor {
 
                             if self.opmode.is_cyclic_synchronous() {
                                 // Mark this RPDO as received for this cycle
-                                self.rpdo_rx[pdo.num] = true;
+                                self.tpdo_rx[pdo.num] = true;
                             }
                         }
                         Err(e) => {
@@ -603,14 +477,14 @@ impl Cia402Motor {
 
     pub fn on_cycle_start(&mut self) {
         // Reset rdpo rx
-        self.rpdo_rx = [false; 4];
+        self.tpdo_rx = [false; 4];
     }
 
-    // Are all current cycle RPDO received for this motor
-    pub fn all_cycle_rpdo_received(&self) -> bool {
-        for (i, pdo_mapping) in self.active_cfg.rpdo.iter().enumerate() {
+    // Are all current cycle TPDO received for this motor?
+    pub fn all_cycle_tpdo_received(&self) -> bool {
+        for (i, pdo_mapping) in self.active_cfg.tpdo.iter().enumerate() {
             if pdo_mapping.is_some() {
-                if !self.rpdo_rx[i] {
+                if !self.tpdo_rx[i] {
                     return false;
                 }
             }
@@ -699,6 +573,20 @@ impl Cia402Motor {
             "get_value_from_semantic() for {:?} returns {:?}", semantic, out
         );
         out
+    }
+
+    pub fn do_e_stop(&mut self) {
+        debug!(system = "Cia402Motor", "MOTOR ESTOP TRIGGERED");
+        let estop_script = Script::new_starting_now(&script::estop::ESTOP_STEPS);
+        self.run_script(estop_script, Purpose::Estop);
+    }
+
+    fn run_script(&mut self, script: Script, purpose: Purpose) {
+        debug!(
+            system = "Cia402Motor",
+            "{:?} -> Running script {:?}", purpose, script
+        );
+        self.controller_state = ControllerState::Configuring(script, purpose);
     }
 }
 

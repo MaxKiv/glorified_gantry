@@ -1,14 +1,17 @@
 ## To Figure out:
 
-/home/max/git/saxion/glorified_gantry/motor-controller/src/rt/engine/mod.rs:459
+/home/max/git/saxion/glorified_gantry/motor-controller/src/motor/mod.rs:330
 
 First:
 
 - [x] Cia402Motor TPDO -> MotorState parsing
-- [ ] Figure out the CANOpen struct:
+- [ ] Cia402Motor Scripting engine (tick(), SdoPoll?)
+- [ ] Cia402Motor RPDO scheduling in profile modes?
+- [ ] Figure out how & when to write CAN messages in RT loop?
+  - [ ] Cia402Motor must indicate to RtEngine that it wants to do can stuff, how?
+        AKA: Figure out the CANOpen struct! Maybe this?
 
         Create some sort of CanOpen structure with 2 sides, 1 tx side:
-
         - accepts CanOpen concepts (nmt send, sdo cmd enqueue, etc)
         - holds these in some internal queue?
         - can poll rx side for milestones?
@@ -16,7 +19,6 @@ First:
         - drains internal queue, sends out canframes
         - tracks milestones, like sdo download confirms?
 
-- [ ] Refactor out Sdo from CANopen -> SdoManager (1 per node)
 - [ ] Compile this shit
 - [ ] Construct CycleFeedback
 - [ ] Start testing, start small -> single drive bringup

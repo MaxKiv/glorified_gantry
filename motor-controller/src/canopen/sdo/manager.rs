@@ -5,17 +5,19 @@ use tracing::{debug, error, info, warn};
 use crate::{
     canopen::{
         CanOpen,
+        frame::NodeId,
         od::{entry::ODEntry, value::ODValue},
         sdo::{
-            SdoDownload, SdoDownloadConfirmed, SdoRequest, SdoResponse, SdoUpload, SdoUploadResult,
+            NormalSdoDownload, RawSdoDownload, SdoDownload, SdoDownloadConfirmed, SdoRequest,
+            SdoResponse, SdoUpload, SdoUploadResult,
         },
     },
     cia402::Cia402Identifier,
     fifo::{Fifo, error::FifoError},
 };
 
-const SDO_EVENT_Q_SIZE: usize = 640;
-const SDO_CMD_Q_SIZE: usize = 640;
+const SDO_EVENT_Q_SIZE: usize = 64;
+const SDO_CMD_Q_SIZE: usize = 16;
 const MAX_EVENTS_PER_TICK: usize = 16;
 const SDO_TIMEOUT: Duration = Duration::from_millis(500);
 
@@ -62,14 +64,19 @@ impl SdoCommand {
         }
     }
 
-    pub fn upload_raw(node: &'static Cia402Identifier) -> Self {
-        let request = SdoManagerRequest::Upload(SdoUpload {
+    pub fn download(
+        node: &'static Cia402Identifier,
+        od_entry: &'static ODEntry,
+        value: ODValue,
+    ) -> Self {
+        let request = SdoManagerRequest::Download(SdoDownload::Normal(NormalSdoDownload {
             node,
             od_entry,
             result: None,
-        });
-        let result = SdoUploadResult::new_from_od_entry(node.node_id, od_entry);
-        let expected_answer = SdoResponse::UploadConfirm(result);
+            value,
+        }));
+        let result = SdoDownloadConfirmed::new_from_od_entry(node.node_id, od_entry);
+        let expected_answer = SdoResponse::DownloadConfirm(result);
 
         SdoCommand {
             request,
@@ -77,19 +84,21 @@ impl SdoCommand {
         }
     }
 
-    pub fn download(
-        node: &'static Cia402Identifier,
-        od_entry: &'static ODEntry,
-        value: ODValue,
-    ) -> Self {
-        let request = SdoManagerRequest::Download(SdoDownload {
+    pub fn download_raw(node: NodeId, index: u16, sub: u8, data: &[u8]) -> Self {
+        let mut dat = [0u8; 8];
+        dat.copy_from_slice(data);
+        let request = SdoManagerRequest::Download(SdoDownload::Raw(RawSdoDownload {
             node,
-            od_entry,
+            index,
+            sub,
+            data: dat,
             result: None,
-            value,
+        }));
+        let expected_answer = SdoResponse::DownloadConfirm(SdoDownloadConfirmed {
+            from: node,
+            index,
+            sub_index: sub,
         });
-        let result = SdoDownloadConfirmed::new_from_od_entry(node.node_id, od_entry);
-        let expected_answer = SdoResponse::DownloadConfirm(result);
 
         SdoCommand {
             request,
@@ -107,7 +116,7 @@ impl SdoCommand {
             expected_answer: SdoResponse::Error(super::SdoError {
                 from: crate::cia402::BS_NODE.node_id,
                 index: 0,
-                sub_index: 0,
+                sub: 0,
                 code: 0,
             }),
         }
@@ -124,8 +133,6 @@ pub enum SdoManagerRequest {
 pub enum SdoManagerState {
     #[default]
     Idle,
-    Uploading(SdoUpload),
-    Downloading(SdoDownload),
     WaitingForResponse {
         expected: SdoResponse,
         deadline: Instant,
@@ -150,28 +157,6 @@ impl SdoManager {
             .push(cmd)
             .map_err(|_| SdoManagerError::CommandQueueFull)?;
         Ok(())
-    }
-
-    pub fn on_rsdo(&mut self, sdo: SdoRequest) {
-        if let Err(err) = self.events.push(SdoManagerEvent::Request(sdo)) {
-            match err {
-                FifoError::Full(event) => {
-                    let discarded_event = self.events.pop().expect("");
-                    error!(
-                        system = "SdoManager",
-                        "on_rsdo fail: SDO Fifo queue full - discarding last event in queue: {:?}",
-                        discarded_event
-                    );
-                    let _ = self.events.push(event);
-                }
-                FifoError::Empty => {
-                    error!(
-                        system = "SdoManager",
-                        "INVALID_STATE: on_rsdo fail: SDO Fifo queue empty - ignoring",
-                    );
-                }
-            }
-        }
     }
 
     pub fn on_tsdo(&mut self, sdo: SdoResponse) {
@@ -202,15 +187,7 @@ impl SdoManager {
         match self.state {
             // What to do in idle
             SdoManagerState::Idle => {
-                self.start_cmd();
-            }
-
-            // What to do when an up/download recently started
-            SdoManagerState::Uploading(SdoUpload { node, od_entry, .. })
-            | SdoManagerState::Downloading(SdoDownload { node, od_entry, .. }) => {
-                // SDO Manager in Down/upload state, check if event is request
-                // Consumes a few even per tick
-                self.on_cmd_started(node, od_entry);
+                self.try_start_new_cmd();
             }
 
             // What to do when waiting for up/download response
@@ -231,8 +208,10 @@ impl SdoManager {
         };
     }
 
+    /// Queues a new SDO
     fn queue_sdo(&mut self, cmd: SdoCommand) {
         let request = cmd.request.clone();
+        let expected = cmd.expected_answer.clone();
         if let Err(_) = self.canopen.queue_sdo(request.clone()) {
             error!(
                 system = "SdoManager",
@@ -242,13 +221,12 @@ impl SdoManager {
             self.state = SdoManagerState::Failed(cmd);
         }
 
-        self.state = match request {
-            SdoManagerRequest::Upload(sdo_upload) => SdoManagerState::Uploading(sdo_upload),
-            SdoManagerRequest::Download(sdo_download) => SdoManagerState::Downloading(sdo_download),
-        };
+        let deadline = Instant::now() + SDO_TIMEOUT;
+        self.state = SdoManagerState::WaitingForResponse { expected, deadline }
     }
 
-    fn on_cmd_started(&mut self, node: &'static Cia402Identifier, od_entry: &'static ODEntry) {
+    /// Checks the SDO event queue if current command completed sucessfully
+    fn check_cmd_success(&mut self, node: &'static Cia402Identifier, od_entry: &'static ODEntry) {
         // Drain MAX_EVENTS_PER_TICK events per tick
         for _ in 0..MAX_EVENTS_PER_TICK {
             if let Ok(event) = self.events.pop() {
@@ -333,7 +311,7 @@ impl SdoManager {
                     "Witnessed expected event - enqueuing next event"
                 );
 
-                self.start_cmd();
+                self.try_start_new_cmd();
                 break;
             }
         }
@@ -415,7 +393,10 @@ impl SdoManager {
         false
     }
 
-    fn start_cmd(&mut self) {
+    /// Start new SDO transaction,
+    /// if that works -> sets state to WaitingForResponse
+    /// if no transaction requested > sets state to Idle
+    fn try_start_new_cmd(&mut self) {
         if self.current_cmd.is_none()
             && let Ok(request) = self.cmd_queue.pop()
         {

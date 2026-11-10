@@ -27,7 +27,7 @@ pub struct NodePdoConfig {
 }
 
 impl NodePdoConfig {
-    pub fn get_cfg_for_opmode(&self, mode: &OperationMode) -> &'static OMSNodePdoConfig {
+    pub fn get_cfg_for_opmode(&'static self, mode: &OperationMode) -> &'static OMSNodePdoConfig {
         match mode {
             OperationMode::CyclicSynchronousPosition => &self.cyclic_position,
             OperationMode::CyclicSynchronousVelocity => &self.cyclic_velocity,

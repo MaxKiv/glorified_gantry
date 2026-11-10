@@ -19,10 +19,25 @@ pub struct SdoUpload {
 }
 
 #[derive(Debug, Clone)]
-pub struct SdoDownload {
+pub enum SdoDownload {
+    Normal(NormalSdoDownload),
+    Raw(RawSdoDownload),
+}
+
+#[derive(Debug, Clone)]
+pub struct NormalSdoDownload {
     pub node: &'static Cia402Identifier,
     pub od_entry: &'static ODEntry,
     pub value: ODValue,
+    pub result: Option<SdoDownloadConfirmed>,
+}
+
+#[derive(Debug, Clone)]
+pub struct RawSdoDownload {
+    pub node: NodeId,
+    pub index: u16,
+    pub sub: u8,
+    pub data: [u8; 8],
     pub result: Option<SdoDownloadConfirmed>,
 }
 
@@ -30,7 +45,7 @@ pub struct SdoDownload {
 pub struct SdoError {
     pub from: NodeId,
     pub index: u16,
-    pub sub_index: u8,
+    pub sub: u8,
     pub code: u32,
 }
 
@@ -39,17 +54,17 @@ pub struct SdoUploadResult {
     pub from: NodeId,
     pub dlc: u8,
     pub index: u16,
-    pub sub_index: u8,
+    pub sub: u8,
     pub data: [u8; 4],
 }
 
 impl SdoUploadResult {
-    pub fn new(from: NodeId, dlc: u8, index: u16, sub_index: u8, data: [u8; 4]) -> Self {
+    pub fn new(from: NodeId, dlc: u8, index: u16, sub: u8, data: [u8; 4]) -> Self {
         Self {
             from,
             dlc,
             index,
-            sub_index,
+            sub,
             data,
         }
     }
@@ -59,7 +74,7 @@ impl SdoUploadResult {
             from,
             dlc: od_entry.get_num_bytes() as u8,
             index: od_entry.index,
-            sub_index: od_entry.sub_index,
+            sub: od_entry.sub_index,
             data: [0u8; 4],
         }
     }
@@ -130,7 +145,7 @@ impl SdoResponse {
                         .try_into()
                         .map_err(|_| CanOpenParseError::SdoInvalidData(frame.clone()))?,
                 ),
-                sub_index: data[3],
+                sub: data[3],
                 code: u32::from_le_bytes(
                     payload
                         .try_into()
@@ -154,7 +169,7 @@ impl SdoResponse {
                         .try_into()
                         .map_err(|_| CanOpenParseError::SdoInvalidData(frame.clone()))?,
                 ),
-                sub_index: data[3],
+                sub: data[3],
                 data: payload
                     .try_into()
                     .map_err(|_| CanOpenParseError::SdoInvalidData(frame.clone()))?,
@@ -167,7 +182,7 @@ impl SdoResponse {
                         .try_into()
                         .map_err(|_| CanOpenParseError::SdoInvalidData(frame.clone()))?,
                 ),
-                sub_index: data[3],
+                sub: data[3],
                 data: payload
                     .try_into()
                     .map_err(|_| CanOpenParseError::SdoInvalidData(frame.clone()))?,
@@ -180,7 +195,7 @@ impl SdoResponse {
                         .try_into()
                         .map_err(|_| CanOpenParseError::SdoInvalidData(frame.clone()))?,
                 ),
-                sub_index: data[3],
+                sub: data[3],
                 data: payload
                     .try_into()
                     .map_err(|_| CanOpenParseError::SdoInvalidData(frame.clone()))?,
@@ -193,7 +208,7 @@ impl SdoResponse {
                         .try_into()
                         .map_err(|_| CanOpenParseError::SdoInvalidData(frame.clone()))?,
                 ),
-                sub_index: data[3],
+                sub: data[3],
                 data: payload
                     .try_into()
                     .map_err(|_| CanOpenParseError::SdoInvalidData(frame.clone()))?,
@@ -208,7 +223,7 @@ impl SdoResponse {
         match &self {
             SdoResponse::Error(sdo_error) => format!(
                 "SDO Error for {:#0x}:{} - code {:#0x}",
-                sdo_error.index, sdo_error.sub_index, sdo_error.code
+                sdo_error.index, sdo_error.sub, sdo_error.code
             )
             .to_string(),
             SdoResponse::DownloadConfirm(sdo_download_result) => format!(
@@ -219,7 +234,7 @@ impl SdoResponse {
             SdoResponse::UploadConfirm(sdo_upload_result) => format!(
                 "SDO Upload Confirm for {:#0x}:{} => [{}]",
                 sdo_upload_result.index,
-                sdo_upload_result.sub_index,
+                sdo_upload_result.sub,
                 hex_dump(&sdo_upload_result.data)
             )
             .to_string(),

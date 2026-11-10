@@ -36,7 +36,7 @@ pub struct PdoMappingSource {
 }
 
 impl PdoMapping {
-    // Encodes the given values into the given buffer, ready to be sent over the wire
+    // Encodes the given values into the given buffer, ready to be sent over the wire as RPDO
     // NOTE: this opportunistically encodes values, it is the users responsibility to
     // provide &[`PdoValue`] with the same order and semantic meaning as defined in this mapping
     pub fn encode(&self, values: &[Option<PdoValue>; 4]) -> RawRpdo {
@@ -57,6 +57,7 @@ impl PdoMapping {
         raw
     }
 
+    /// Decodes a TPDO into PdoValues
     pub fn decode(&self, raw: RawRpdo) -> [Option<PdoValue>; 4] {
         let mut out = [const { None }; 4];
 
@@ -100,35 +101,35 @@ pub struct OMSNodePdoConfig {
 }
 
 impl OMSNodePdoConfig {
-    pub fn parse_rpdo(
+    pub fn parse_tpdo(
         &self,
-        rpdo: &RawPdoMessage,
+        tpdo: &RawPdoMessage,
         feedback: &mut MotorFeedback,
     ) -> anyhow::Result<()> {
-        match rpdo.pdo_type {
-            PdoType::TPDO => anyhow::bail!("parse_rpdo called on TPDO"),
-            PdoType::RPDO => {
-                let Some(mapping) = &self.rpdo[rpdo.num] else {
-                    anyhow::bail!("No mapping for RPDO: {:?}", rpdo);
+        match tpdo.pdo_type {
+            PdoType::RPDO => anyhow::bail!("parse_rpdo called on RPDO"),
+            PdoType::TPDO => {
+                let Some(mapping) = &self.tpdo[tpdo.num] else {
+                    anyhow::bail!("No mapping for TPDO: {:?}", tpdo);
                 };
-                let data = u64::from_le_bytes(rpdo.data);
+                let data = u64::from_le_bytes(tpdo.data);
                 let decoded = mapping.decode(data);
 
                 for (i, src) in mapping.sources.iter().enumerate() {
-                    // Precondition: RPDO messages must contain PdoValues in exactly the same order
+                    // Precondition: TPDO messages must contain PdoValues in exactly the same order
                     // as configured in PdoMappingSource
                     let Some(pdo_val) = &decoded[i] else {
                         anyhow::bail!(
-                            "parse_rpdo Precondition violated: current rpdo map expects
-                            {:?} but this is not present in decoded rpdo: {:?}",
+                            "parse_tpdo Precondition violated: current tpdo map expects
+                            {:?} but this is not present in decoded tpdo: {:?}",
                             src.entry.semantic,
                             decoded
                         );
                     };
                     if src.entry.semantic != pdo_val.semantic {
                         anyhow::bail!(
-                            "parse_rpdo Precondition violated: current rpdo map expects
-                            {:?} but this is not present in decoded rpdo: {:?}",
+                            "parse_tpdo Precondition violated: current tpdo map expects
+                            {:?} but this is not present in decoded tpdo: {:?}",
                             src.entry.semantic,
                             decoded
                         );
@@ -172,7 +173,7 @@ impl OMSNodePdoConfig {
 
                         // Unexpected Pdo Value semantic, bail
                         unknown_semantic => anyhow::bail!(
-                            "Failed decoding RPDO, unexpected semantic: {:?}",
+                            "Failed decoding TPDO, unexpected semantic: {:?}",
                             unknown_semantic
                         ),
                     }
