@@ -548,7 +548,7 @@ const fn construct_pdo_communication_param(kind: PdoType, pdo_num: u8, sub_index
 
     ODEntry {
         index: communication_index,
-        sub_index,
+        sub: sub_index,
         default: ODValue::U8(0),
         access: AccessType::ReadWrite,
         pdo_mappable: MappableType::None,
@@ -818,7 +818,7 @@ static OD_LOOKUP: Lazy<FnvIndexMap<ODIdx, &ODEntry, OD_LOOKUP_SIZE>> = Lazy::new
         m.insert(
             ODIdx {
                 index: entry.index,
-                sub_index: entry.sub_index,
+                sub_index: entry.sub,
             },
             entry,
         )

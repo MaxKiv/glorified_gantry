@@ -49,7 +49,7 @@ pub struct ODEntry {
     // Index of the OD entry
     pub index: u16,
     // Subindex of the OD entry
-    pub sub_index: u8,
+    pub sub: u8,
     // Indicates both the type and default value
     pub default: ODValue,
     pub access: AccessType,
@@ -61,7 +61,7 @@ pub struct ODEntry {
 impl ODEntry {
     pub const fn new(
         index: u16,
-        sub_index: u8,
+        sub: u8,
         access: AccessType,
         pdo_mappable: MappableType,
         default: ODValue,
@@ -69,7 +69,7 @@ impl ODEntry {
     ) -> Self {
         Self {
             index,
-            sub_index,
+            sub,
             access,
             pdo_mappable,
             default,
@@ -114,7 +114,7 @@ impl ODEntry {
 
         Some(Self {
             index,
-            sub_index,
+            sub: sub_index,
             default: parsed_value,
             access: entry.access,
             pdo_mappable: entry.pdo_mappable.clone(),

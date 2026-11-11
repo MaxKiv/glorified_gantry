@@ -89,16 +89,6 @@ impl GantryAxis {
         Ok(())
     }
 
-    pub fn request_nmt_command(&mut self, cmd: NmtCommandSpecifier) -> Result<(), AxisError> {
-        for motor in self.get_axis_motors_mut() {
-            motor
-                .request_nmt_command(cmd)
-                .map_err(|e| AxisError::NmtCommandFailed(cmd, motor.id.clone(), e))?;
-        }
-
-        Ok(())
-    }
-
     /// Push a new setpoint to the axis master drive, and slave if any
     pub fn new_axis_setpoint(&mut self, setpoint: Setpoint) {
         // TODO: scale setpoint using AxisScaling
@@ -203,8 +193,8 @@ impl GantryAxis {
     }
 
     pub fn do_e_stop(&mut self) {
-        tracing::debug!(system = "Axis", "AXIS ESTOP TRIGGERED");
-        for motor in self.get_axis_motors_ref() {
+        tracing::warn!(system = "Axis", "AXIS ESTOP TRIGGERED");
+        for motor in self.get_axis_motors_mut() {
             motor.do_e_stop();
         }
     }

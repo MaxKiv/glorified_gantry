@@ -69,7 +69,7 @@ impl SdoFrame {
             sdo.node,
             SdoCommandSpecifier::Upload,
             sdo.od_entry.index,
-            sdo.od_entry.sub_index,
+            sdo.od_entry.sub,
             &[],
         )
     }

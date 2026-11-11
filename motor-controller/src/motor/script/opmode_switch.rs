@@ -60,6 +60,7 @@ fn pdo_invalidate_step(
         comm_idx,
         COMM_SUB_COB_ID,
         &(cob_id | VALID_BIT).to_le_bytes(),
+        size_of::<u32>(),
     )
 }
 /// Get a [Vec<ScriptStep>] containing all actions required to switch a [CiA402Motor] to a new [OMSNodePdoConfig]
@@ -94,7 +95,7 @@ pub fn get_pdo_remap_script(
 
     steps.extend(PDO_REMAP_END);
 
-    Script::new(steps)
+    Script::from_vec(steps)
 }
 
 /// Get a [Vec<ScriptStep>] containing all SDO writes required to switch a [CiA402Motor] to a new [OMSNodePdoConfig]
@@ -165,6 +166,7 @@ fn get_single_pdo_remapping_script(
         communication_index,
         COMM_SUB_COB_ID,
         &(cob_id | VALID_BIT).to_le_bytes(),
+        size_of::<u32>(),
     ));
 
     trace!(
@@ -176,6 +178,7 @@ fn get_single_pdo_remapping_script(
         communication_index,
         COMM_SUB_TX_TYPE,
         &[new_pdo_cfg.transmission_type.od_value()],
+        new_pdo_cfg.transmission_type.len_bytes(),
     ));
 
     // 1.C & 1.D Configure periodic event + inhibit time if TransmissionType = on change
@@ -186,12 +189,14 @@ fn get_single_pdo_remapping_script(
             communication_index,
             COMM_SUB_EVENT_TIMER,
             &EVENT_TIMER_MS.to_le_bytes(),
+            size_of::<u16>(),
         ));
         s.push(ScriptStep::sdo_write(
             id,
             communication_index,
             COMM_SUB_INHIBIT,
             &INHIBIT_TIME_100US.to_le_bytes(),
+            size_of::<u16>(),
         ));
     }
 
@@ -200,18 +205,25 @@ fn get_single_pdo_remapping_script(
         "2. Deactivate the mapping by setting subindex 00h of the corresponding mapping parameter ({}) to \"0\".",
         mapping_index
     );
-    s.push(ScriptStep::sdo_write(id, mapping_index, 0x00, &[0]));
+    s.push(ScriptStep::sdo_write(
+        id,
+        mapping_index,
+        0x00,
+        &[0],
+        size_of::<u8>(),
+    ));
 
     trace!("3. Change the mapping in the desired subindices.");
     for (i, source) in new_pdo_cfg.sources.iter().enumerate() {
         let entry: u32 = ((source.entry.index as u32) << 16)
-            | ((source.entry.sub_index as u32) << 8)
+            | ((source.entry.sub as u32) << 8)
             | (source.len as u32);
         s.push(ScriptStep::sdo_write(
             id,
             mapping_index,
             (i + 1) as u8,
             &entry.to_le_bytes(),
+            size_of::<u32>(),
         ));
     }
 
@@ -223,6 +235,7 @@ fn get_single_pdo_remapping_script(
         mapping_index,
         0x0,
         &[new_pdo_cfg.sources.len() as u8],
+        size_of::<u8>(),
     ));
 
     trace!(
@@ -233,6 +246,7 @@ fn get_single_pdo_remapping_script(
         communication_index,
         COMM_SUB_COB_ID,
         &cob_id.to_le_bytes(),
+        size_of::<u32>(),
     ));
 
     s

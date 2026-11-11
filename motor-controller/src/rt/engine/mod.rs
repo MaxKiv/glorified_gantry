@@ -586,16 +586,6 @@ impl RtEngine {
 
         self.new_gantry_setpoint(GantrySetpoint::estop_setpoint());
 
-        // TODO:
-        for axis in self.axi.iter_mut().flatten() {
-            if let Err(err) = axis.request_nmt_command(NmtCommandSpecifier::EnterPreOperational) {
-                error!(
-                    "ESTOP - FATAL: unable to set NMT PreOp for {:?} axis: {:?}",
-                    axis.axis, err
-                )
-            }
-        }
-
         self.state = RtState::Faulted;
     }
 }

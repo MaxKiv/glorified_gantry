@@ -1,3 +1,4 @@
+pub mod action;
 pub mod frame;
 pub mod manager;
 
@@ -38,6 +39,7 @@ pub struct RawSdoDownload {
     pub index: u16,
     pub sub: u8,
     pub data: [u8; 8],
+    pub len: usize,
     pub result: Option<SdoDownloadConfirmed>,
 }
 
@@ -74,7 +76,7 @@ impl SdoUploadResult {
             from,
             dlc: od_entry.get_num_bytes() as u8,
             index: od_entry.index,
-            sub: od_entry.sub_index,
+            sub: od_entry.sub,
             data: [0u8; 4],
         }
     }
@@ -84,7 +86,7 @@ impl SdoUploadResult {
 pub struct SdoDownloadConfirmed {
     pub from: NodeId,
     pub index: u16,
-    pub sub_index: u8,
+    pub sub: u8,
 }
 
 impl SdoDownloadConfirmed {
@@ -92,7 +94,7 @@ impl SdoDownloadConfirmed {
         Self {
             from,
             index: od_entry.index,
-            sub_index: od_entry.sub_index,
+            sub: od_entry.sub,
         }
     }
 }
@@ -159,7 +161,7 @@ impl SdoResponse {
                         .try_into()
                         .map_err(|_| CanOpenParseError::SdoInvalidData(frame.clone()))?,
                 ),
-                sub_index: data[3],
+                sub: data[3],
             })),
             0x4F => Ok(SdoResponse::UploadConfirm(SdoUploadResult {
                 from,
@@ -228,7 +230,7 @@ impl SdoResponse {
             .to_string(),
             SdoResponse::DownloadConfirm(sdo_download_result) => format!(
                 "SDO Download Confirm for {:#0x}:{}",
-                sdo_download_result.index, sdo_download_result.sub_index
+                sdo_download_result.index, sdo_download_result.sub
             )
             .to_string(),
             SdoResponse::UploadConfirm(sdo_upload_result) => format!(
@@ -238,6 +240,21 @@ impl SdoResponse {
                 hex_dump(&sdo_upload_result.data)
             )
             .to_string(),
+        }
+    }
+
+    /// Sdo Identification helper; returns (NodeId, index, sub)
+    fn key(&self) -> (NodeId, u16, u8) {
+        match self {
+            SdoResponse::Error(SdoError {
+                from, index, sub, ..
+            }) => (from.clone(), *index, *sub),
+            SdoResponse::DownloadConfirm(SdoDownloadConfirmed {
+                from, index, sub, ..
+            }) => (from.clone(), *index, *sub),
+            SdoResponse::UploadConfirm(SdoUploadResult {
+                from, index, sub, ..
+            }) => (from.clone(), *index, *sub),
         }
     }
 }

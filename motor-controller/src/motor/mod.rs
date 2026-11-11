@@ -9,17 +9,19 @@ use std::time::Instant;
 use crate::canopen::nmt::NmtCommandSpecifier::EnterPreOperational;
 use crate::canopen::nmt::NmtCommandSpecifier::StartRemoteNode;
 use crate::canopen::nmt::NmtState::Operational;
-use crate::canopen::od::TPDO_MAPPING_PARAMETER_BASE_INDEX;
 use crate::canopen::od::entry::PdoSemantic;
 use crate::canopen::od::value::ODValue;
 use crate::canopen::pdo::RawRpdo;
 use crate::canopen::pdo::mapping::PdoValue;
+use crate::canopen::sdo::manager::SdoPoll;
 use crate::cw::ControlWord;
+use crate::motor::ControllerState::Faulted;
 use crate::motor::limits::Cia402MotorLimits;
 use crate::motor::script::Purpose;
 use crate::motor::script::Script;
 use crate::motor::script::ScriptStep;
 use crate::motor::script::opmode_switch::get_pdo_remap_script;
+use crate::motor::script::parametrisation::get_parametrisation_script;
 use crate::rt::MotorFeedback;
 use crate::sw::StatusWord;
 use tracing::debug;
@@ -39,14 +41,7 @@ use crate::{
             NmtCommandSpecifier, NmtMonitorMessage,
             NmtState::{self, PreOperational},
         },
-        od::{
-            RPDO_COMMUNICATION_PARAMETER_BASE_INDEX, TPDO_COMMUNICATION_PARAMETER_BASE_INDEX,
-            get_pdo_deactivation_od_entry,
-        },
-        pdo::{
-            PdoType,
-            mapping::{OMSNodePdoConfig, PdoMapping},
-        },
+        pdo::{PdoType, mapping::OMSNodePdoConfig},
         sdo::manager::{SdoCommand, SdoManager},
     },
     cia402::{Cia402Identifier, Cia402State},
@@ -54,23 +49,13 @@ use crate::{
     motor::{error::MotorError, state::MotorState},
     oms::{OperationMode, setpoint::Setpoint},
 };
-/// State of the Cia402Motor Controller
-enum ControllerState {
-    Idle,
-    Operating,
-    Configuring(Script, Purpose), // ie. Parametrising or Mode Switching
-    Faulted(MotorError),
-}
 
 pub struct Cia402Motor {
     pub id: Cia402Identifier,
 
-    // TODO: make this a reference
-    canopen: CanOpen,
-
     sdo: SdoManager,
 
-    controller_state: ControllerState,
+    state: ControllerState,
     tpdo_rx: [bool; 4],
 
     cia402_state: Cia402State,             // Current CiA402 state
@@ -83,9 +68,10 @@ pub struct Cia402Motor {
     pub motor_state: MotorState,
     feedback: MotorFeedback,
 
-    active_setpoint: Setpoint, // Active motor setpoint
-    controlword: ControlWord,  // Active controlword
-    statusword: StatusWord,    // Last received statusword
+    active_script: Option<Script>, // Active Configuration actions
+    active_setpoint: Setpoint,     // Active motor setpoint
+    controlword: ControlWord,      // Active controlword
+    statusword: StatusWord,        // Last received statusword
 
     // Collection of latest setpoint per relevant mode
     target_position: i32,
@@ -94,6 +80,13 @@ pub struct Cia402Motor {
 
     limits: Cia402MotorLimits,                 // Profile limits
     default_parameters: &'static [SdoCommand], // All configuration parameters
+}
+
+/// State of the Cia402Motor Controller
+enum ControllerState {
+    Operating,           // Actively controlling motor
+    Configuring,         // Paused Operating to change motor configuration
+    Faulted(MotorError), // Something bad
 }
 
 pub struct TickCtx<'a> {
@@ -105,26 +98,23 @@ pub struct TickCtx<'a> {
 impl Cia402Motor {
     pub fn new(
         id: Cia402Identifier,
-        canopen: CanOpen,
         pdo_cfg: &'static NodePdoConfig,
         default_parameters: &'static [SdoCommand],
     ) -> Self {
         let nmt = NmtState::Bootup;
         let opmode = OperationMode::default();
-        let active_setpoint = Setpoint::default();
         let cia402_state = Cia402State::default();
         let active_cfg = pdo_cfg.get_cfg_for_opmode(&opmode);
 
         Self {
             id,
             nmt,
-            canopen,
             opmode,
-            active_setpoint,
+            active_setpoint: None,
             cia402_state,
             pdo_cfg,
             active_cfg,
-            controller_state: ControllerState::Idle,
+            state: ControllerState::Idle,
             default_parameters,
             motor_state: MotorState::new(),
             feedback: MotorFeedback::new(),
@@ -136,13 +126,8 @@ impl Cia402Motor {
             limits: todo!(),
             controlword: todo!(),
             statusword: todo!(),
+            active_script: STARTUP_DRIVE_SCRIPT, // TODO
         }
-    }
-
-    pub fn request_nmt_command(&mut self, cmd: NmtCommandSpecifier) -> Result<(), CanOpenError> {
-        self.canopen.send_nmt(cmd, &self.id)?;
-
-        Ok(())
     }
 
     pub fn process_nmt_message(&mut self, msg: NmtMonitorMessage) {
@@ -168,94 +153,12 @@ impl Cia402Motor {
 
     /// Sets new motor setpoint
     pub fn new_motor_setpoint(&mut self, new_sp: Setpoint) {
-        self.active_setpoint = new_sp;
+        self.active_setpoint = Some(new_sp);
     }
 
-    /// Build a script that contains all [`ScriptStep`] required to perform an opmode switch to the
-    /// given [`OperationMode`]
-    fn get_opmode_switch_script(&mut self, new: &OperationMode) -> Script {
-        let new_pdo_cfg = self.pdo_cfg.get_cfg_for_opmode(new);
-
-        let mut start = vec![
-            ScriptStep::QuickStop,
-            ScriptStep::Nmt {
-                cmd: EnterPreOperational,
-                expect: PreOperational,
-            },
-        ];
-
-        // TODO: Compute middle script
-        // Should consist of steps in remap_pdo()
-        // Everything should be known at compile time, precompute a script for every
-        // OMSNodePdoConfig?
-
-        let mut end = vec![
-            ScriptStep::Nmt {
-                cmd: StartRemoteNode,
-                expect: Operational,
-            },
-            ScriptStep::EnableOperation,
-        ];
-
-        Script {
-            steps: todo!(),
-            cursor: 0,
-            started: Instant::now(),
-        }
-    }
-
-    fn switch_pdo_config(&mut self, new: &OperationMode) -> Result<(), MotorError> {
-        let new_pdo_cfg = self.pdo_cfg.get_cfg_for_opmode(new);
-
-        // switch to NMT Pre-OP
-        self.request_nmt_command(NmtCommandSpecifier::EnterPreOperational)
-            .map_err(|e| MotorError::PdoRemapping(e))?;
-
-        // remap PDO
-        for (idx, rpdo) in new_pdo_cfg.rpdo.iter().enumerate() {
-            if let Some(rpdo) = rpdo {
-                self.remap_pdo(idx as u8, rpdo);
-            }
-        }
-        for (idx, tpdo) in new_pdo_cfg.tpdo.iter().enumerate() {
-            if let Some(tpdo) = tpdo {
-                self.remap_pdo(idx as u8, tpdo);
-            }
-        }
-
-        // switch to NMT OP
-        self.request_nmt_command(NmtCommandSpecifier::StartRemoteNode)
-            .map_err(|e| MotorError::PdoRemapping(e))?;
-
-        self.active_cfg = new_pdo_cfg;
-        Ok(())
-    }
-
-    pub fn default_parametrisation(&mut self) -> Result<(), MotorError> {
-        // switch to NMT Pre-OP
-        self.request_nmt_command(NmtCommandSpecifier::EnterPreOperational)
-            .map_err(|e| MotorError::PdoRemapping(e))?;
-
-        // Parametrise using SDO
-        for sdo_cmd in self.default_parameters {
-            if let Err(e) = self.sdo.new_cmd(sdo_cmd.clone()) {
-                error!(
-                    system = "Cia402Motor",
-                    "Failed to default parametrise motor {} - {:?}", self.id, e
-                );
-                assert!(
-                    false,
-                    "Failed to default parametrise motor {} - {:?}",
-                    self.id, e
-                )
-            }
-        }
-
-        // switch to NMT OP
-        self.request_nmt_command(NmtCommandSpecifier::StartRemoteNode)
-            .map_err(|e| MotorError::PdoRemapping(e))?;
-
-        Ok(())
+    pub fn default_parametrisation(&mut self) {
+        let script = get_parametrisation_script(&self.id, self.default_parameters);
+        self.run_script(script);
     }
 
     pub fn get_rpdo(&self) -> MotorRpdoSet {
@@ -297,21 +200,23 @@ impl Cia402Motor {
     /// Central work scheduler for the Cia402Motor Controller state machine
     pub fn tick(&mut self, ctx: &mut TickCtx) {
         use ControllerState::*;
-        match &mut self.controller_state {
-            Idle | Faulted(_) => {}
+        match &self.state {
+            Faulted(e) => {
+                // TODO: decide what to do here?
+                // GantryAxis should know about this for sure, to prevent skew
+            }
 
             Operating => {
                 // Check if setpoint is new & requires opmode switch
                 let new_opmode = self.active_setpoint.required_opmode();
+
                 // Does this opmode switch warrant a PDO remapping?
                 if switching_opmode_requires_pdo_remapping(&self.opmode, &new_opmode) {
                     // Get new opmode PDO mapping
-                    let new_pdo_cfg =
-                        self.pdo_cfg.get_cfg_for_opmode( &new_opmode);
+                    let new_pdo_cfg = self.pdo_cfg.get_cfg_for_opmode(&new_opmode);
 
                     // Get script (==all action steps required) to switch opmode
-                    let script = get_pdo_remap_script(&self.id, self.active_cfg,
-                        new_pdo_cfg);
+                    let script = get_pdo_remap_script(&self.id, self.active_cfg, new_pdo_cfg);
 
                     self.run_script(script, Purpose::OpModeSwitch(new_opmode));
                 } else {
@@ -320,20 +225,30 @@ impl Cia402Motor {
                 }
             }
 
-            Configuring(script, purpose) => {
+            Configuring => {
+                debug_assert!(self.active_script.is_some());
+                let Some(script) = self.active_script.as_mut() else {
+                    error!(
+                        system = "Cia402Motor",
+                        "In Configuring state but no active script"
+                    );
+                    self.fault(MotorError::Logic);
+                    return;
+                };
+
                 let step = &script.steps[script.cursor];
                 let done = match step {
                     ScriptStep::QuickStop => self.cia402_state.is_quick_stopped(),
-                    ScriptStep::Nmt { expect, .. } => self.nmt_observed == *expect,
-                    ScriptStep::Sdo(_) => match self.sdo.poll() {
+                    ScriptStep::Nmt { expect, .. } => self.nmt == *expect,
+                    ScriptStep::Sdo(c) => match self.sdo.poll() {
                         // non-blocking
                         SdoPoll::Done(Ok(_)) => true,
                         SdoPoll::Done(Err(e)) => {
-                            self.fault(e.into());
+                            self.fault(MotorError::ScriptSdoError(step.clone(), script.clone(), e));
                             return;
                         }
                         SdoPoll::Busy => false,
-                        SdoPoll::Idle => false, // waiting for slot, see below
+                        SdoPoll::Idle => false,
                     },
                     ScriptStep::EnableOperation => {
                         self.cia402_state == Cia402State::OperationEnabled
@@ -346,30 +261,57 @@ impl Cia402Motor {
 
                 if done {
                     script.cursor += 1;
-                    if script.cursor == script.steps.len() {
+                    if script.cursor >= script.steps.len() {
                         // Finish current script
-                        self.finish(purpose);
+                        self.finish_script();
                     } else {
                         // fires the entry action of the new step
-                        self.enter_step(ctx);
+                        if let Err(e) = self.perform_step(ctx) {
+                            self.fault(e);
+                        }
                     }
                 // Check for timeout
-                } else if ctx.now - script.started > step.timeout() {
-                    self.fault(MotorError::StepTimeout(script.cursor));
+                } else if ctx.now - self.active_script.started > step.timeout() {
+                    self.fault(MotorError::ScriptTimeout(
+                        step.clone(),
+                        self.active_script.clone(),
+                    ));
                 }
             }
         }
     }
 
-    fn enter_step(&mut self, ctx: &mut TickCtx) {
-        // The ONLY place an action is performed, exactly once per step.
-        match self.current_step() {
-            ScriptStep::Nmt { cmd, .. } => { ctx.io.send_nmt(*cmd, &self.id).ok(); self.nmt_commanded = ... }
-            ScriptStep::Sdo(cmd) => self.sdo.new_cmd(cmd.clone()),      // sent when the SDO slot allows
+    /// Performs a single [ScriptStep], this is the only place that can happen
+    fn perform_step(&mut self, ctx: &mut TickCtx) -> Result<(), MotorError> {
+        debug_assert!(self.active_script.is_some());
+        let Some(script) = self.active_script.as_mut() else {
+            error!(
+                system = "Cia402Motor",
+                "In Configuring state but no active script"
+            );
+            return Err(MotorError::Logic);
+        };
+        let step = &script.steps[script.cursor];
+        match step {
+            // Send NMT command directly on CAN
+            ScriptStep::Nmt { cmd, .. } => {
+                ctx.io
+                    .send_nmt(*cmd, &self.id)
+                    .map_err(|e| MotorError::ScriptCANOpenError(e, step.clone(), script.clone()))?;
+            }
+            ScriptStep::Sdo(cmd) => {
+                // Ask SDO manager to send out SDO at earliest convienence
+                self.sdo
+                    .new_cmd(cmd.clone())
+                    .map_err(|e| MotorError::SDOManagerError(e, step.clone(), script.clone()))?;
+            }
             ScriptStep::QuickStop | ScriptStep::EnableOperation | ScriptStep::DisableOperation => {} // via controlword, see below
-            ScriptStep::Settle(_) => {}
-        }
-        self.script.started = ctx.now;
+            ScriptStep::Settle(_) => { // Intentionally empty
+            }
+        };
+        script.started = ctx.now;
+
+        Ok(())
     }
 
     pub fn on_sync_feedback(&mut self) {
@@ -409,17 +351,11 @@ impl Cia402Motor {
             }
 
             MessageType::RSDO(s) => {
-                info!(
-                    system = "Cia402Motor",
-                    "Got RSDO {:?}", s
-                );
+                info!(system = "Cia402Motor", "Got RSDO {:?}", s);
             }
 
             MessageType::TSDO(s) => {
-                info!(
-                    system = "Cia402Motor",
-                    "Got TSDO {:?}", s
-                );
+                info!(system = "Cia402Motor", "Got TSDO {:?}", s);
                 self.sdo.on_tsdo(s);
             }
 
@@ -576,17 +512,35 @@ impl Cia402Motor {
     }
 
     pub fn do_e_stop(&mut self) {
-        debug!(system = "Cia402Motor", "MOTOR ESTOP TRIGGERED");
-        let estop_script = Script::new_starting_now(&script::estop::ESTOP_STEPS);
-        self.run_script(estop_script, Purpose::Estop);
+        warn!(system = "Cia402Motor", "MOTOR ESTOP TRIGGERED");
+        // TODO: avoid rebuilding at runtime by allowing for const scripts
+        let estop_script = Script::from_vec(
+            script::estop::ESTOP_STEPS.iter().cloned().collect(),
+            Purpose::Estop,
+        );
+        self.run_script(estop_script);
     }
 
-    fn run_script(&mut self, script: Script, purpose: Purpose) {
+    fn run_script(&mut self, script: Script) {
         debug!(
             system = "Cia402Motor",
             "{:?} -> Running script {:?}", purpose, script
         );
-        self.controller_state = ControllerState::Configuring(script, purpose);
+        self.active_script = Some(script);
+        self.state = ControllerState::Configuring;
+    }
+
+    fn fault(&mut self, error: MotorError) {
+        error!(system = "Cia402Motor", "FAULT - {:?}", error);
+        self.state = Faulted(error);
+    }
+
+    fn finish_script(&mut self) {
+        info!(
+            system = "Cia402Motor",
+            "Finished {:?} script - Start Operating", self.active_script.purpose
+        );
+        self.state = ControllerState::Operating;
     }
 }
 

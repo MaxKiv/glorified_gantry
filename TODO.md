@@ -1,32 +1,17 @@
 ## To Figure out:
 
-/home/max/git/saxion/glorified_gantry/motor-controller/src/motor/mod.rs:330
+/home/max/git/saxion/glorified_gantry/motor-controller/src/motor/script/parametrisation.rs:39
 
 First:
 
-- [x] Cia402Motor TPDO -> MotorState parsing
-- [ ] Cia402Motor Scripting engine (tick(), SdoPoll?)
+- [ ] Complete Cia402Motor Scripting engine (tick(), poll())
+- [ ] figure out how to do Cia402 transitions in Cia402Motor
 - [ ] Cia402Motor RPDO scheduling in profile modes?
 - [ ] Figure out how & when to write CAN messages in RT loop?
-  - [ ] Cia402Motor must indicate to RtEngine that it wants to do can stuff, how?
-        AKA: Figure out the CANOpen struct! Maybe this?
-
-        Create some sort of CanOpen structure with 2 sides, 1 tx side:
-        - accepts CanOpen concepts (nmt send, sdo cmd enqueue, etc)
-        - holds these in some internal queue?
-        - can poll rx side for milestones?
-          and another rx side that:
-        - drains internal queue, sends out canframes
-        - tracks milestones, like sdo download confirms?
-
+- [ ] Cia402Motor must write can sometimes, pass &mut CanOpen struct everywhere
 - [ ] Compile this shit
 - [ ] Construct CycleFeedback
-- [ ] Start testing, start small -> single drive bringup
-
-This allows us to schedule the canopen traffic at some deterministic point in
-the sync cycle, and allows us to yield and wait for sdo/nmt commands to confirm.
-
--> So far it seems writing CAN oportunistically is fine, Meh
+- [ ] Start testing, start small -> single drive bringup (parametrisation)
 
 Later:
 
@@ -34,6 +19,11 @@ Later:
 1. Validate TEST/DEMOSTRATOR HGantryNodeMap
 
 ## Improvements
+
+### Allow for const scripts
+
+avoid rebuilding ESTOP et al at runtime
+likely all scripts could be generated at compile or startup time
 
 ### Add motor scaling
 

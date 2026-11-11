@@ -180,4 +180,13 @@ impl CanOpen {
 
         Ok(())
     }
+
+    fn send_sdo_request(&self, request: &SdoManagerRequest) -> Result<(), CanOpenError> {
+        match request {
+            SdoManagerRequest::Upload(sdo) => self.send_sdo_upload(sdo)?,
+            SdoManagerRequest::Download(sdo) => self.send_sdo_download(sdo)?,
+        }
+
+        Ok(())
+    }
 }

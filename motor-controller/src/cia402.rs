@@ -12,6 +12,11 @@ pub enum Cia402State {
     FaultReactionActive,
     Fault,
 }
+impl Cia402State {
+    pub fn is_quick_stopped(&self) -> bool {
+        matches!(self, Cia402State::QuickStopActive)
+    }
+}
 
 pub struct Cia402Manager {
     cia402_state: Cia402State,

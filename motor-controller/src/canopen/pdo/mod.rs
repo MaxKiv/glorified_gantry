@@ -53,6 +53,10 @@ pub enum TransmissionType {
 }
 
 impl TransmissionType {
+    pub fn len_bytes(&self) -> usize {
+        size_of::<u8>()
+    }
+
     pub fn od_value(&self) -> u8 {
         match self {
             TransmissionType::OnSyncRPDO => 0x0,
