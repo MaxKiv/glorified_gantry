@@ -6,6 +6,7 @@ pub mod pdo;
 pub mod sdo;
 pub mod sync;
 
+use crate::canopen::frame::NodeId;
 use crate::canopen::pdo::RawRpdo;
 use crate::canopen::pdo::frame::RpdoFrame;
 use crate::canopen::sdo::manager::SdoManagerRequest;
@@ -45,7 +46,7 @@ pub enum CanOpenError {
     #[error("Unable to send NMT cmd {0:?} to {1:?}")]
     Nmt(NmtCommandSpecifier, Cia402Identifier),
     #[error("Unable to send Sdo Frame {0:?} to {1:?}")]
-    SdoSend(SdoFrame, Cia402Identifier),
+    SdoSend(SdoFrame, NodeId),
     #[error("Unable to enqueue Sdo Manager Request {0:?}")]
     SdoQueue(SdoManagerRequest),
     #[error("Unable to send Rpdo Frame {0:?} to {1:?}")]
@@ -137,12 +138,11 @@ impl CanOpen {
     }
 
     fn send_sdo_download(&self, sdo: &SdoDownload) -> Result<(), CanOpenError> {
-        let node = sdo.node;
         let frame = SdoFrame::new_write(sdo);
 
         self.can
             .write_frame(&frame.inner)
-            .map_err(|_| CanOpenError::SdoQueue(frame, node.clone()))?;
+            .map_err(|_| CanOpenError::SdoSend(frame, node.clone()))?;
 
         Ok(())
     }

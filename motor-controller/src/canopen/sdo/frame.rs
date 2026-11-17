@@ -1,5 +1,8 @@
 use crate::{
-    canopen::sdo::{SdoDownload, SdoUpload},
+    canopen::{
+        frame::NodeId,
+        sdo::{SdoDownload, SdoUpload},
+    },
     cia402::Cia402Identifier,
 };
 
@@ -49,18 +52,34 @@ pub struct SdoFrame {
 impl SdoFrame {
     /// Build an expedited SDO download (write) request, 1–4 data bytes
     pub fn new_write(sdo: &SdoDownload) -> Self {
-        let mut data = [0u8; 8];
-        let len = sdo.value.to_le_bytes(&mut data);
-        let cmd = SdoCommandSpecifier::expedited_download(len)
-            .expect("SDO expedited download requires 1-4 data bytes");
+        match sdo {
+            SdoDownload::Normal(super::NormalSdoDownload {
+                node,
+                od_entry,
+                value,
+                ..
+            }) => {
+                let mut data = [0u8; 8];
+                let len = value.to_le_bytes(&mut data);
+                let cmd = SdoCommandSpecifier::expedited_download(len)
+                    .expect("SDO expedited download requires 1-4 data bytes");
 
-        Self::new_raw_request(
-            sdo.node,
-            cmd,
-            sdo.od_entry.index,
-            sdo.od_entry.sub_index,
-            &data,
-        )
+                Self::new_raw_request(node.clone(), cmd, od_entry.index, od_entry.sub, &data)
+            }
+            SdoDownload::Raw(super::RawSdoDownload {
+                node,
+                index,
+                sub,
+                len,
+                data,
+                ..
+            }) => {
+                let cmd = SdoCommandSpecifier::expedited_download(*len)
+                    .expect("SDO expedited download requires 1-4 data bytes");
+
+                Self::new_raw_request(node.clone(), cmd, *index, *sub, data)
+            }
+        }
     }
 
     /// Build an SDO upload (read) request
@@ -84,19 +103,19 @@ impl SdoFrame {
     }
 
     fn new_raw_request(
-        node: &Cia402Identifier,
+        node: NodeId,
         cmd: SdoCommandSpecifier,
         index: u16,
-        sub_index: u8,
+        sub: u8,
         data: &[u8],
     ) -> Self {
-        let cob_id = SDO_REQUEST_BASE_COB_ID + u32::from(node.node_id.u8());
+        let cob_id = SDO_REQUEST_BASE_COB_ID + u32::from(node.u8());
 
         let mut payload = [0u8; 8];
         payload[0] = cmd.as_u8();
         payload[1] = index as u8;
         payload[2] = (index >> 8) as u8;
-        payload[3] = sub_index;
+        payload[3] = sub;
         payload[4..4 + data.len()].copy_from_slice(data);
 
         let inner: CanFrame =

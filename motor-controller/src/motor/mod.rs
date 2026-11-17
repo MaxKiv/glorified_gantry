@@ -13,6 +13,7 @@ use crate::canopen::od::entry::PdoSemantic;
 use crate::canopen::od::value::ODValue;
 use crate::canopen::pdo::RawRpdo;
 use crate::canopen::pdo::mapping::PdoValue;
+use crate::canopen::sdo::action::SdoAction;
 use crate::canopen::sdo::manager::SdoPoll;
 use crate::cw::ControlWord;
 use crate::motor::ControllerState::Faulted;
@@ -78,8 +79,8 @@ pub struct Cia402Motor {
     target_velocity: i32,
     target_torque: i16,
 
-    limits: Cia402MotorLimits,                 // Profile limits
-    default_parameters: &'static [SdoCommand], // All configuration parameters
+    limits: Cia402MotorLimits,                         // Profile limits
+    default_parameters: &'static [SdoAction<'static>], // All configuration parameters
 }
 
 /// State of the Cia402Motor Controller
@@ -99,22 +100,22 @@ impl Cia402Motor {
     pub fn new(
         id: Cia402Identifier,
         pdo_cfg: &'static NodePdoConfig,
-        default_parameters: &'static [SdoCommand],
+        default_parameters: &'static [SdoAction<'static>],
     ) -> Self {
         let nmt = NmtState::Bootup;
         let opmode = OperationMode::default();
         let cia402_state = Cia402State::default();
         let active_cfg = pdo_cfg.get_cfg_for_opmode(&opmode);
 
-        Self {
+        let mut out = Self {
             id,
             nmt,
             opmode,
-            active_setpoint: None,
+            active_setpoint: Setpoint::default(),
             cia402_state,
             pdo_cfg,
             active_cfg,
-            state: ControllerState::Idle,
+            state: ControllerState::Configuring,
             default_parameters,
             motor_state: MotorState::new(),
             feedback: MotorFeedback::new(),
@@ -126,8 +127,13 @@ impl Cia402Motor {
             limits: todo!(),
             controlword: todo!(),
             statusword: todo!(),
-            active_script: STARTUP_DRIVE_SCRIPT, // TODO
-        }
+            active_script: None,
+        };
+
+        // Start parametrised
+        out.default_parametrisation();
+
+        out
     }
 
     pub fn process_nmt_message(&mut self, msg: NmtMonitorMessage) {
@@ -135,29 +141,13 @@ impl Cia402Motor {
         self.nmt = msg.current_state;
     }
 
-    /// Switches drive [`OperationMode`], remapping pdo if required
-    /// NOTE: this must be called at the start of a cycle
-    pub fn switch_operation_mode(&mut self, new: &OperationMode) -> Result<(), MotorError> {
-        // Is a pdo remapping required?
-        if switching_opmode_requires_pdo_remapping(&self.opmode, new) {
-            // NOTE: this requires a bunch of sdo calls, so take care to call this at cycle start
-            self.switch_pdo_config(new)?;
-        }
-
-        // NOTE: switch to new opmode, like any state changes, are done at the appropriate place
-        // in the sync cycle
-        self.opmode = *new;
-
-        Ok(())
-    }
-
     /// Sets new motor setpoint
     pub fn new_motor_setpoint(&mut self, new_sp: Setpoint) {
-        self.active_setpoint = Some(new_sp);
+        self.active_setpoint = new_sp;
     }
 
     pub fn default_parametrisation(&mut self) {
-        let script = get_parametrisation_script(&self.id, self.default_parameters);
+        let script = get_parametrisation_script(self.id.node_id, self.default_parameters);
         self.run_script(script);
     }
 
@@ -204,6 +194,8 @@ impl Cia402Motor {
             Faulted(e) => {
                 // TODO: decide what to do here?
                 // GantryAxis should know about this for sure, to prevent skew
+
+                warn!(system = "Cia402Motor", "Faulted: {:?}", e);
             }
 
             Operating => {
@@ -216,9 +208,10 @@ impl Cia402Motor {
                     let new_pdo_cfg = self.pdo_cfg.get_cfg_for_opmode(&new_opmode);
 
                     // Get script (==all action steps required) to switch opmode
-                    let script = get_pdo_remap_script(&self.id, self.active_cfg, new_pdo_cfg);
+                    let script =
+                        get_pdo_remap_script(&self.id, self.active_cfg, new_pdo_cfg, &new_opmode);
 
-                    self.run_script(script, Purpose::OpModeSwitch(new_opmode));
+                    self.run_script(script);
                 } else {
                     // No PDO remap required, plain switch -> updated through RPDO later
                     self.opmode = new_opmode;
@@ -240,11 +233,13 @@ impl Cia402Motor {
                 let done = match step {
                     ScriptStep::QuickStop => self.cia402_state.is_quick_stopped(),
                     ScriptStep::Nmt { expect, .. } => self.nmt == *expect,
-                    ScriptStep::Sdo(c) => match self.sdo.poll() {
+                    ScriptStep::Sdo(_) => match self.sdo.poll() {
                         // non-blocking
                         SdoPoll::Done(Ok(_)) => true,
                         SdoPoll::Done(Err(e)) => {
-                            self.fault(MotorError::ScriptSdoError(step.clone(), script.clone(), e));
+                            let err_script = script.clone();
+                            let err_step = step.clone();
+                            self.fault(MotorError::ScriptSdoError(err_step, err_script, e));
                             return;
                         }
                         SdoPoll::Busy => false,
@@ -271,11 +266,10 @@ impl Cia402Motor {
                         }
                     }
                 // Check for timeout
-                } else if ctx.now - self.active_script.started > step.timeout() {
-                    self.fault(MotorError::ScriptTimeout(
-                        step.clone(),
-                        self.active_script.clone(),
-                    ));
+                } else if ctx.now - script.started > step.timeout() {
+                    let err_script = script.clone();
+                    let err_step = step.clone();
+                    self.fault(MotorError::ScriptTimeout(err_step, err_script));
                 }
             }
         }
@@ -524,7 +518,7 @@ impl Cia402Motor {
     fn run_script(&mut self, script: Script) {
         debug!(
             system = "Cia402Motor",
-            "{:?} -> Running script {:?}", purpose, script
+            "{:?} -> Running script {:?}", script.purpose, script
         );
         self.active_script = Some(script);
         self.state = ControllerState::Configuring;
@@ -532,13 +526,25 @@ impl Cia402Motor {
 
     fn fault(&mut self, error: MotorError) {
         error!(system = "Cia402Motor", "FAULT - {:?}", error);
+        self.do_e_stop();
+
         self.state = Faulted(error);
     }
 
     fn finish_script(&mut self) {
+        debug_assert!(self.active_script.is_some());
+        let Some(script) = self.active_script.as_mut() else {
+            error!(
+                system = "Cia402Motor",
+                "finish_script without active script"
+            );
+            self.fault(MotorError::Logic);
+            return;
+        };
+
         info!(
             system = "Cia402Motor",
-            "Finished {:?} script - Start Operating", self.active_script.purpose
+            "Finished {:?} script - Start Operating", script.purpose
         );
         self.state = ControllerState::Operating;
     }

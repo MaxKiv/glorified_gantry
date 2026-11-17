@@ -18,9 +18,10 @@ use crate::{
     },
     cia402::Cia402Identifier,
     motor::script::{
-        Script,
+        Purpose, Script,
         ScriptStep::{self, *},
     },
+    oms::OperationMode,
 };
 
 // PDO mapping validity toggle
@@ -68,6 +69,7 @@ pub fn get_pdo_remap_script(
     id: &Cia402Identifier,
     old: &OMSNodePdoConfig,
     new: &OMSNodePdoConfig,
+    new_opmode: &OperationMode,
 ) -> Script {
     /// Steps to take before PDO mapping change
     pub const PDO_REMAP_START: [ScriptStep; 2] = [
@@ -95,7 +97,7 @@ pub fn get_pdo_remap_script(
 
     steps.extend(PDO_REMAP_END);
 
-    Script::from_vec(steps)
+    Script::from_vec(steps, Purpose::OpModeSwitch(new_opmode.clone()))
 }
 
 /// Get a [Vec<ScriptStep>] containing all SDO writes required to switch a [CiA402Motor] to a new [OMSNodePdoConfig]

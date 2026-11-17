@@ -64,13 +64,13 @@ pub struct SdoCommand {
 }
 
 impl SdoCommand {
-    pub fn upload(node: &'static Cia402Identifier, od_entry: &'static ODEntry) -> Self {
+    pub fn upload(node: NodeId, od_entry: &'static ODEntry) -> Self {
         let request = SdoManagerRequest::Upload(SdoUpload {
             node,
             od_entry,
             result: None,
         });
-        let result = SdoUploadResult::new_from_od_entry(node.node_id, od_entry);
+        let result = SdoUploadResult::new_from_od_entry(node, od_entry);
         let expected_answer = SdoResponse::UploadConfirm(result);
 
         SdoCommand {
@@ -79,18 +79,14 @@ impl SdoCommand {
         }
     }
 
-    pub fn download(
-        node: &'static Cia402Identifier,
-        od_entry: &'static ODEntry,
-        value: ODValue,
-    ) -> Self {
+    pub fn download(node: NodeId, od_entry: &'static ODEntry, value: ODValue) -> Self {
         let request = SdoManagerRequest::Download(SdoDownload::Normal(NormalSdoDownload {
             node,
             od_entry,
             result: None,
             value,
         }));
-        let result = SdoDownloadConfirmed::new_from_od_entry(node.node_id, od_entry);
+        let result = SdoDownloadConfirmed::new_from_od_entry(node, od_entry);
         let expected_answer = SdoResponse::DownloadConfirm(result);
 
         SdoCommand {
@@ -122,7 +118,7 @@ impl SdoCommand {
         }
     }
 
-    pub fn from_action(node: &'static Cia402Identifier, action: &SdoAction) -> Self {
+    pub fn from_action(node: NodeId, action: &SdoAction) -> Self {
         match action {
             SdoAction::Download { entry, data } => {
                 // TODO: hacky?
@@ -139,12 +135,12 @@ impl SdoCommand {
     pub fn bullshit() -> Self {
         Self {
             request: SdoManagerRequest::Upload(SdoUpload {
-                node: &crate::cia402::BS_NODE,
+                node: NodeId::INVALID,
                 od_entry: &crate::canopen::od::DEVICE_TYPE,
                 result: None,
             }),
             expected_answer: SdoResponse::Error(super::SdoError {
-                from: crate::cia402::BS_NODE.node_id,
+                from: NodeId::INVALID,
                 index: 0,
                 sub: 0,
                 code: 0,
@@ -159,7 +155,7 @@ impl SdoCommand {
                 node,
                 od_entry,
                 ..
-            })) => (node.node_id.clone(), od_entry.index, od_entry.sub),
+            })) => (node.clone(), od_entry.index, od_entry.sub),
             SdoManagerRequest::Download(SdoDownload::Raw(RawSdoDownload {
                 node,
                 index,

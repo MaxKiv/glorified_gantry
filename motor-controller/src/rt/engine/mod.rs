@@ -15,6 +15,7 @@ use crate::{
     consts::RT_CONFIG,
     fifo::Fifo,
     frontend::{GantryCommand, GantrySetpoint},
+    motor::TickCtx,
     oms::OperationMode,
     rt::{
         RtError,
@@ -222,7 +223,7 @@ impl RtEngine {
                 self.start_sync_cycle()?;
             }
 
-            // Advance SDO state machine
+            // Service SDO
             // This sends at most 1 SDO call out to a device, in an attempt to guarantee never
             // exceeding the synchronisation window
             if self.state == RtState::Cyclic {
@@ -560,9 +561,9 @@ impl RtEngine {
         }
     }
 
-    fn tick(&mut self) {
+    fn tick(&mut self, ctx: &mut TickCtx) {
         for axis in self.axi.iter_mut().flatten() {
-            axis.tick();
+            axis.tick(ctx);
         }
     }
 

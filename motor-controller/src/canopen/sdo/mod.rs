@@ -14,7 +14,7 @@ use crate::{
 
 #[derive(Debug, Clone)]
 pub struct SdoUpload {
-    pub node: &'static Cia402Identifier,
+    pub node: NodeId,
     pub od_entry: &'static ODEntry,
     pub result: Option<SdoUploadResult>,
 }
@@ -27,7 +27,7 @@ pub enum SdoDownload {
 
 #[derive(Debug, Clone)]
 pub struct NormalSdoDownload {
-    pub node: &'static Cia402Identifier,
+    pub node: NodeId,
     pub od_entry: &'static ODEntry,
     pub value: ODValue,
     pub result: Option<SdoDownloadConfirmed>,

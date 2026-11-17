@@ -1,6 +1,10 @@
 ## To Figure out:
 
-/home/max/git/saxion/glorified_gantry/motor-controller/src/motor/script/parametrisation.rs:39
+src/canopen/mod.rs:141
+
+zero:
+
+- refactor SdoCommand et al to use NodeId instead of &Cia402Identifier...
 
 First:
 

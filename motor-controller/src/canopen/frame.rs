@@ -6,7 +6,6 @@ use crate::{
         EmergencyMessage, MessageType, NmtControlMessage, NmtMonitorMessage, SyncMessage,
         emcy::EMCY,
         nmt::{NmtCommandSpecifier, NmtState},
-        od::entry::ODEntry,
         pdo::message::RawPdoMessage,
         sdo::{SdoRequest, SdoResponse},
     },
@@ -21,6 +20,8 @@ pub struct CobId(pub u16);
 pub struct NodeId(pub u8);
 
 impl NodeId {
+    pub const INVALID: NodeId = NodeId(128);
+
     pub fn new(id: u8) -> Self {
         assert!(
             id <= MAX_NODE_ID as u8,

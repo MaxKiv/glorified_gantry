@@ -1,12 +1,12 @@
 use crate::{
     canopen::{
+        frame::NodeId,
         nmt::{
             NmtCommandSpecifier::{EnterPreOperational, StartRemoteNode},
             NmtState::{Operational, PreOperational},
         },
         sdo::{action::SdoAction, manager::SdoCommand},
     },
-    cia402::Cia402Identifier,
     motor::script::{
         Purpose, Script,
         ScriptStep::{self, *},
@@ -14,7 +14,7 @@ use crate::{
 };
 
 /// Get a [Vec<ScriptStep>] containing all actions required to parametrise a [CiA402Motor]
-pub fn get_parametrisation_script(id: &Cia402Identifier, parameters: &[SdoAction]) -> Script {
+pub fn get_parametrisation_script(node: NodeId, parameters: &'static [SdoAction]) -> Script {
     /// Steps to take before PDO mapping change
     pub const PARAMETRISATION_START_STEPS: [ScriptStep; 2] = [
         QuickStop,
@@ -37,7 +37,7 @@ pub fn get_parametrisation_script(id: &Cia402Identifier, parameters: &[SdoAction
 
     steps.extend(PARAMETRISATION_START_STEPS);
     for action in parameters {
-        let cmd = SdoCommand::from_action(id, action);
+        let cmd = SdoCommand::from_action(node, action);
         steps.push(ScriptStep::Sdo(cmd));
     }
     steps.extend(PARAMETRISATION_END_STEPS);

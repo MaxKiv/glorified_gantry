@@ -11,7 +11,7 @@ use crate::{
     },
     cia402::Cia402Identifier,
     consts::pdo::NodePdoConfig,
-    motor::{Cia402Motor, MotorRpdoSet},
+    motor::{Cia402Motor, MotorRpdoSet, TickCtx},
     oms::{OperationMode, setpoint::Setpoint},
     rt::engine::cfg::Axis,
 };
@@ -39,16 +39,15 @@ impl GantryAxis {
         axis: Axis,
         master: Cia402Identifier,
         slave: Option<Cia402Identifier>,
-        canopen: CanOpen,
         scaling: AxisScaling,
         pdo_cfg: &'static NodePdoConfig,
         default_parameters: &'static [SdoCommand],
     ) -> Self {
         // Start master
-        let master = Cia402Motor::new(master, canopen, pdo_cfg, default_parameters);
+        let master = Cia402Motor::new(master, pdo_cfg, default_parameters);
         let slave = slave
             .as_ref()
-            .map(|s| Cia402Motor::new(s.clone(), canopen, pdo_cfg, default_parameters));
+            .map(|s| Cia402Motor::new(s.clone(), pdo_cfg, default_parameters));
         let opmode = OperationMode::default();
 
         Self {
@@ -78,17 +77,6 @@ impl GantryAxis {
             .flatten()
     }
 
-    pub fn switch_opmode(&mut self, new_opmode: &OperationMode) -> Result<(), AxisError> {
-        for motor in self.get_axis_motors_mut() {
-            motor
-                .switch_operation_mode(new_opmode)
-                .map_err(|_| AxisError::UnableToSwitchOpMode(*new_opmode))?;
-        }
-
-        self.opmode = *new_opmode;
-        Ok(())
-    }
-
     /// Push a new setpoint to the axis master drive, and slave if any
     pub fn new_axis_setpoint(&mut self, setpoint: Setpoint) {
         // TODO: scale setpoint using AxisScaling
@@ -102,19 +90,9 @@ impl GantryAxis {
         }
     }
 
-    pub fn default_parametrisation(&mut self) -> Result<(), AxisError> {
+    pub fn tick(&mut self, ctx: &mut TickCtx) {
         for motor in self.get_axis_motors_mut() {
-            motor
-                .default_parametrisation()
-                .map_err(|_| AxisError::UnableToDefaultParametrise(motor.id.clone()));
-        }
-
-        Ok(())
-    }
-
-    pub fn tick(&mut self) {
-        for motor in self.get_axis_motors_mut() {
-            motor.tick();
+            motor.tick(ctx);
         }
     }
 

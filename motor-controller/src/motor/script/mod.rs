@@ -13,7 +13,7 @@ use crate::{
     oms::OperationMode,
 };
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Purpose {
     Startup,
     OpModeSwitch(OperationMode),
