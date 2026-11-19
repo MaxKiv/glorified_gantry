@@ -1,14 +1,10 @@
 pub mod error;
 pub mod limits;
-pub mod pdo;
 pub mod script;
 pub mod state;
 
 use std::time::Instant;
 
-use crate::canopen::nmt::NmtCommandSpecifier::EnterPreOperational;
-use crate::canopen::nmt::NmtCommandSpecifier::StartRemoteNode;
-use crate::canopen::nmt::NmtState::Operational;
 use crate::canopen::od::entry::PdoSemantic;
 use crate::canopen::od::value::ODValue;
 use crate::canopen::pdo::RawRpdo;
@@ -36,14 +32,14 @@ pub type MotorRpdoSet = [Option<RawRpdo>; 4];
 
 use crate::{
     canopen::{
-        CanOpen, CanOpenError, MessageType,
+        CanOpen, MessageType,
         frame::CanOpenFrame,
         nmt::{
-            NmtCommandSpecifier, NmtMonitorMessage,
-            NmtState::{self, PreOperational},
+            NmtMonitorMessage,
+            NmtState::{self},
         },
         pdo::{PdoType, mapping::OMSNodePdoConfig},
-        sdo::manager::{SdoCommand, SdoManager},
+        sdo::manager::SdoManager,
     },
     cia402::{Cia402Identifier, Cia402State},
     consts::pdo::NodePdoConfig,
@@ -97,7 +93,7 @@ pub struct TickCtx<'a> {
 }
 
 impl Cia402Motor {
-    pub fn new(
+    pub fn start_parametrised(
         id: Cia402Identifier,
         pdo_cfg: &'static NodePdoConfig,
         default_parameters: &'static [SdoAction<'static>],

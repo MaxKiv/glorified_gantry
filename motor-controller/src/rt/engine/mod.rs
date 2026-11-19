@@ -156,8 +156,6 @@ impl RtEngine {
     fn run(&mut self) -> Result<(), RtError> {
         info!("RT Thread started");
 
-        self.startup_drives()?;
-
         // Arm SYNC timer
         self.sync_timer.arm().map_err(|_| RtError::Timer)?;
 
@@ -504,40 +502,6 @@ impl RtEngine {
 
     fn set_rt_state(&mut self, new_state: RtState) {
         self.state = new_state;
-    }
-
-    // Startup?
-    // Set NMT OP?
-    // parametrise_motor?
-    //TODO:
-    fn startup_drives(&mut self) -> Result<(), RtError> {
-        // Each axis:
-        // - Default parametrise
-        // - Default operationmode
-        // TODO: nicer errors
-        for axis in self.axi.iter_mut().as_mut_slice.flatten() {
-            axis.default_parametrisation()
-                .map_err(|_| RtError::Startup)?;
-            axis.switch_opmode(&OperationMode::default())
-                .map_err(|_| RtError::Startup)?;
-        }
-
-        // Drives end in NMT Op + Cia402 disabled
-
-        Ok(())
-    }
-
-    // TODO:
-    fn mode_switch(&self, motor: &Cia402Identifier) -> Result<(), RtError> {
-        // NMT PreOp
-        self.canopen
-            .send_nmt(NmtCommandSpecifier::EnterPreOperational, motor);
-
-        // Mode-specific Parametrisation
-
-        // NMT OP + Cia402 Disabled
-
-        Ok(())
     }
 
     /// Push a newly received setpoint to each of the gantry axis

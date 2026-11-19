@@ -2,12 +2,10 @@ use tracing::info;
 use uom::si::f64::Length;
 
 use crate::{
-    axis::{error::AxisError, scaling::AxisScaling},
+    axis::{cfg::AxisConfig, scaling::AxisScaling},
     canopen::{
-        CanOpen,
         frame::{CanOpenFrame, NodeId},
-        nmt::NmtCommandSpecifier,
-        sdo::manager::SdoCommand,
+        sdo::action::SdoAction,
     },
     cia402::Cia402Identifier,
     consts::pdo::NodePdoConfig,
@@ -16,6 +14,7 @@ use crate::{
     rt::engine::cfg::Axis,
 };
 
+pub mod cfg;
 pub mod error;
 pub mod scaling;
 
@@ -31,23 +30,20 @@ pub struct GantryAxis {
     pub scaling: AxisScaling,
     pub opmode: OperationMode,
     pdo_cfg: &'static NodePdoConfig, // All motors in axis have the same const pdo_cfg
-    default_parameters: &'static [SdoCommand],
+    default_parameters: &'static [SdoAction<'static>],
 }
 
 impl GantryAxis {
-    pub fn new(
-        axis: Axis,
-        master: Cia402Identifier,
-        slave: Option<Cia402Identifier>,
-        scaling: AxisScaling,
-        pdo_cfg: &'static NodePdoConfig,
-        default_parameters: &'static [SdoCommand],
-    ) -> Self {
+    pub fn start_parametrised(cfg: AxisConfig, pdo_cfg: &'static NodePdoConfig) -> Self {
         // Start master
-        let master = Cia402Motor::new(master, pdo_cfg, default_parameters);
-        let slave = slave
+        let axis = cfg.axis;
+        let scaling = cfg.scaling;
+        let default_parameters = cfg.default_parameters;
+        let master = Cia402Motor::start_parametrised(cfg.master, pdo_cfg, default_parameters);
+        let slave = cfg
+            .slave
             .as_ref()
-            .map(|s| Cia402Motor::new(s.clone(), pdo_cfg, default_parameters));
+            .map(|s| Cia402Motor::start_parametrised(s.clone(), pdo_cfg, default_parameters));
         let opmode = OperationMode::default();
 
         Self {

@@ -1,8 +1,9 @@
 use socketcan::{CanFrame, Frame};
 
-use crate::{
-    canopen::pdo::{PdoType, RawRpdo},
-    cia402::Cia402Identifier,
+use crate::canopen::{
+    CanOpenError,
+    frame::NodeId,
+    pdo::{PdoType, RawRpdo},
 };
 
 #[derive(Debug)]
@@ -11,16 +12,18 @@ pub struct RpdoFrame {
 }
 
 impl RpdoFrame {
-    pub fn new_from_raw_rpdo(raw_rpdo: RawRpdo, num: u16, node: &Cia402Identifier) -> Self {
+    pub fn new_from_raw_rpdo(
+        raw_rpdo: RawRpdo,
+        num: u16,
+        id: NodeId,
+    ) -> Result<Self, CanOpenError> {
         let cob_id = PdoType::RPDO
-            .get_pdo_cob_id(node.id)
-            .ok_or(DriveError::ViolatedInvariant(
-                "Asked for the cob_id for PDO number: {rpdo_num} > 4".to_string(),
-            ))?;
+            .get_pdo_cob_id(num, id.u8())
+            .ok_or(CanOpenError::RpdoFrame(raw_rpdo))?;
 
-        let inner: CanFrame = CanFrame::from_raw_id(cob_id, &raw_rpdo.to_le_bytes())
-            .expect("failed to construct NMT frame");
+        let inner: CanFrame = CanFrame::from_raw_id(cob_id as u32, &raw_rpdo.to_le_bytes())
+            .ok_or(CanOpenError::RpdoFrame(raw_rpdo))?;
 
-        Self { inner }
+        Ok(Self { inner })
     }
 }

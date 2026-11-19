@@ -46,6 +46,7 @@ impl SdoCommandSpecifier {
 
 #[derive(Debug)]
 pub struct SdoFrame {
+    pub node: NodeId,
     pub inner: CanFrame,
 }
 
@@ -93,15 +94,6 @@ impl SdoFrame {
         )
     }
 
-    /// Wrap a received CAN frame (from 0x580 + node_id) into an SdoFrame response
-    pub fn from_response(frame: CanFrame) -> Self {
-        debug_assert!(
-            (frame.id_word() & !0x7F) == SDO_RESPONSE_BASE_COB_ID,
-            "CAN frame is not an SDO response (expected COB-ID 0x580 + node_id)"
-        );
-        Self { inner: frame }
-    }
-
     fn new_raw_request(
         node: NodeId,
         cmd: SdoCommandSpecifier,
@@ -121,6 +113,6 @@ impl SdoFrame {
         let inner: CanFrame =
             CanFrame::from_raw_id(cob_id, &payload).expect("failed to construct SDO frame");
 
-        Self { inner }
+        Self { inner, node }
     }
 }

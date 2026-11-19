@@ -44,7 +44,7 @@ impl NodePdoConfig {
 }
 
 /// Default configuration of a single node/motor
-const DEFAULT_NODE_PDOCFG: NodePdoConfig = NodePdoConfig {
+pub const DEFAULT_NODE_PDOCFG: NodePdoConfig = NodePdoConfig {
     profile_position: DEFAULT_PP_PDOCFG,
     profile_velocity: DEFAULT_PV_PDOCFG,
     profile_torque: DEFAULT_PT_PDOCFG,

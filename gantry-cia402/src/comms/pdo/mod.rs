@@ -246,7 +246,7 @@ impl Pdo {
         self.set_operational_mode(new_mode);
 
         // Send RPDO1 to effect mode switch
-        trace!("Sending RPDO1 to effect mode switch");
+        trace!("Sending RPDO1 tjo effect mode switch");
         self.send_rpdo(RPDO_CONTROL_OPMODE).await?;
 
         let pdo_set = self.pdo_table.get_pdoset_for_operationmode(new_mode);

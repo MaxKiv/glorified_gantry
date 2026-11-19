@@ -46,11 +46,13 @@ pub enum CanOpenError {
     #[error("Unable to send NMT cmd {0:?} to {1:?}")]
     Nmt(NmtCommandSpecifier, Cia402Identifier),
     #[error("Unable to send Sdo Frame {0:?} to {1:?}")]
-    SdoSend(SdoFrame, NodeId),
+    SdoSend(CanFrame, NodeId),
     #[error("Unable to enqueue Sdo Manager Request {0:?}")]
     SdoQueue(SdoManagerRequest),
     #[error("Unable to send Rpdo Frame {0:?} to {1:?}")]
-    Rpdo(RpdoFrame, Cia402Identifier),
+    RpdoSend(RpdoFrame, Cia402Identifier),
+    #[error("Invalid RPDO frame: {0:?}")]
+    RpdoFrame(RawRpdo),
 }
 
 /// Thin socketcan wrapper for CANOpen primitives
@@ -128,11 +130,11 @@ impl CanOpen {
         num: u16,
         motor: &Cia402Identifier,
     ) -> Result<(), CanOpenError> {
-        let frame = RpdoFrame::new_from_raw_rpdo(raw_rpdo, num as u16, motor);
+        let frame = RpdoFrame::new_from_raw_rpdo(raw_rpdo, num as u16, motor.node_id)?;
 
         self.can
             .write_frame(&frame.inner)
-            .map_err(|_| CanOpenError::Rpdo(frame, motor.clone()))?;
+            .map_err(|_| CanOpenError::RpdoSend(frame, motor.clone()))?;
 
         Ok(())
     }
@@ -142,18 +144,17 @@ impl CanOpen {
 
         self.can
             .write_frame(&frame.inner)
-            .map_err(|_| CanOpenError::SdoSend(frame, node.clone()))?;
+            .map_err(|_| CanOpenError::SdoSend(frame.inner, frame.node))?;
 
         Ok(())
     }
 
     fn send_sdo_upload(&self, sdo: &SdoUpload) -> Result<(), CanOpenError> {
-        let node = sdo.node;
         let frame = SdoFrame::new_read(sdo);
 
         self.can
             .write_frame(&frame.inner)
-            .map_err(|_| CanOpenError::SdoQueue(frame, node.clone()))?;
+            .map_err(|_| CanOpenError::SdoSend(frame.inner, frame.node))?;
 
         Ok(())
     }

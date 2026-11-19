@@ -130,7 +130,8 @@ impl CanOpenFrame {
                     // T/RPDO1..4 (0x180 + n*0x200)
                     0x180..=0x57F => {
                         let msg = RawPdoMessage::try_from_can_frame(cob_id, frame)?;
-                        (MessageType::PDO(msg), Some(msg.node_id))
+                        let node_id = msg.node_id.clone();
+                        (MessageType::PDO(msg), Some(node_id))
                     }
 
                     // 0x580–0x5FF -> TSDO
