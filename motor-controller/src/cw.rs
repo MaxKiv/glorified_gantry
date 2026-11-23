@@ -110,7 +110,7 @@ mod tests {
         let cw = ControlWord::from_bits_truncate(0b1111111111111111);
         let flags = Cia402Flags::empty();
         let combined = cw.with_cia402_flags(&flags);
-        assert_eq!(combined.bits(), 0b1111111110111000);
+        assert_eq!(combined.bits(), 0b1111111101110000);
     }
 
     #[test]

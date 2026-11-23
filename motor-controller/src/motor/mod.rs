@@ -1,9 +1,10 @@
+pub mod cfg;
+pub mod ctx;
 pub mod error;
 pub mod limits;
 pub mod script;
 pub mod state;
-
-use std::time::Instant;
+pub mod targets;
 
 use crate::canopen::od::entry::PdoSemantic;
 use crate::canopen::od::value::ODValue;
@@ -11,14 +12,18 @@ use crate::canopen::pdo::RawRpdo;
 use crate::canopen::pdo::mapping::PdoValue;
 use crate::canopen::sdo::action::SdoAction;
 use crate::canopen::sdo::manager::SdoPoll;
+use crate::consts::TEST_LIMITS;
 use crate::cw::ControlWord;
 use crate::motor::ControllerState::Faulted;
+use crate::motor::cfg::MotorConfig;
+use crate::motor::ctx::TickCtx;
 use crate::motor::limits::Cia402MotorLimits;
 use crate::motor::script::Purpose;
 use crate::motor::script::Script;
 use crate::motor::script::ScriptStep;
 use crate::motor::script::opmode_switch::get_pdo_remap_script;
 use crate::motor::script::parametrisation::get_parametrisation_script;
+use crate::motor::targets::Cia402MotorTargets;
 use crate::rt::MotorFeedback;
 use crate::sw::StatusWord;
 use tracing::debug;
@@ -32,7 +37,7 @@ pub type MotorRpdoSet = [Option<RawRpdo>; 4];
 
 use crate::{
     canopen::{
-        CanOpen, MessageType,
+        MessageType,
         frame::CanOpenFrame,
         nmt::{
             NmtMonitorMessage,
@@ -70,11 +75,7 @@ pub struct Cia402Motor {
     controlword: ControlWord,      // Active controlword
     statusword: StatusWord,        // Last received statusword
 
-    // Collection of latest setpoint per relevant mode
-    target_position: i32,
-    target_velocity: i32,
-    target_torque: i16,
-
+    targets: Cia402MotorTargets,                       // Profile targets
     limits: Cia402MotorLimits,                         // Profile limits
     default_parameters: &'static [SdoAction<'static>], // All configuration parameters
 }
@@ -86,25 +87,17 @@ enum ControllerState {
     Faulted(MotorError), // Something bad
 }
 
-pub struct TickCtx<'a> {
-    now: Instant,
-    io: &'a mut CanOpen,
-    sdo_slot_free: bool,
-}
-
 impl Cia402Motor {
-    pub fn start_parametrised(
-        id: Cia402Identifier,
-        pdo_cfg: &'static NodePdoConfig,
-        default_parameters: &'static [SdoAction<'static>],
-    ) -> Self {
+    pub fn start_parametrised(cfg: MotorConfig) -> Self {
         let nmt = NmtState::Bootup;
         let opmode = OperationMode::default();
         let cia402_state = Cia402State::default();
+        let pdo_cfg = cfg.pdo;
         let active_cfg = pdo_cfg.get_cfg_for_opmode(&opmode);
+        let limits = TEST_LIMITS.clone();
 
         let mut out = Self {
-            id,
+            id: cfg.id,
             nmt,
             opmode,
             active_setpoint: Setpoint::default(),
@@ -112,17 +105,15 @@ impl Cia402Motor {
             pdo_cfg,
             active_cfg,
             state: ControllerState::Configuring,
-            default_parameters,
+            default_parameters: cfg.default_parameters,
             motor_state: MotorState::new(),
             feedback: MotorFeedback::new(),
             tpdo_rx: [false; 4],
-            sdo: todo!(),
-            target_position: todo!(),
-            target_velocity: todo!(),
-            target_torque: todo!(),
-            limits: todo!(),
-            controlword: todo!(),
-            statusword: todo!(),
+            sdo: SdoManager::new(),
+            targets: Cia402MotorTargets::new(),
+            limits,
+            controlword: ControlWord::default(),
+            statusword: StatusWord::default(),
             active_script: None,
         };
 
@@ -133,7 +124,7 @@ impl Cia402Motor {
     }
 
     pub fn process_nmt_message(&mut self, msg: NmtMonitorMessage) {
-        assert!(msg.node_id == self.id.node_id);
+        debug_assert!(msg.node_id == self.id.node_id);
         self.nmt = msg.current_state;
     }
 
@@ -155,7 +146,7 @@ impl Cia402Motor {
         for (num, rpdo) in self.active_cfg.rpdo.iter().enumerate() {
             if let Some(rpdo) = rpdo {
                 trace!(system = "Cia402Motor", "get_rpdo - rpdo #{} mapped", num);
-                assert!(
+                debug_assert!(
                     rpdo.pdo == PdoType::RPDO,
                     "Non-RPDO mapping in self.active_cfg.rpdos.iter()",
                 );
@@ -184,8 +175,15 @@ impl Cia402Motor {
     }
 
     /// Central work scheduler for the Cia402Motor Controller state machine
+    /// Schedules non-blocking (== non I/O) work for this motor
     pub fn tick(&mut self, ctx: &mut TickCtx) {
+        debug!(system = "Cia402Motor", "tick()",);
         use ControllerState::*;
+
+        // Schedule SDO manager work
+        self.sdo.tick(ctx);
+
+        // Cia402Motor State machine
         match &self.state {
             Faulted(e) => {
                 // TODO: decide what to do here?
@@ -197,20 +195,25 @@ impl Cia402Motor {
             Operating => {
                 // Check if setpoint is new & requires opmode switch
                 let new_opmode = self.active_setpoint.required_opmode();
+                if self.opmode != new_opmode {
+                    // Does this opmode switch warrant a PDO remapping?
+                    if switching_opmode_requires_pdo_remapping(&self.opmode, &new_opmode) {
+                        // Get new opmode PDO mapping
+                        let new_pdo_cfg = self.pdo_cfg.get_cfg_for_opmode(&new_opmode);
 
-                // Does this opmode switch warrant a PDO remapping?
-                if switching_opmode_requires_pdo_remapping(&self.opmode, &new_opmode) {
-                    // Get new opmode PDO mapping
-                    let new_pdo_cfg = self.pdo_cfg.get_cfg_for_opmode(&new_opmode);
+                        // Get script (==all action steps required) to switch opmode
+                        let script = get_pdo_remap_script(
+                            &self.id,
+                            self.active_cfg,
+                            new_pdo_cfg,
+                            &new_opmode,
+                        );
 
-                    // Get script (==all action steps required) to switch opmode
-                    let script =
-                        get_pdo_remap_script(&self.id, self.active_cfg, new_pdo_cfg, &new_opmode);
-
-                    self.run_script(script);
-                } else {
-                    // No PDO remap required, plain switch -> updated through RPDO later
-                    self.opmode = new_opmode;
+                        self.run_script(script);
+                    } else {
+                        // No PDO remap required, plain switch -> updated through RPDO later
+                        self.opmode = new_opmode;
+                    }
                 }
             }
 
@@ -285,7 +288,7 @@ impl Cia402Motor {
         match step {
             // Send NMT command directly on CAN
             ScriptStep::Nmt { cmd, .. } => {
-                ctx.io
+                ctx.can
                     .send_nmt(*cmd, &self.id)
                     .map_err(|e| MotorError::ScriptCANOpenError(e, step.clone(), script.clone()))?;
             }
@@ -310,7 +313,7 @@ impl Cia402Motor {
 
     pub fn process_canopen_msg(&mut self, parsed: CanOpenFrame) {
         tracing::trace!(system = "Cia402Motor", "process_canopen_msg({:?})", parsed);
-        assert!(
+        debug_assert!(
             parsed
                 .node_id
                 .map(|id| id == self.id.node_id)
@@ -353,13 +356,13 @@ impl Cia402Motor {
                 // TPDO are sent by the motors, RPDO are received by the motors
                 // When processing CANOpen messages, we only care about the motor feedback: TPDO
                 if pdo.pdo_type == PdoType::TPDO {
-                    assert!(
+                    debug_assert!(
                         pdo.node_id == self.id.node_id,
                         "Cia402Motor::process_canopen_msg on TPDO with wrong node id {}",
                         pdo.node_id.u8()
                     );
 
-                    assert!(
+                    debug_assert!(
                         self.active_cfg.tpdo[pdo.num].is_some(),
                         "Cia402Motor::process_canopen_msg on unexpected TRDO num {}",
                         pdo.num
@@ -462,15 +465,15 @@ impl Cia402Motor {
             },
             PdoSemantic::TargetPosition => PdoValue {
                 semantic: semantic.clone(),
-                value: ODValue::I32(self.target_position),
+                value: ODValue::I32(self.targets.target_position),
             },
             PdoSemantic::TargetVelocity => PdoValue {
                 semantic: semantic.clone(),
-                value: ODValue::I32(self.target_velocity),
+                value: ODValue::I32(self.targets.target_velocity),
             },
             PdoSemantic::TargetTorque => PdoValue {
                 semantic: semantic.clone(),
-                value: ODValue::I16(self.target_torque),
+                value: ODValue::I16(self.targets.target_torque),
             },
             PdoSemantic::ProfileVelocity => PdoValue {
                 semantic: semantic.clone(),
@@ -575,7 +578,7 @@ mod tests {
 
         for (old, new, switch_expected) in cases {
             if switch_expected {
-                assert_eq!(
+                debug_assert_eq!(
                     switching_opmode_requires_pdo_remapping(&old, &new),
                     true,
                     "switching opmode from {:?} -> {:?} should require switch",
@@ -583,7 +586,7 @@ mod tests {
                     new,
                 );
             } else {
-                assert_eq!(
+                debug_assert_eq!(
                     switching_opmode_requires_pdo_remapping(&old, &new),
                     false,
                     "switching opmode from {:?} -> {:?} should require switch",

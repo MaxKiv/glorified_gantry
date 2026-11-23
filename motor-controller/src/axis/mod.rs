@@ -1,16 +1,11 @@
-use tracing::info;
+use tracing::{debug, info};
 use uom::si::f64::Length;
 
 use crate::{
     axis::{cfg::AxisConfig, scaling::AxisScaling},
-    canopen::{
-        frame::{CanOpenFrame, NodeId},
-        sdo::action::SdoAction,
-    },
-    cia402::Cia402Identifier,
-    consts::pdo::NodePdoConfig,
-    motor::{Cia402Motor, MotorRpdoSet, TickCtx},
-    oms::{OperationMode, setpoint::Setpoint},
+    canopen::frame::{CanOpenFrame, NodeId},
+    motor::{Cia402Motor, MotorRpdoSet, ctx::TickCtx},
+    oms::setpoint::Setpoint,
     rt::engine::cfg::Axis,
 };
 
@@ -28,32 +23,21 @@ pub struct GantryAxis {
     pub master: Cia402Motor,
     pub slave: Option<Cia402Motor>,
     pub scaling: AxisScaling,
-    pub opmode: OperationMode,
-    pdo_cfg: &'static NodePdoConfig, // All motors in axis have the same const pdo_cfg
-    default_parameters: &'static [SdoAction<'static>],
 }
 
 impl GantryAxis {
-    pub fn start_parametrised(cfg: AxisConfig, pdo_cfg: &'static NodePdoConfig) -> Self {
+    pub fn start_parametrised(cfg: AxisConfig) -> Self {
         // Start master
         let axis = cfg.axis;
         let scaling = cfg.scaling;
-        let default_parameters = cfg.default_parameters;
-        let master = Cia402Motor::start_parametrised(cfg.master, pdo_cfg, default_parameters);
-        let slave = cfg
-            .slave
-            .as_ref()
-            .map(|s| Cia402Motor::start_parametrised(s.clone(), pdo_cfg, default_parameters));
-        let opmode = OperationMode::default();
+        let master = Cia402Motor::start_parametrised(cfg.master);
+        let slave = cfg.slave.map(|s| Cia402Motor::start_parametrised(s));
 
         Self {
             axis,
             master,
             slave,
             scaling,
-            opmode,
-            pdo_cfg,
-            default_parameters,
         }
     }
 
@@ -86,7 +70,9 @@ impl GantryAxis {
         }
     }
 
+    /// Schedules non-blocking (== non I/O) work for all motors in this axis
     pub fn tick(&mut self, ctx: &mut TickCtx) {
+        debug!(system = "Axis", "tick()",);
         for motor in self.get_axis_motors_mut() {
             motor.tick(ctx);
         }

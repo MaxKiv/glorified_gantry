@@ -1,5 +1,6 @@
 pub mod cmd;
 pub mod engine;
+pub mod event;
 pub mod eventfd;
 pub mod timekeeper;
 pub mod timerfd;
@@ -72,6 +73,7 @@ struct RtFeedback<const N: usize> {
 mod tests {
     use crate::{
         consts::RT_CONFIG,
+        frontend::cmd::GantryCommand,
         rt::{
             cmd::{RtCommand, channel::CmdChannel},
             engine::RtEngine,
@@ -81,7 +83,7 @@ mod tests {
 
     use super::*;
 
-    const CMD_CHANNEL_SIZE: usize = RT_CONFIG.cmd_channel_size;
+    pub const CMD_CHANNEL_SIZE: usize = RT_CONFIG.cmd_channel_size;
 
     #[test]
     fn rt() -> anyhow::Result<()> {
@@ -105,7 +107,7 @@ mod tests {
 
                     info!("tokio sending gantry cmd");
                     cmd_tx
-                        .send(&crate::frontend::GantryCommand::Idle)
+                        .send(&GantryCommand::Idle)
                         .expect("failed to notify RT");
                 }
             });

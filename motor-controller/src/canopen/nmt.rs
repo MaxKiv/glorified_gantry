@@ -105,12 +105,16 @@ impl NmtFrame {
 
 #[cfg(test)]
 mod tests {
+    use crate::utils::setup_tracing_subscriber;
+
     use super::*;
 
     #[test]
     fn nmt_cmd_as_u8() {
+        setup_tracing_subscriber();
+
         let cases = [
-            (NmtCommandSpecifier::ResetNode, 0x01),
+            (NmtCommandSpecifier::StartRemoteNode, 0x01),
             (NmtCommandSpecifier::StopRemoteNode, 0x02),
             (NmtCommandSpecifier::EnterPreOperational, 0x80),
             (NmtCommandSpecifier::ResetNode, 0x81),

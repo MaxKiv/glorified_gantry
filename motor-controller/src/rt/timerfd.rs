@@ -23,7 +23,11 @@ pub struct TimerFd {
 }
 
 impl TimerFd {
-    pub fn from_period_monotonic(period: Duration, timer_type: TimerType) -> std::io::Result<Self> {
+    pub fn from_period_monotonic(
+        name: &'static str,
+        period: Duration,
+        timer_type: TimerType,
+    ) -> std::io::Result<Self> {
         let fd = unsafe {
             libc::timerfd_create(
                 libc::CLOCK_MONOTONIC,
@@ -47,6 +51,7 @@ impl TimerFd {
         };
 
         Ok(Self {
+            name,
             fd,
             period,
             period_ns: period.as_nanos() as i64,

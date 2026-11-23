@@ -38,36 +38,3 @@ pub const DEFAULT_ACTIVE_GANTRY_PDOCFG: HGantryActivePdoConfig = HGantryActivePd
     y: DEFAULT_PP_PDOCFG,
     z: DEFAULT_PP_PDOCFG,
 };
-
-pub const TEST_MOTORS: [Option<GantryMotor>; MAX_NODE_ID] = [
-    Some(GantryMotor {
-        node_id: NodeId(1),
-        kind: GantryMotorType::Y,
-    }),
-    None,
-    Some(GantryMotor {
-        node_id: NodeId(3),
-        kind: GantryMotorType::Z,
-    }),
-    None,
-];
-
-// pub const DEMO_GANTRY_NODES: &[GantryMotor] = &[
-//     GantryMotor {
-//         node_id: NodeId::new(1),
-//         kind: GantryMotorType::Xmaster,
-//     },
-//     GantryMotor {
-//         node_id: NodeId::new(2),
-//         kind: GantryMotorType::Xslave,
-//     },
-//     GantryMotor {
-//         node_id: NodeId::new(3),
-//         kind: GantryMotorType::Y,
-//     },
-//     GantryMotor {
-//         node_id: NodeId::new(4),
-//         kind: GantryMotorType::Z,
-//     },
-// ];
-//

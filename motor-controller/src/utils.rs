@@ -1,11 +1,17 @@
 #[cfg(test)]
 pub(crate) fn setup_tracing_subscriber() {
+    // use tracing::Level;
+    // use tracing_subscriber::FmtSubscriber;
+    //
+    // let subscriber = FmtSubscriber::builder()
+    //     .with_max_level(Level::INFO)
+    //     .finish();
+    //
+    // tracing::subscriber::set_global_default(subscriber).expect("setting default subscriber failed");
+
     use tracing::Level;
-    use tracing_subscriber::FmtSubscriber;
 
-    let subscriber = FmtSubscriber::builder()
+    let _ = tracing_subscriber::fmt()
         .with_max_level(Level::INFO)
-        .finish();
-
-    tracing::subscriber::set_global_default(subscriber).expect("setting default subscriber failed");
+        .try_init();
 }

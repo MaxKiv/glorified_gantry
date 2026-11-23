@@ -1,13 +1,16 @@
 use crate::{
-    axis::scaling::AxisScaling,
+    axis::{cfg::AxisConfig, scaling::AxisScaling},
     canopen::{frame::NodeId, pdo::mapping::OMSNodePdoConfig, sdo::action::SdoAction},
     cia402::Cia402Identifier,
-    consts::pdo::{
-        gantry::{
-            DEFAULT_ACTIVE_GANTRY_PDOCFG, DEFAULT_GANTRY_PDOCFG, HGantryActivePdoConfig,
-            HGantryPdoConfig,
+    consts::{
+        cfg::TEST_GANTRY_CFG,
+        pdo::{
+            gantry::{
+                DEFAULT_ACTIVE_GANTRY_PDOCFG, DEFAULT_GANTRY_PDOCFG, HGantryActivePdoConfig,
+                HGantryPdoConfig,
+            },
+            pp::DEFAULT_PP_PDOCFG,
         },
-        pp::DEFAULT_PP_PDOCFG,
     },
     oms::OperationMode,
 };
@@ -64,28 +67,28 @@ impl Axis {
     pub const COUNT: usize = std::mem::variant_count::<Axis>();
 }
 
-pub struct GantryAxisCfg {
+pub struct GantryCfg {
     pub x: Option<AxisConfig>,
     pub y: Option<AxisConfig>,
     pub z: Option<AxisConfig>,
 }
 
-impl GantryAxisCfg {
+impl GantryCfg {
     /// Iterate over all configured motors: (axis config, which motor, node id)
     pub fn motors(&self) -> impl Iterator<Item = (Axis, &Cia402Identifier)> {
         [
-            self.x.as_ref().map(|a| (a.axis, &a.master)),
+            self.x.as_ref().map(|a| (a.axis, &a.master.id)),
             self.x
                 .as_ref()
-                .and_then(|a| a.slave.as_ref().map(|s| (a.axis, s))),
-            self.y.as_ref().map(|a| (a.axis, &a.master)),
+                .and_then(|a| a.slave.as_ref().map(|s| (a.axis, &s.id))),
+            self.y.as_ref().map(|a| (a.axis, &a.master.id)),
             self.y
                 .as_ref()
-                .and_then(|a| a.slave.as_ref().map(|s| (a.axis, s))),
-            self.z.as_ref().map(|a| (a.axis, &a.master)),
+                .and_then(|a| a.slave.as_ref().map(|s| (a.axis, &s.id))),
+            self.z.as_ref().map(|a| (a.axis, &a.master.id)),
             self.z
                 .as_ref()
-                .and_then(|a| a.slave.as_ref().map(|s| (a.axis, s))),
+                .and_then(|a| a.slave.as_ref().map(|s| (a.axis, &s.id))),
         ]
         .into_iter()
         .flatten()
@@ -95,10 +98,10 @@ impl GantryAxisCfg {
 /// Constant/unchangable part of the RtEngine configuration
 pub struct ConstRtEngineConfig {
     pub gantry_oms_pdo_cfg: HGantryPdoConfig,
-    pub axis_cfg: GantryAxisCfg,
+    pub axis_cfg: GantryCfg,
 }
 
 pub const TEST_CONST_RT_ENGINE_CFG: ConstRtEngineConfig = ConstRtEngineConfig {
     gantry_oms_pdo_cfg: DEFAULT_GANTRY_PDOCFG,
-    axis_cfg: TEST_AXIS_CFG,
+    axis_cfg: TEST_GANTRY_CFG,
 };

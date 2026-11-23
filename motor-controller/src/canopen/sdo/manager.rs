@@ -12,8 +12,8 @@ use crate::{
             SdoUpload, SdoUploadResult, action::SdoAction,
         },
     },
-    cia402::Cia402Identifier,
     fifo::{Fifo, error::FifoError},
+    motor::ctx::TickCtx,
 };
 
 const SDO_EVENT_Q_SIZE: usize = 64;
@@ -225,19 +225,22 @@ impl SdoManager {
     }
 
     /// SDO manager state machine work scheduler
-    pub fn tick(&mut self, now: Instant, can: &mut CanOpen, slot_free: bool) {
+    /// Schedules Non-blocking (== non IO) work
+    pub fn tick(&mut self, ctx: &mut TickCtx) {
         // Is there a current action
         match self.current.take() {
             None => {
-                if slot_free && let Ok(cmd) = self.cmd_queue.pop() {
+                // No current action; schedule a new SDO
+                if let Ok(cmd) = self.cmd_queue.pop() {
                     // drop stale frames
-                    while self.events.pop().is_ok() {}
+                    self.events.clear();
 
-                    match can.send_sdo_request(&cmd.request) {
+                    // Enqeueu SDO, to be sent later at appropriate moments in the SYNC cycle
+                    match ctx.can.queue_sdo(cmd.request.clone()) {
                         Ok(()) => {
                             self.current = Some(InFlight {
                                 cmd,
-                                deadline: now + SDO_TIMEOUT,
+                                deadline: ctx.now + SDO_TIMEOUT,
                             })
                         }
                         Err(e) => {
@@ -267,7 +270,7 @@ impl SdoManager {
                     });
                     return;
                 }
-                if now >= current.deadline {
+                if ctx.now >= current.deadline {
                     // deadline expired, report failure
                     self.result = Some(Err(SdoFailure::Timeout));
                 } else {

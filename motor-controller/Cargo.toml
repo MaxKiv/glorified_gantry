@@ -18,6 +18,7 @@ socketcan = "3.6.2"
 libc = "0.2.189"
 once_cell = "1.21.4"
 uom = "0.38.0"
+rtrb = "0.4.1"
 
 [dev-dependencies]
 tracing-subscriber = { version = "0.3.19", features = ["registry", "env-filter"] }

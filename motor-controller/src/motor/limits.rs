@@ -1,3 +1,4 @@
+#[derive(Debug, Clone)]
 pub struct Cia402MotorLimits {
     pub profile_velocity: u32,      // Counts/s
     pub profile_acceleration: u32,  // Counts/s^2

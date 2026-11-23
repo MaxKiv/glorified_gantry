@@ -14,7 +14,6 @@ pub mod motor;
 pub mod oms;
 pub mod rt;
 pub mod setpoint;
-pub mod spmgr;
 pub mod spsc;
 pub mod sw;
 pub mod utils;

@@ -2,7 +2,7 @@ use std::io;
 use std::os::fd::RawFd;
 use std::sync::{Arc, Mutex, MutexGuard};
 
-use crate::frontend::GantryCommand;
+use crate::frontend::cmd::GantryCommand;
 use crate::rt::cmd::queue::CommandQueue;
 use crate::spsc::error::Error;
 

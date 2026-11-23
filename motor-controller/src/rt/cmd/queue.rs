@@ -1,4 +1,4 @@
-use crate::{frontend::GantryCommand, rt::cmd::RtCommand, spsc::ringbuffer::SpScRingBuffer};
+use crate::{frontend::cmd::GantryCommand, spsc::ringbuffer::SpScRingBuffer};
 
 /// CMD Queue as SPSC ring buffer
 pub struct CommandQueue<const N: usize> {

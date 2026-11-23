@@ -10,13 +10,11 @@ use uom::si::length::millimeter;
 
 use crate::{
     axis::GantryAxis,
-    canopen::{CanOpen, frame::CanOpenFrame, nmt::NmtCommandSpecifier, sdo::manager::SdoManager},
-    cia402::Cia402Identifier,
+    canopen::{CanOpen, frame::CanOpenFrame},
     consts::RT_CONFIG,
     fifo::Fifo,
-    frontend::{GantryCommand, GantrySetpoint},
-    motor::TickCtx,
-    oms::OperationMode,
+    frontend::cmd::{GantryCommand, GantrySetpoint},
+    motor::ctx::TickCtx,
     rt::{
         RtError,
         cmd::channel::CmdReceiver,
@@ -34,12 +32,12 @@ const CAN_RX_FD: usize = 2;
 const CMD_RX_FD: usize = 3;
 const CMD_CHANNEL_SIZE: usize = RT_CONFIG.cmd_channel_size;
 const CMD_QUEUE_SIZE: usize = RT_CONFIG.cmd_channel_size;
-const X_AXIS: usize = 1;
-const Y_AXIS: usize = 2;
-const Z_AXIS: usize = 3;
+const X_AXIS: usize = 0;
+const Y_AXIS: usize = 1;
+const Z_AXIS: usize = 2;
 
 #[derive(Debug, Default, PartialEq)]
-enum RtState {
+pub enum RtState {
     #[default]
     Idle,
     SingleCycle,
@@ -60,12 +58,9 @@ pub struct MotorSetpoint {
     pub target_torque: i16,
 }
 
-/// N = Number of Managed Motors
 pub struct RtEngine {
     can_interface: String,
     canopen: CanOpen,
-
-    sdo_manager: SdoManager,
 
     /// Bridges frontend -> RT FIFO
     cmd_channel_rx: CmdReceiver<CMD_CHANNEL_SIZE>,
@@ -93,14 +88,17 @@ impl RtEngine {
         // Constructs a new sync cycle timer
         // implemented as absolute monotonic clock
         let sync_timer =
-            TimerFd::from_period_monotonic(RT_CONFIG.cycle_period, TimerType::Absolute)
+            TimerFd::from_period_monotonic("Sync", RT_CONFIG.cycle_period, TimerType::Absolute)
                 .expect("Failed to create RT timer");
 
         // Constructs a new feedback timer
         // implemented as relative monotonic clock
-        let feedback_timer =
-            TimerFd::from_period_monotonic(RT_CONFIG.feedback_period, TimerType::Relative)
-                .expect("Failed to create RT timer");
+        let feedback_timer = TimerFd::from_period_monotonic(
+            "Feedback",
+            RT_CONFIG.feedback_period,
+            TimerType::Relative,
+        )
+        .expect("Failed to create RT timer");
 
         let can = CanSocket::open(&can_interface).expect("Unable to open CAN interface");
         can.set_nonblocking(true)
@@ -145,7 +143,6 @@ impl RtEngine {
             const_rt_cfg: TEST_CONST_RT_ENGINE_CFG,
             cycle_state,
             current_cmd: GantryCommand::default(),
-            sdo_manager: todo!(),
             axi: todo!(),
         };
 
@@ -188,6 +185,9 @@ impl RtEngine {
                     // Intentionally empty
                 }
             }
+
+            // Schedule non-i/o work for all governed axi (and thus their motors)
+            self.tick_axi();
 
             // Wait for event to happen: Poll FDs
             if self.poll() < 0 {
@@ -552,5 +552,13 @@ impl RtEngine {
         self.new_gantry_setpoint(GantrySetpoint::estop_setpoint());
 
         self.state = RtState::Faulted;
+    }
+
+    fn tick_axi(&mut self) {
+        debug!(system = "RtEngine", "tick_axi()",);
+        for axis in self.axi.as_mut().iter_mut().flatten() {
+            let mut ctx = TickCtx::new(&mut self.canopen);
+            axis.tick(&mut ctx);
+        }
     }
 }

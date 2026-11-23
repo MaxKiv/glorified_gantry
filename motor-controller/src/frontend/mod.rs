@@ -1,3 +1,8 @@
+pub mod cmd;
+pub mod event;
+
+use crate::frontend::cmd::GantryCommand;
+use crate::rt::event::EventReceiver;
 use tokio::runtime::Handle;
 use tokio::sync::broadcast;
 use tokio::sync::mpsc;
@@ -6,129 +11,73 @@ use uom::si::f64::Length;
 use uom::si::f64::Torque;
 use uom::si::f64::Velocity;
 
+use crate::canopen::nmt::NmtState;
+use crate::cia402::Cia402State;
 use crate::consts::RT_CONFIG;
-use crate::oms::home::HomingSetpoint;
-use crate::oms::setpoint::Setpoint;
-use crate::oms::torque::TorqueSetpoint;
+use crate::frontend::event::GantryEvent;
 use crate::rt::cmd::channel::CmdSender;
+use crate::rt::engine::RtState;
 
-const CMD_CHANNEL_SIZE: usize = RT_CONFIG.cmd_channel_size;
+pub const CMD_CH_SIZE: usize = RT_CONFIG.cmd_channel_size;
+pub const EVENT_CH_SIZE: usize = RT_CONFIG.event_channel_size;
 
 /// Non-RT part
 /// Responsible for
 ///  configuration             
 ///  external commands        
 ///  logging/UI/RPC          
-
-#[derive(Debug, Clone)]
-pub struct PositionCommand {
-    target: Length,
-    vel: Velocity,
-    relative: bool,
-}
-
-#[derive(Debug, Clone)]
-pub struct VelocityCommand {
-    target: Velocity,
-}
-
-#[derive(Debug, Clone)]
-pub struct TorqueCommand {
-    target: Torque,
-}
-
-#[derive(Debug, Clone)]
-pub struct GantrySetpoint {
-    pub x: Option<Setpoint>,
-    pub y: Option<Setpoint>,
-    pub z: Option<Setpoint>,
-}
-
-impl GantrySetpoint {
-    pub fn new_home_all_axis() -> Self {
-        GantrySetpoint {
-            x: Some(Setpoint::Home(HomingSetpoint::default())),
-            y: Some(Setpoint::Home(HomingSetpoint::default())),
-            z: Some(Setpoint::Home(HomingSetpoint::default())),
-        }
-    }
-
-    pub fn estop_setpoint() -> Self {
-        GantrySetpoint {
-            x: Some(Setpoint::ProfileTorque(TorqueSetpoint { target_torque: 0 })),
-            y: Some(Setpoint::ProfileTorque(TorqueSetpoint { target_torque: 0 })),
-            z: Some(Setpoint::ProfileTorque(TorqueSetpoint { target_torque: 0 })),
-        }
-    }
-}
-
-#[derive(Debug, Clone, Default)]
-pub enum GantryCommand {
-    /// Motors are Responsible for interpolation
-    Setpoint(GantrySetpoint),
-    /// You are Responsible for interpolation
-    CyclicSetpoint(GantrySetpoint),
-    /// Home motors
-    Home,
-    /// De Energise motors
-    #[default]
-    Idle,
-    // ResetFaults, ?
-}
-
 #[derive(Debug, thiserror::Error)]
 pub enum GantryFrontendError {
     #[error("Command Channel Closed")]
     CommandChannelClosed,
+    #[error("Event Channel Closed")]
+    EventChannelClosed,
 }
 
 struct GantrySnapshot {
     sequence: u64,
-
-    state: GantryState,
-
+    state: RtState,
     axes: [AxisSnapshot; 3],
-
     drives: [DriveSnapshot; 6],
-
-    faults: FaultSummary,
+    // TODO:
+    // fault: Option<GantryError>,
 }
+
 struct AxisSnapshot {
-    position: Position,
+    position: Length,
     velocity: Velocity,
     torque: Torque,
-
-    skew: Option<Position>,
+    skew: Option<Length>,
 }
+
 struct DriveSnapshot {
     nmt_state: NmtState,
     cia402_state: Cia402State,
 
-    position: Position,
+    position: Length,
     velocity: Velocity,
     torque: Torque,
 
-    following_error: Position,
+    following_error: Length,
 }
 
-// | Thing                      | Owner                                         |
-// | -------------------------- | --------------------------------------------- |
-// | CAN socket                 | RT                                            |
-// | PDO RX/TX                  | RT                                            |
-// | SYNC                       | RT                                            |
-// | SDO transactions           | non-RT, executed through RT-owned CAN service |   ! <-- I question the need for this, RT does parametrisation?
-// | NMT state                  | RT                                            |
-// | CiA-402 state              | RT                                            |
-// | controlword generation     | RT                                            |
-// | statusword interpretation  | RT                                            |
-// | Profile Position handshake | RT                                            |
-// | actual position/velocity   | RT                                            |
-// | trajectory execution       | RT                                            |
-// | axis synchronization       | RT                                            |
-// | machine safety state       | RT                                            |
-// | configuration              | non-RT                                        |
-// | external commands          | non-RT                                        |
-// | logging/UI/RPC             | non-RT                                        |
+// | Thing                      | Owner        |
+// | -------------------------- | ------------ |
+// | CAN socket                 | RT           |
+// | PDO RX/TX                  | RT           |
+// | SYNC                       | RT           |
+// | SDO transactions           | RT           |
+// | NMT state                  | RT           |
+// | CiA-402 state              | RT           |
+// | controlword generation     | RT           |
+// | statusword interpretation  | RT           |
+// | Profile Position handshake | RT           |
+// | actual position/velocity   | RT           |
+// | trajectory execution       | RT           |
+// | axis synchronization       | RT           |
+// | machine safety state       | RT           |
+// | external commands          | non-RT       |
+// | logging/UI/RPC             | non-RT       |
 /// Non-RT part of [`MotionController`]
 pub struct GantryFrontend {
     cmd_rx: mpsc::Receiver<GantryCommand>,
@@ -136,18 +85,17 @@ pub struct GantryFrontend {
 }
 
 impl GantryFrontend {
-    pub fn start_on(runtime: &Handle, rt_cmd_tx: CmdSender<CMD_CHANNEL_SIZE>) -> GantryHandle {
-        pub const CMD_CH_SIZE: usize = 64;
-        pub const EVENT_CH_SIZE: usize = 64;
-
+    pub fn start_on(
+        runtime: &Handle,
+        rt_cmd_tx: CmdSender<CMD_CH_SIZE>,
+        rt_event_rx: EventReceiver<GantryEvent>,
+    ) -> GantryHandle {
         let (cmd_tx, cmd_rx) = mpsc::channel(CMD_CH_SIZE);
         let (event_tx, event_rx) = broadcast::channel(EVENT_CH_SIZE);
 
-        let controller = GantryFrontend { cmd_rx, event_tx };
-
-        let joinset = JoinSet::new();
-        joinset.spawn_on(GantryFrontend::bridge_commands(cmd_rx, rt_cmd_tx), runtime);
-        joinset.spawn_on(
+        let mut task_joinset = JoinSet::new();
+        task_joinset.spawn_on(GantryFrontend::bridge_commands(cmd_rx, rt_cmd_tx), runtime);
+        task_joinset.spawn_on(
             GantryFrontend::bridge_events(event_tx, rt_event_rx),
             runtime,
         );
@@ -155,14 +103,14 @@ impl GantryFrontend {
         GantryHandle {
             cmd_tx,
             event_rx,
-            joinset,
+            joinset: task_joinset,
         }
     }
 
     /// Bridges the [`GantryCommand`] send to the async [`GantryFrontend`] to the RT [`GantryController`]
     async fn bridge_commands(
         mut cmd_rx: mpsc::Receiver<GantryCommand>,
-        rt_cmd_tx: CmdSender<CMD_CHANNEL_SIZE>,
+        rt_cmd_tx: CmdSender<CMD_CH_SIZE>,
     ) -> Result<(), GantryFrontendError> {
         loop {
             // Wait for command to arrive at async mpsc channel
@@ -172,20 +120,32 @@ impl GantryFrontend {
                 .ok_or(GantryFrontendError::CommandChannelClosed)?;
 
             // Send over Frontend -> RT SPSC channel
-            rt_cmd_tx.send(&cmd);
+            rt_cmd_tx
+                .send(&cmd)
+                .expect("Unable to send frontend cmd -> RtEngine");
         }
     }
 
-    /// Bridges the [`GantryCommand`] send to the async [`GantryFrontend`] to the RT [`GantryController`]
+    /// Bridges the [`GantryEvent`] send to the async [`GantryFrontend`] to the RT [`RtEngine`]
     async fn bridge_events(
-        mut event_tx: broadcast::Sender<GantryEvent>,
-        rt_event_rx: todo!(),
+        event_tx: broadcast::Sender<GantryEvent>,
+        rt_event_rx: EventReceiver<GantryEvent>,
     ) -> Result<(), GantryFrontendError> {
-        loop {
-            let event = rt_event_rx.recv();
+        let mut rx = rt_event_rx.into_async().unwrap();
 
-            if let Err(err) = event_tx.send(event) {
-                tracing::error!("Unable to bridge GantryEvent: {:?}", err);
+        loop {
+            rx.readable()
+                .await
+                .map_err(|_| GantryFrontendError::EventChannelClosed)?;
+
+            while let Some(event) = rx.try_recv() {
+                // Errors here means nobody is listening; silently discard
+                let _ = event_tx.send(event);
+            }
+
+            let num_dropped = rx.take_dropped();
+            if num_dropped > 0 {
+                tracing::warn!("RT event ring overflowed, dropped {} events", num_dropped);
             }
         }
     }
