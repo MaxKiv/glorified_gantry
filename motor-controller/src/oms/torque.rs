@@ -1,6 +1,6 @@
 use crate::{event::MotorEvent, sw::StatusWord};
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct TorqueSetpoint {
     pub target_torque: i16,
 }

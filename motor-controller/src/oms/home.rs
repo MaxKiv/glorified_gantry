@@ -1,13 +1,13 @@
 use crate::{event::MotorEvent, sw::StatusWord};
 
 /// A Homing mode setpoint
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct HomingSetpoint {
     pub flags: HomeFlagsCW,
 }
 
 bitflags::bitflags! {
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq)]
     /// Controlword OMS flags for Homing mode
     pub struct HomeFlagsCW: u16 {
         const NEW_SETPOINT       = 1 << 4; // Bit 4: Rising edge triggers start of movement

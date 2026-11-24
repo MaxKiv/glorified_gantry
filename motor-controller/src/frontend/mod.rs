@@ -7,6 +7,8 @@ use tokio::runtime::Handle;
 use tokio::sync::broadcast;
 use tokio::sync::mpsc;
 use tokio::task::JoinSet;
+use tracing::debug;
+use tracing::info;
 use uom::si::f64::Length;
 use uom::si::f64::Torque;
 use uom::si::f64::Velocity;
@@ -112,12 +114,15 @@ impl GantryFrontend {
         mut cmd_rx: mpsc::Receiver<GantryCommand>,
         rt_cmd_tx: CmdSender<CMD_CH_SIZE>,
     ) -> Result<(), GantryFrontendError> {
+        info!(system = "Frontend", "starting bridge_commands()");
         loop {
             // Wait for command to arrive at async mpsc channel
             let cmd = cmd_rx
                 .recv()
                 .await
                 .ok_or(GantryFrontendError::CommandChannelClosed)?;
+
+            debug!(system = "Frontend", "bridge_commands() got {:?}", cmd);
 
             // Send over Frontend -> RT SPSC channel
             rt_cmd_tx
@@ -131,6 +136,7 @@ impl GantryFrontend {
         event_tx: broadcast::Sender<GantryEvent>,
         rt_event_rx: EventReceiver<GantryEvent>,
     ) -> Result<(), GantryFrontendError> {
+        info!(system = "Frontend", "starting bridge_events()");
         let mut rx = rt_event_rx.into_async().unwrap();
 
         loop {
@@ -138,9 +144,16 @@ impl GantryFrontend {
                 .await
                 .map_err(|_| GantryFrontendError::EventChannelClosed)?;
 
+            debug!(system = "Frontend", "bridge_events() - readable");
+
             while let Some(event) = rx.try_recv() {
+                let clone = event.clone();
                 // Errors here means nobody is listening; silently discard
-                let _ = event_tx.send(event);
+                let r = event_tx.send(event);
+                debug!(
+                    system = "Frontend",
+                    "bridge_events() bridged event {:?} - {:?}", clone, r
+                );
             }
 
             let num_dropped = rx.take_dropped();
@@ -152,9 +165,9 @@ impl GantryFrontend {
 }
 
 pub struct GantryHandle {
-    cmd_tx: mpsc::Sender<GantryCommand>,
-    event_rx: broadcast::Receiver<GantryEvent>,
-    joinset: JoinSet<Result<(), GantryFrontendError>>,
+    pub cmd_tx: mpsc::Sender<GantryCommand>,
+    pub event_rx: broadcast::Receiver<GantryEvent>,
+    pub joinset: JoinSet<Result<(), GantryFrontendError>>,
 }
 
 impl GantryHandle {

@@ -13,7 +13,10 @@ use crate::{
     canopen::{CanOpen, frame::CanOpenFrame},
     consts::RT_CONFIG,
     fifo::Fifo,
-    frontend::cmd::{GantryCommand, GantrySetpoint},
+    frontend::{
+        cmd::{GantryCommand, GantrySetpoint},
+        event::GantryEvent,
+    },
     motor::ctx::TickCtx,
     rt::{
         RtError,
@@ -22,6 +25,7 @@ use crate::{
             cfg::{Axis, ConstRtEngineConfig, TEST_CONST_RT_ENGINE_CFG},
             cycle_rx::{CyclePhase, CycleState},
         },
+        event::EventSender,
         timerfd::{TimerFd, TimerType},
     },
 };
@@ -62,10 +66,13 @@ pub struct RtEngine {
     can_interface: String,
     canopen: CanOpen,
 
-    /// Bridges frontend -> RT FIFO
+    // Frontend Channels
+    /// Command channel Frontend -> RtEngine
     cmd_channel_rx: CmdReceiver<CMD_CHANNEL_SIZE>,
     /// FIFO GantryCommand stack for later consumption
     cmd_queue: Fifo<GantryCommand, CMD_QUEUE_SIZE>,
+    /// Event channel RtEngine -> Frontend
+    event_tx: EventSender<GantryEvent>,
 
     state: RtState,
     const_rt_cfg: ConstRtEngineConfig,
@@ -84,6 +91,7 @@ impl RtEngine {
     pub fn start(
         can_interface: String,
         cmd_rx: CmdReceiver<CMD_CHANNEL_SIZE>,
+        event_tx: EventSender<GantryEvent>,
     ) -> JoinHandle<Result<(), RtError>> {
         // Constructs a new sync cycle timer
         // implemented as absolute monotonic clock
@@ -143,6 +151,7 @@ impl RtEngine {
             const_rt_cfg: TEST_CONST_RT_ENGINE_CFG,
             cycle_state,
             current_cmd: GantryCommand::default(),
+            event_tx,
             axi: todo!(),
         };
 

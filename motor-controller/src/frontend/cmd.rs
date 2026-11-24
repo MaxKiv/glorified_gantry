@@ -6,24 +6,24 @@ use uom::si::f64::Length;
 use uom::si::f64::Torque;
 use uom::si::f64::Velocity;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct PositionCommand {
     target: Length,
     vel: Velocity,
     relative: bool,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct VelocityCommand {
     target: Velocity,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct TorqueCommand {
     target: Torque,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct GantrySetpoint {
     pub x: Option<Setpoint>,
     pub y: Option<Setpoint>,
@@ -48,7 +48,7 @@ impl GantrySetpoint {
     }
 }
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, PartialEq)]
 pub enum GantryCommand {
     /// Motors are Responsible for interpolation
     Setpoint(GantrySetpoint),

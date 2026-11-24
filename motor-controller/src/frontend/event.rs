@@ -1,2 +1,7 @@
-#[derive(Debug, Clone)]
-pub enum GantryEvent {}
+#[derive(Debug, Clone, PartialEq)]
+pub enum GantryEvent {
+    Configuring,
+    Operational,
+    StateFeedback,
+    Error,
+}

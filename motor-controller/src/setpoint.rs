@@ -14,5 +14,5 @@ pub enum CyclicMotorSetpoint {
 }
 
 pub struct PositionSetpoint {
-    target: i32,
+    pub target: i32,
 }

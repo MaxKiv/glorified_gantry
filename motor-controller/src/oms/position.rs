@@ -8,7 +8,7 @@ pub const STARTUP_POSITIONMODE_SETPOINT: PositionSetpoint = PositionSetpoint {
 
 // Controlword OMS flags for Profile Position mode
 bitflags::bitflags! {
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq)]
     pub struct PositionFlagsCW: u16 {
         const NEW_SETPOINT              = 1 << 4; // Bit 4: Rising edge triggers start of movement
         const CHANGE_IMMEDIATELY        = 1 << 5; // Bit 5: Should the motor instantly adapt to the new setpoint, or first reach the previous target?
@@ -27,6 +27,7 @@ impl Default for PositionFlagsCW {
         & !(PositionFlagsCW::DECELERATE_AFTER_REACHING) // By default have zero velocity when reaching setpoint
     }
 }
+
 impl PositionFlagsCW {
     pub fn absolute() -> Self {
         Self::default()
@@ -44,7 +45,7 @@ impl PositionFlagsCW {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct PositionSetpoint {
     pub flags: PositionFlagsCW,
     pub target: i32,

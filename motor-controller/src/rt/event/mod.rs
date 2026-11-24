@@ -1,5 +1,5 @@
 use std::io;
-use std::os::fd::{AsRawFd, FromRawFd, OwnedFd};
+use std::os::fd::{AsFd, AsRawFd, FromRawFd, OwnedFd};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 
@@ -58,7 +58,6 @@ pub struct AsyncEventReceiver<T> {
     last_reported: u64,
 }
 
-// move readable(), try_recv(), take_dropped() here unchanged
 impl<T> AsyncEventReceiver<T> {
     /// Wait until the RT side signals, and clear the eventfd.
     /// Afterwards, drain with `try_recv()` until it returns `None`.

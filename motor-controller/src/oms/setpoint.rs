@@ -9,7 +9,7 @@ use crate::oms::{
     velocity::VelocitySetpoint,
 };
 
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, PartialEq)]
 pub enum Setpoint {
     #[default]
     DeEnergised,

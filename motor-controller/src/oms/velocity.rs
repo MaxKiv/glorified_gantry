@@ -1,6 +1,6 @@
 use crate::{event::MotorEvent, sw::StatusWord};
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct VelocitySetpoint {
     pub target_velocity: i32,
 }

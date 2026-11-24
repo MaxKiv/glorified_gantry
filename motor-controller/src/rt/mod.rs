@@ -77,22 +77,25 @@ mod tests {
         rt::{
             cmd::{RtCommand, channel::CmdChannel},
             engine::RtEngine,
+            event::event_channel,
         },
         utils::setup_tracing_subscriber,
     };
 
     use super::*;
 
-    pub const CMD_CHANNEL_SIZE: usize = RT_CONFIG.cmd_channel_size;
+    pub const CMD_CH_SIZE: usize = RT_CONFIG.cmd_channel_size;
+    pub const EVENT_CH_SIZE: usize = RT_CONFIG.event_channel_size;
 
     #[test]
-    fn rt() -> anyhow::Result<()> {
+    fn full() -> anyhow::Result<()> {
         setup_tracing_subscriber();
 
-        let (cmd_tx, cmd_rx) = CmdChannel::<CMD_CHANNEL_SIZE>::new()?;
+        let (rt_cmd_tx, rt_cmd_rx) = CmdChannel::<CMD_CH_SIZE>::new()?;
+        let (rt_event_tx, rt_event_rx) = event_channel(EVENT_CH_SIZE)?;
 
-        info!("Starting rt engine");
-        let rt_engine = RtEngine::start(String::from("can0"), cmd_rx);
+        info!("Starting RT engine");
+        let rt_engine = RtEngine::start(String::from("can0"), rt_cmd_rx, rt_event_tx);
 
         info!("Starting tokio reactor");
         let tokio = std::thread::spawn(move || {
@@ -106,7 +109,7 @@ mod tests {
                     tokio::time::sleep(std::time::Duration::from_secs(2)).await;
 
                     info!("tokio sending gantry cmd");
-                    cmd_tx
+                    rt_cmd_tx
                         .send(&GantryCommand::Idle)
                         .expect("failed to notify RT");
                 }
