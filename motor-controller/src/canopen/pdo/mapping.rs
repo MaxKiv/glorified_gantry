@@ -95,12 +95,12 @@ impl PdoMappingSource {
 
 /// Operation Mode Specific pdo mapping for a single node
 #[derive(Default)]
-pub struct OMSNodePdoConfig {
+pub struct OMSMotorPdoConfig {
     pub tpdo: [Option<PdoMapping>; 4],
     pub rpdo: [Option<PdoMapping>; 4],
 }
 
-impl OMSNodePdoConfig {
+impl OMSMotorPdoConfig {
     pub fn parse_tpdo(
         &self,
         tpdo: &RawPdoMessage,

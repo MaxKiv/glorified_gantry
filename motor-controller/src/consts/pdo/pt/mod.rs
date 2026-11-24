@@ -2,11 +2,11 @@ use crate::canopen::{
     od,
     pdo::{
         OnSyncN, PdoType, TransmissionType,
-        mapping::{OMSNodePdoConfig, PdoMapping, PdoMappingSource},
+        mapping::{OMSMotorPdoConfig, PdoMapping, PdoMappingSource},
     },
 };
 
-pub const DEFAULT_PT_PDOCFG: OMSNodePdoConfig = OMSNodePdoConfig {
+pub const DEFAULT_PT_PDOCFG: OMSMotorPdoConfig = OMSMotorPdoConfig {
     rpdo: [
         Some(PdoMapping {
             pdo: PdoType::RPDO,

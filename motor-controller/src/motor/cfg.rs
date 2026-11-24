@@ -1,10 +1,7 @@
 use crate::{
     canopen::sdo::action::SdoAction,
     cia402::Cia402Identifier,
-    consts::{
-        params::test::TEST_PARAMS,
-        pdo::{NodePdoConfig, gantry::DEFAULT_GANTRY_PDOCFG},
-    },
+    consts::{params::test::TEST_PARAMS, pdo::MotorPdoConfig},
 };
 
 /// Configuration struct for a single CiA402 motor
@@ -15,13 +12,13 @@ pub struct MotorConfig {
     /// Required parameters for each motor of this axis
     pub default_parameters: &'static [SdoAction<'static>],
     /// Full PDO Configuration for this motor
-    pub pdo: &'static NodePdoConfig,
+    pub pdo: &'static MotorPdoConfig,
     // /// Define how to map from SI units <-> Motor units
-    // pub scaling: AxisScaling,
+    // pub scaling: MotorScaling,
 }
 
 impl MotorConfig {
-    pub const fn test(id: Cia402Identifier, pdo: &'static NodePdoConfig) -> Self {
+    pub const fn test(id: Cia402Identifier, pdo: &'static MotorPdoConfig) -> Self {
         Self {
             id,
             default_parameters: TEST_PARAMS,

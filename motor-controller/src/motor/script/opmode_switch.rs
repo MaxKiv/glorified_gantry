@@ -13,7 +13,7 @@ use crate::{
         },
         pdo::{
             PdoType, TransmissionType,
-            mapping::{OMSNodePdoConfig, PdoMapping},
+            mapping::{OMSMotorPdoConfig, PdoMapping},
         },
     },
     cia402::Cia402Identifier,
@@ -67,8 +67,8 @@ fn pdo_invalidate_step(
 /// Get a [Vec<ScriptStep>] containing all actions required to switch a [CiA402Motor] to a new [OMSNodePdoConfig]
 pub fn get_pdo_remap_script(
     id: &Cia402Identifier,
-    old: &OMSNodePdoConfig,
-    new: &OMSNodePdoConfig,
+    old: &OMSMotorPdoConfig,
+    new: &OMSMotorPdoConfig,
     new_opmode: &OperationMode,
 ) -> Script {
     /// Steps to take before PDO mapping change
@@ -103,8 +103,8 @@ pub fn get_pdo_remap_script(
 /// Get a [Vec<ScriptStep>] containing all SDO writes required to switch a [CiA402Motor] to a new [OMSNodePdoConfig]
 fn get_pdo_cfg_set_remapping_sdo_steps(
     node: &Cia402Identifier,
-    old_pdo_cfg: &OMSNodePdoConfig,
-    new_pdo_cfg: &OMSNodePdoConfig,
+    old_pdo_cfg: &OMSMotorPdoConfig,
+    new_pdo_cfg: &OMSMotorPdoConfig,
 ) -> Vec<ScriptStep> {
     let node_id = node.node_id.u8();
     let mut steps = Vec::with_capacity(64 * 8);

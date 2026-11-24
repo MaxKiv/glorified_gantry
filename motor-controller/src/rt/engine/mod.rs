@@ -1,39 +1,32 @@
-pub mod cfg;
 pub mod cycle_rx;
+pub mod fds;
 
 use std::thread::JoinHandle;
 
-use libc::pollfd;
 use socketcan::{CanSocket, EmbeddedFrame, Frame, Socket};
 use tracing::{debug, error, info, trace, warn};
 use uom::si::length::millimeter;
 
 use crate::{
-    axis::GantryAxis,
     canopen::{CanOpen, frame::CanOpenFrame},
     consts::RT_CONFIG,
     fifo::Fifo,
-    frontend::{
-        cmd::{GantryCommand, GantrySetpoint},
-        event::GantryEvent,
-    },
+    frontend::{cmd::GantryCommand, event::GantryEvent},
+    gantry::setpoint::GantrySetpoint,
+    gantry::{Gantry, cfg::GantryCfg},
     motor::ctx::TickCtx,
     rt::{
         RtError,
         cmd::channel::CmdReceiver,
         engine::{
-            cfg::{Axis, ConstRtEngineConfig, TEST_CONST_RT_ENGINE_CFG},
             cycle_rx::{CyclePhase, CycleState},
+            fds::RtEngineFds,
         },
         event::EventSender,
         timerfd::{TimerFd, TimerType},
     },
 };
 
-const SYNC_TIMER_FD: usize = 0;
-const FEEDBACK_TIMER_FD: usize = 1;
-const CAN_RX_FD: usize = 2;
-const CMD_RX_FD: usize = 3;
 const CMD_CHANNEL_SIZE: usize = RT_CONFIG.cmd_channel_size;
 const CMD_QUEUE_SIZE: usize = RT_CONFIG.cmd_channel_size;
 const X_AXIS: usize = 0;
@@ -75,15 +68,17 @@ pub struct RtEngine {
     event_tx: EventSender<GantryEvent>,
 
     state: RtState,
-    const_rt_cfg: ConstRtEngineConfig,
 
-    axi: [Option<GantryAxis>; Axis::COUNT],
+    // axi: [Option<GantryAxis>; Axis::COUNT],
+    // sync_timer: TimerFd,
+    // feedback_timer: TimerFd,
+    // const_rt_cfg: ConstRtEngineConfig,
+    cfg: GantryCfg,
+    gantry: Gantry,
 
     current_cmd: GantryCommand,
 
-    poll_fds: [pollfd; 4],
-    sync_timer: TimerFd,
-    feedback_timer: TimerFd,
+    fds: RtEngineFds,
     cycle_state: CycleState,
 }
 
@@ -92,7 +87,13 @@ impl RtEngine {
         can_interface: String,
         cmd_rx: CmdReceiver<CMD_CHANNEL_SIZE>,
         event_tx: EventSender<GantryEvent>,
+        gantry_cfg: GantryCfg,
     ) -> JoinHandle<Result<(), RtError>> {
+        let can = CanSocket::open(&can_interface).expect("Unable to open CAN interface");
+        can.set_nonblocking(true)
+            .expect("Unable to set CAN socket nonblocking");
+        let canopen = CanOpen::new(can);
+
         // Constructs a new sync cycle timer
         // implemented as absolute monotonic clock
         let sync_timer =
@@ -108,36 +109,38 @@ impl RtEngine {
         )
         .expect("Failed to create RT timer");
 
-        let can = CanSocket::open(&can_interface).expect("Unable to open CAN interface");
-        can.set_nonblocking(true)
-            .expect("Unable to set CAN socket nonblocking");
-        let canopen = CanOpen::new(can);
-
         // Construct poll FDs
-        let poll_fds = [
+        let sync_fd = sync_timer.fd();
+        let feedback_fd = feedback_timer.fd();
+        let can_fd = canopen.raw_fd();
+        let cmd_fd = cmd_rx.fd();
+        let fds = RtEngineFds::new(
+            sync_timer,
+            feedback_timer,
             libc::pollfd {
-                fd: sync_timer.fd(),
+                fd: sync_fd,
                 events: libc::POLLIN,
                 revents: 0,
             },
             libc::pollfd {
-                fd: feedback_timer.fd(),
+                fd: feedback_fd,
                 events: libc::POLLIN,
                 revents: 0,
             },
             libc::pollfd {
-                fd: canopen.raw_fd(),
+                fd: can_fd,
                 events: libc::POLLIN,
                 revents: 0,
             },
             libc::pollfd {
-                fd: cmd_rx.fd(),
+                fd: cmd_fd,
                 events: libc::POLLIN,
                 revents: 0,
             },
-        ];
+        );
 
-        let cycle_state = CycleState::new();
+        // construct gantry
+        let gantry = Gantry::with_cfg(gantry_cfg.clone());
 
         let mut rt = Self {
             can_interface,
@@ -145,14 +148,12 @@ impl RtEngine {
             cmd_channel_rx: cmd_rx,
             state: RtState::default(),
             cmd_queue: Fifo::<GantryCommand, CMD_QUEUE_SIZE>::new(),
-            poll_fds,
-            sync_timer,
-            feedback_timer,
-            const_rt_cfg: TEST_CONST_RT_ENGINE_CFG,
-            cycle_state,
+            cycle_state: CycleState::new(),
             current_cmd: GantryCommand::default(),
             event_tx,
-            axi: todo!(),
+            cfg: gantry_cfg,
+            gantry,
+            fds,
         };
 
         // Spawn RT engine thread
@@ -163,8 +164,7 @@ impl RtEngine {
         info!("RT Thread started");
 
         // Arm SYNC timer
-        self.sync_timer.arm().map_err(|_| RtError::Timer)?;
-
+        self.fds.sync_timer.arm().map_err(|_| RtError::Timer)?;
         // Main RT loop
         loop {
             // NOTE: anything here triggers on every poll() resulution
@@ -196,10 +196,11 @@ impl RtEngine {
             }
 
             // Schedule non-i/o work for all governed axi (and thus their motors)
-            self.tick_axi();
+            let mut ctx = TickCtx::new(&mut self.canopen);
+            self.gantry.tick(&mut ctx);
 
             // Wait for event to happen: Poll FDs
-            if self.poll() < 0 {
+            if self.fds.poll() < 0 {
                 let error = std::io::Error::last_os_error();
                 if error.kind() == std::io::ErrorKind::Interrupted {
                     continue;
@@ -209,24 +210,24 @@ impl RtEngine {
             }
 
             // Drain CAN
-            if self.can_frame_received() {
+            if self.fds.can_frame_received() {
                 self.process_can_rx();
             }
             // Drain Frontend CMDs
-            if self.cmd_received() {
+            if self.fds.cmd_received() {
                 self.process_cmd_rx();
             }
 
             // Handle timing events.
             if self.cycle_state.phase == CyclePhase::WaitingForTpdo {
-                if self.all_cycle_tpdo_received() {
+                if self.gantry.all_cycle_tpdo_received() {
                     self.sync_feedback_received();
-                } else if self.feedback_deadline_elapsed() {
+                } else if self.fds.feedback_deadline_elapsed() {
                     self.feedback_deadline_exceeded();
                 }
             }
 
-            if self.sync_timer_elapsed() {
+            if self.fds.sync_timer_elapsed() {
                 self.start_sync_cycle()?;
             }
 
@@ -249,22 +250,6 @@ impl RtEngine {
 
         warn!("RT engine shutting down...");
         Ok(())
-    }
-
-    fn feedback_deadline_elapsed(&self) -> bool {
-        self.poll_fds[FEEDBACK_TIMER_FD].revents & libc::POLLIN != 0
-    }
-
-    fn cmd_received(&self) -> bool {
-        self.poll_fds[CMD_RX_FD].revents & libc::POLLIN != 0
-    }
-
-    fn can_frame_received(&self) -> bool {
-        self.poll_fds[CAN_RX_FD].revents & libc::POLLIN != 0
-    }
-
-    fn sync_timer_elapsed(&self) -> bool {
-        self.poll_fds[SYNC_TIMER_FD].revents & libc::POLLIN != 0
     }
 
     fn process_can_rx(&mut self) {
@@ -293,7 +278,7 @@ impl RtEngine {
 
                     // Dispatch adressed messages to their recipient
                     if let Some(msg_id) = parsed.node_id {
-                        for axis in self.axi.iter_mut().flatten() {
+                        for axis in self.gantry.get_axi_mut() {
                             if axis
                                 .managed_node_ids()
                                 .find(|node| *node == msg_id)
@@ -342,7 +327,7 @@ impl RtEngine {
 
     fn start_sync_cycle(&mut self) -> Result<(), RtError> {
         // Reset SYNC timer
-        self.sync_timer.reset().map_err(|_| RtError::Timer)?;
+        self.fds.sync_timer.reset().map_err(|_| RtError::Timer)?;
 
         // Calculate timing metrics for previous cycle
         self.cycle_state
@@ -363,10 +348,11 @@ impl RtEngine {
             match cmd.clone() {
                 GantryCommand::CyclicSetpoint(gantry_setpoint)
                 | GantryCommand::Setpoint(gantry_setpoint) => {
-                    self.new_gantry_setpoint(gantry_setpoint);
+                    self.gantry.new_gantry_setpoint(gantry_setpoint);
                 }
                 GantryCommand::Home => {
-                    self.new_gantry_setpoint(GantrySetpoint::new_home_all_axis());
+                    self.gantry
+                        .new_gantry_setpoint(GantrySetpoint::new_home_all_axis());
                     self.set_rt_state(RtState::SingleCycle);
                 }
                 GantryCommand::Idle => {
@@ -381,7 +367,10 @@ impl RtEngine {
         self.canopen.send_sync().map_err(|e| RtError::CanOpen(e))?;
 
         // Setup feedback timer
-        self.feedback_timer.arm_once().map_err(|_| RtError::Timer)?;
+        self.fds
+            .feedback_timer
+            .arm_once()
+            .map_err(|_| RtError::Timer)?;
 
         // Bookkeeping
         self.cycle_state
@@ -396,6 +385,7 @@ impl RtEngine {
     fn feedback_deadline_exceeded(&mut self) {
         // Check timer expirations
         let expirations = self
+            .fds
             .feedback_timer
             .expirations()
             .expect("TimerFD read failed");
@@ -424,7 +414,8 @@ impl RtEngine {
 
         //   if (x-axis skew > large) -> ESTOP
         debug!(system = "RtEngine", "Checking axis skew",);
-        for axis in self.axi.iter_mut().flatten() {
+        let mut skew_detected = false;
+        for axis in self.gantry.get_axi_mut() {
             if let Some(skew_mm) = axis.skew().map(|skew| skew.get::<millimeter>()) {
                 if skew_mm > RT_CONFIG.max_axis_skew_mm {
                     error!(
@@ -433,27 +424,23 @@ impl RtEngine {
                         skew_mm,
                         RT_CONFIG.max_axis_skew_mm,
                     );
-
-                    self.do_e_stop();
-
-                    // TODO: is this transition right?
-                    self.cycle_state
-                        .transition_cycle_phase(CyclePhase::SdoWindow);
-                    // I have to return here, else double &mut self in outer loop
-                    // I probably also want to return, estop should put the system in some known
-                    // fail state
-                    return;
+                    skew_detected = true;
                 }
             }
         }
+        if skew_detected {
+            self.gantry.do_e_stop();
+            self.cycle_state
+                .transition_cycle_phase(CyclePhase::SdoWindow);
+        }
 
-        for axis in self.axi.iter_mut().flatten() {
+        for axis in self.gantry.get_axi_mut() {
             axis.on_sync_feedback();
         }
 
         // Collect RPDO for each motor in the gantry
         debug!(system = "RtEngine", "Collect & Transmit RPDO",);
-        for axis in self.axi.as_ref().iter().flatten() {
+        for axis in self.gantry.get_axi_ref() {
             let axis_rpdos = axis.get_rpdos();
 
             // Send each RPDO over can,
@@ -488,16 +475,6 @@ impl RtEngine {
         // The SDO window is further picked up in the main RT loop
     }
 
-    fn poll(&mut self) -> i32 {
-        unsafe {
-            libc::poll(
-                self.poll_fds.as_mut_ptr(),
-                self.poll_fds.len() as libc::nfds_t,
-                -1,
-            )
-        }
-    }
-
     fn to_error_state(&mut self, arg: &'static str) {
         self.set_rt_state(RtState::Faulted);
         todo!("TODO error_state for: {}", arg)
@@ -513,61 +490,8 @@ impl RtEngine {
         self.state = new_state;
     }
 
-    /// Push a newly received setpoint to each of the gantry axis
-    fn new_gantry_setpoint(&mut self, gantry_setpoint: GantrySetpoint) {
-        if let Some(axis) = &mut self.axi[X_AXIS]
-            && let Some(setpoint) = gantry_setpoint.x
-        {
-            axis.new_axis_setpoint(setpoint)
-        }
-
-        if let Some(axis) = &mut self.axi[Y_AXIS]
-            && let Some(setpoint) = gantry_setpoint.y
-        {
-            axis.new_axis_setpoint(setpoint)
-        }
-
-        if let Some(axis) = &mut self.axi[Z_AXIS]
-            && let Some(setpoint) = gantry_setpoint.z
-        {
-            axis.new_axis_setpoint(setpoint)
-        }
-    }
-
-    fn tick(&mut self, ctx: &mut TickCtx) {
-        for axis in self.axi.iter_mut().flatten() {
-            axis.tick(ctx);
-        }
-    }
-
-    fn all_cycle_tpdo_received(&self) -> bool {
-        for axis in self.axi.iter().flatten() {
-            if !axis.all_cycle_tpdo_received() {
-                return false;
-            }
-        }
-
-        true
-    }
-
-    /// Performs an Emergency Stop of the gantry
     fn do_e_stop(&mut self) {
-        error!(system = "RtEngine", "ESTOP TRIGGERED",);
-
-        for axis in self.axi.as_mut().iter_mut().flatten() {
-            axis.do_e_stop();
-        }
-
-        self.new_gantry_setpoint(GantrySetpoint::estop_setpoint());
-
+        self.gantry.do_e_stop();
         self.state = RtState::Faulted;
-    }
-
-    fn tick_axi(&mut self) {
-        debug!(system = "RtEngine", "tick_axi()",);
-        for axis in self.axi.as_mut().iter_mut().flatten() {
-            let mut ctx = TickCtx::new(&mut self.canopen);
-            axis.tick(&mut ctx);
-        }
     }
 }

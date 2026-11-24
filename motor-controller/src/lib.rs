@@ -9,6 +9,7 @@ pub mod cw;
 pub mod event;
 pub mod fifo;
 pub mod frontend;
+pub mod gantry;
 pub mod handshake;
 pub mod motor;
 pub mod oms;

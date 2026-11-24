@@ -6,12 +6,23 @@ use crate::{
     canopen::frame::{CanOpenFrame, NodeId},
     motor::{Cia402Motor, MotorRpdoSet, ctx::TickCtx},
     oms::setpoint::Setpoint,
-    rt::engine::cfg::Axis,
 };
 
 pub mod cfg;
 pub mod error;
 pub mod scaling;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(C)]
+pub enum Axis {
+    X = 0,
+    Y = 1,
+    Z = 2,
+}
+
+impl Axis {
+    pub const COUNT: usize = std::mem::variant_count::<Axis>();
+}
 
 pub struct GantryAxisRpdo {
     pub master: MotorRpdoSet,

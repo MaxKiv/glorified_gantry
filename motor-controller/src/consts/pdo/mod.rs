@@ -1,5 +1,5 @@
 use crate::{
-    canopen::pdo::mapping::OMSNodePdoConfig,
+    canopen::pdo::mapping::OMSMotorPdoConfig,
     consts::pdo::{
         cp::DEFAULT_CP_PDOCFG, ct::DEFAULT_CT_PDOCFG, cv::DEFAULT_CV_PDOCFG, pp::DEFAULT_PP_PDOCFG,
         pt::DEFAULT_PT_PDOCFG, pv::DEFAULT_PV_PDOCFG,
@@ -17,17 +17,17 @@ pub mod pv;
 
 /// Full PDO Configuration of a single node
 /// maps from every relevant OperationMode -> PdoConfig for that mode
-pub struct NodePdoConfig {
-    profile_position: OMSNodePdoConfig,
-    profile_velocity: OMSNodePdoConfig,
-    profile_torque: OMSNodePdoConfig,
-    cyclic_position: OMSNodePdoConfig,
-    cyclic_velocity: OMSNodePdoConfig,
-    cyclic_torque: OMSNodePdoConfig,
+pub struct MotorPdoConfig {
+    profile_position: OMSMotorPdoConfig,
+    profile_velocity: OMSMotorPdoConfig,
+    profile_torque: OMSMotorPdoConfig,
+    cyclic_position: OMSMotorPdoConfig,
+    cyclic_velocity: OMSMotorPdoConfig,
+    cyclic_torque: OMSMotorPdoConfig,
 }
 
-impl NodePdoConfig {
-    pub fn get_cfg_for_opmode(&'static self, mode: &OperationMode) -> &'static OMSNodePdoConfig {
+impl MotorPdoConfig {
+    pub fn get_cfg_for_opmode(&'static self, mode: &OperationMode) -> &'static OMSMotorPdoConfig {
         match mode {
             OperationMode::CyclicSynchronousPosition => &self.cyclic_position,
             OperationMode::CyclicSynchronousVelocity => &self.cyclic_velocity,
@@ -44,7 +44,7 @@ impl NodePdoConfig {
 }
 
 /// Default configuration of a single node/motor
-pub const DEFAULT_NODE_PDOCFG: NodePdoConfig = NodePdoConfig {
+pub const DEFAULT_MOTOR_PDOCFG: MotorPdoConfig = MotorPdoConfig {
     profile_position: DEFAULT_PP_PDOCFG,
     profile_velocity: DEFAULT_PV_PDOCFG,
     profile_torque: DEFAULT_PT_PDOCFG,
@@ -52,3 +52,6 @@ pub const DEFAULT_NODE_PDOCFG: NodePdoConfig = NodePdoConfig {
     cyclic_velocity: DEFAULT_CV_PDOCFG,
     cyclic_torque: DEFAULT_CT_PDOCFG,
 };
+
+pub const TEST_MOTOR_PDOCFG: &MotorPdoConfig = &DEFAULT_MOTOR_PDOCFG;
+pub const DEMO_MOTOR_PDOCFG: &MotorPdoConfig = &DEFAULT_MOTOR_PDOCFG;

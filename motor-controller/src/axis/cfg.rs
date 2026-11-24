@@ -1,7 +1,6 @@
-use crate::{
-    axis::scaling::AxisScaling, canopen::sdo::action::SdoAction, motor::cfg::MotorConfig,
-    rt::engine::cfg::Axis,
-};
+use crate::axis::Axis;
+use crate::axis::scaling::AxisScaling;
+use crate::{consts::pdo::MotorPdoConfig, motor::cfg::MotorConfig};
 
 /// Configuration struct for a single gantry axis
 #[derive(Clone)]

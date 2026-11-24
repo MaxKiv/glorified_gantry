@@ -72,7 +72,7 @@ struct RtFeedback<const N: usize> {
 #[cfg(test)]
 mod tests {
     use crate::{
-        consts::RT_CONFIG,
+        consts::{RT_CONFIG, cfg::TEST_GANTRY_CFG},
         frontend::cmd::GantryCommand,
         rt::{
             cmd::{RtCommand, channel::CmdChannel},
@@ -91,11 +91,18 @@ mod tests {
     fn full() -> anyhow::Result<()> {
         setup_tracing_subscriber();
 
+        let gantry_cfg = &TEST_GANTRY_CFG;
+
         let (rt_cmd_tx, rt_cmd_rx) = CmdChannel::<CMD_CH_SIZE>::new()?;
         let (rt_event_tx, rt_event_rx) = event_channel(EVENT_CH_SIZE)?;
 
         info!("Starting RT engine");
-        let rt_engine = RtEngine::start(String::from("can0"), rt_cmd_rx, rt_event_tx);
+        let rt_engine = RtEngine::start(
+            String::from("can0"),
+            rt_cmd_rx,
+            rt_event_tx,
+            gantry_cfg.clone(),
+        );
 
         info!("Starting tokio reactor");
         let tokio = std::thread::spawn(move || {

@@ -43,11 +43,11 @@ use crate::{
             NmtMonitorMessage,
             NmtState::{self},
         },
-        pdo::{PdoType, mapping::OMSNodePdoConfig},
+        pdo::{PdoType, mapping::OMSMotorPdoConfig},
         sdo::manager::SdoManager,
     },
     cia402::{Cia402Identifier, Cia402State},
-    consts::pdo::NodePdoConfig,
+    consts::pdo::MotorPdoConfig,
     motor::{error::MotorError, state::MotorState},
     oms::{OperationMode, setpoint::Setpoint},
 };
@@ -60,11 +60,11 @@ pub struct Cia402Motor {
     state: ControllerState,
     tpdo_rx: [bool; 4],
 
-    cia402_state: Cia402State,             // Current CiA402 state
-    nmt: NmtState,                         // Current NMT State
-    opmode: OperationMode,                 // Active operation mode
-    active_cfg: &'static OMSNodePdoConfig, // Current Pdo Mapping
-    pdo_cfg: &'static NodePdoConfig,       // Required Pdo mapping per node
+    cia402_state: Cia402State,              // Current CiA402 state
+    nmt: NmtState,                          // Current NMT State
+    opmode: OperationMode,                  // Active operation mode
+    active_cfg: &'static OMSMotorPdoConfig, // Current Pdo Mapping
+    pdo_cfg: &'static MotorPdoConfig,       // Required Pdo mapping per node
 
     // TODO, these 2 seem similar?
     pub motor_state: MotorState,
