@@ -1,7 +1,8 @@
 use crate::{
     canopen::sdo::action::SdoAction,
     cia402::Cia402Identifier,
-    consts::{params::test::TEST_PARAMS, pdo::MotorPdoConfig},
+    consts::{TEST_LIMITS, params::test::TEST_PARAMS, pdo::MotorPdoConfig},
+    motor::{limits::MotorLimits, scaling::MotorScaling},
 };
 
 /// Configuration struct for a single CiA402 motor
@@ -14,7 +15,9 @@ pub struct MotorConfig {
     /// Full PDO Configuration for this motor
     pub pdo: &'static MotorPdoConfig,
     // /// Define how to map from SI units <-> Motor units
-    // pub scaling: MotorScaling,
+    pub scaling: MotorScaling,
+    // /// Define how to map from SI units <-> Motor units
+    pub limits: MotorLimits,
 }
 
 impl MotorConfig {
@@ -23,6 +26,8 @@ impl MotorConfig {
             id,
             default_parameters: TEST_PARAMS,
             pdo,
+            scaling: MotorScaling::test_setup(),
+            limits: TEST_LIMITS,
         }
     }
 }

@@ -1,4 +1,4 @@
-use crate::{canopen::frame::NodeId, oms::OperationMode, rt::RtSetpoint};
+use crate::{canopen::frame::NodeId, oms::OperationMode};
 
 pub mod channel;
 pub mod queue;

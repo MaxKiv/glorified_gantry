@@ -2,12 +2,16 @@ use tracing::error;
 
 use crate::{
     axis::GantryAxis,
-    gantry::{cfg::GantryCfg, setpoint::GantrySetpoint},
+    gantry::{
+        cfg::GantryCfg, feedback::GantryFeedback, setpoint::GantrySetpoint, skew::GantrySkew,
+    },
     motor::ctx::TickCtx,
 };
 
 pub mod cfg;
+pub mod feedback;
 pub mod setpoint;
+pub mod skew;
 
 pub struct Gantry {
     x: Option<GantryAxis>,
@@ -37,6 +41,33 @@ impl Gantry {
         [self.x.as_mut(), self.y.as_mut(), self.z.as_mut()]
             .into_iter()
             .flatten()
+    }
+
+    /// Get axi skew
+    pub fn get_axi_skew(&mut self) -> GantrySkew {
+        GantrySkew {
+            x: {
+                if let Some(ref x) = self.x {
+                    x.skew()
+                } else {
+                    None
+                }
+            },
+            y: {
+                if let Some(ref y) = self.y {
+                    y.skew()
+                } else {
+                    None
+                }
+            },
+            z: {
+                if let Some(ref z) = self.z {
+                    z.skew()
+                } else {
+                    None
+                }
+            },
+        }
     }
 
     /// Performs an Emergency Stop of the gantry
@@ -84,6 +115,14 @@ impl Gantry {
             && let Some(setpoint) = setpoint.z
         {
             axis.new_axis_setpoint(setpoint)
+        }
+    }
+
+    pub fn get_gantry_feedback(&self) -> GantryFeedback {
+        GantryFeedback {
+            x: self.x.as_ref().map(|axis| axis.get_axis_feedback()),
+            y: self.y.as_ref().map(|axis| axis.get_axis_feedback()),
+            z: self.z.as_ref().map(|axis| axis.get_axis_feedback()),
         }
     }
 }

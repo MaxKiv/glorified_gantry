@@ -4,7 +4,7 @@ pub mod pdo;
 
 use std::time::Duration;
 
-use crate::motor::limits::Cia402MotorLimits;
+use crate::motor::limits::MotorLimits;
 
 pub const MAX_NODE_ID: usize = 4;
 
@@ -47,13 +47,13 @@ pub const RT_CONFIG: RtConfig = RtConfig {
     max_axis_skew_mm: 1.0,
 };
 
-pub const DEMO_LIMITS: Cia402MotorLimits = Cia402MotorLimits {
+pub const DEMO_LIMITS: MotorLimits = MotorLimits {
     profile_velocity: 30u32,       // Revs/minute
     profile_acceleration: 20_000,  // Counts/s^2
     profile_decceleration: 20_000, // Counts/s^2
 };
 
-pub const TEST_LIMITS: Cia402MotorLimits = Cia402MotorLimits {
+pub const TEST_LIMITS: MotorLimits = MotorLimits {
     profile_velocity: 15u32,       // Revs/minute
     profile_acceleration: 20_000,  // Counts/s^2
     profile_decceleration: 20_000, // Counts/s^2

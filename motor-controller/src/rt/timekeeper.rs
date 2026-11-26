@@ -1,9 +1,8 @@
 use libc::timespec;
-use tracing::error;
 
 use crate::{consts::RT_CONFIG, rt::engine::cycle_rx::CyclePhase};
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct CycleTiming {
     cycle: u64,
     cycle_expected_ns: u64,

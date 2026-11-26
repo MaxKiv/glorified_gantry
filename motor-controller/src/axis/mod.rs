@@ -2,7 +2,7 @@ use tracing::{debug, info};
 use uom::si::f64::Length;
 
 use crate::{
-    axis::{cfg::AxisConfig, scaling::AxisScaling},
+    axis::{cfg::AxisConfig, feedback::AxisFeedback, scaling::AxisScaling},
     canopen::frame::{CanOpenFrame, NodeId},
     motor::{Cia402Motor, MotorRpdoSet, ctx::TickCtx},
     oms::setpoint::Setpoint,
@@ -10,6 +10,7 @@ use crate::{
 
 pub mod cfg;
 pub mod error;
+pub mod feedback;
 pub mod scaling;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -167,6 +168,13 @@ impl GantryAxis {
         tracing::warn!(system = "Axis", "AXIS ESTOP TRIGGERED");
         for motor in self.get_axis_motors_mut() {
             motor.do_e_stop();
+        }
+    }
+
+    pub fn get_axis_feedback(&self) -> AxisFeedback {
+        AxisFeedback {
+            master: self.master.get_feedback(),
+            slave: self.slave.as_ref().map(|s| s.get_feedback()),
         }
     }
 }

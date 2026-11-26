@@ -1,4 +1,5 @@
 use tracing::info;
+use uom::si::{length::millimeter, torque::newton_meter, velocity::millimeter_per_second};
 
 use crate::{
     canopen::{
@@ -8,8 +9,7 @@ use crate::{
         },
         pdo::{PdoType, RawRpdo, TransmissionType, message::RawPdoMessage},
     },
-    oms::OperationMode,
-    rt::MotorFeedback,
+    motor::{scaling::MotorScaling, state::MotorState},
     sw::StatusWord,
 };
 
@@ -104,7 +104,8 @@ impl OMSMotorPdoConfig {
     pub fn parse_tpdo(
         &self,
         tpdo: &RawPdoMessage,
-        feedback: &mut MotorFeedback,
+        state: &mut MotorState,
+        scaling: &MotorScaling,
     ) -> anyhow::Result<()> {
         match tpdo.pdo_type {
             PdoType::RPDO => anyhow::bail!("parse_rpdo called on RPDO"),
@@ -140,7 +141,7 @@ impl OMSMotorPdoConfig {
                         PdoSemantic::Statusword => {
                             let sw = StatusWord::from_bits_truncate(pdo_val.as_raw() as u16);
                             info!("parsed statusword: {:?}", sw);
-                            feedback.sw = sw
+                            state.sw = sw
                         }
                         PdoSemantic::ActualOperationMode => {
                             let raw = pdo_val.as_raw() as i8;
@@ -151,24 +152,39 @@ impl OMSMotorPdoConfig {
                                 )
                             })?;
                             info!("parsed opmode: {:?}", opmode);
-                            feedback.opmode = opmode;
+                            state.opmode = opmode;
                         }
                         PdoSemantic::ActualPosition => {
-                            let pos = pdo_val.as_raw() as i32;
-                            info!("parsed actual position: {:?}", pos);
-                            feedback.pos = pos
+                            let pos_raw = pdo_val.as_raw() as i32;
+                            let pos = scaling.from_device_pos(pos_raw);
+                            info!(
+                                "parsed raw position feedback {} -> {:?}mm",
+                                pos_raw,
+                                pos.get::<millimeter>()
+                            );
+                            state.pos = scaling.from_device_pos(pos_raw)
                         }
 
                         PdoSemantic::ActualVelocity => {
-                            let vel = pdo_val.as_raw() as i32;
-                            info!("parsed actual velocity: {:?}", vel);
-                            feedback.vel = vel
+                            let vel_raw = pdo_val.as_raw() as i32;
+                            let vel = scaling.from_device_vel(vel_raw);
+                            info!(
+                                "parsed raw velocity feedback {} -> {:?}mm/s",
+                                vel_raw,
+                                vel.get::<millimeter_per_second>()
+                            );
+                            state.vel = scaling.from_device_vel(vel_raw)
                         }
 
                         PdoSemantic::ActualTorque => {
-                            let torque = pdo_val.as_raw() as i16;
-                            info!("parsed actual torque: {:?}", torque);
-                            feedback.torque = torque;
+                            let torque_raw = pdo_val.as_raw() as i16;
+                            let torque = scaling.from_device_torque(torque_raw);
+                            info!(
+                                "parsed raw torque feedback {} -> {:?}Nm",
+                                torque_raw,
+                                torque.get::<newton_meter>()
+                            );
+                            state.torque = scaling.from_device_torque(torque_raw)
                         }
 
                         // Unexpected Pdo Value semantic, bail

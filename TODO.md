@@ -1,21 +1,16 @@
 ## To Figure out:
 
-src/canopen/mod.rs:141
-
-zero:
-
-- refactor SdoCommand et al to use NodeId instead of &Cia402Identifier...
+/home/max/git/saxion/glorified_gantry/motor-controller/src/rt/cmd/mod.rs:12
 
 First:
 
-- [ ] Complete Cia402Motor Scripting engine (tick(), poll())
-- [ ] figure out how to do Cia402 transitions in Cia402Motor
-- [ ] Cia402Motor RPDO scheduling in profile modes?
+- [ ] Currently cia402 transitions are just written to the ControlWord, add
+      required state machine in Cia402Motor
 - [ ] Figure out how & when to write CAN messages in RT loop?
 - [ ] Cia402Motor must write can sometimes, pass &mut CanOpen struct everywhere
-- [ ] Compile this shit
-- [ ] Construct CycleFeedback
 - [ ] Start testing, start small -> single drive bringup (parametrisation)
+- [ ] Cia402Motor RPDO scheduling in profile modes?
+- [ ] Improve CycleTiming, its a mess
 
 Later:
 

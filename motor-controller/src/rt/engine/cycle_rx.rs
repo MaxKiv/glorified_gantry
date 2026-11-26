@@ -1,10 +1,6 @@
 use tracing::{debug, info, warn};
 
-use crate::{
-    canopen::pdo::message::RawPdoMessage,
-    consts::MAX_NODE_ID,
-    rt::timekeeper::{CycleTiming, TimeKeeper},
-};
+use crate::rt::timekeeper::{CycleTiming, TimeKeeper};
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum CyclePhase {

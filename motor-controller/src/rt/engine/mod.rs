@@ -5,15 +5,14 @@ use std::thread::JoinHandle;
 
 use socketcan::{CanSocket, EmbeddedFrame, Frame, Socket};
 use tracing::{debug, error, info, trace, warn};
-use uom::si::length::millimeter;
+use uom::si::{f64::Length, length::millimeter};
 
 use crate::{
     canopen::{CanOpen, frame::CanOpenFrame},
     consts::RT_CONFIG,
     fifo::Fifo,
     frontend::{cmd::GantryCommand, event::GantryEvent},
-    gantry::setpoint::GantrySetpoint,
-    gantry::{Gantry, cfg::GantryCfg},
+    gantry::{Gantry, cfg::GantryCfg, setpoint::GantrySetpoint},
     motor::ctx::TickCtx,
     rt::{
         RtError,
@@ -23,15 +22,14 @@ use crate::{
             fds::RtEngineFds,
         },
         event::EventSender,
+        feedback::CycleFeedback,
+        timekeeper::CycleTiming,
         timerfd::{TimerFd, TimerType},
     },
 };
 
 const CMD_CHANNEL_SIZE: usize = RT_CONFIG.cmd_channel_size;
 const CMD_QUEUE_SIZE: usize = RT_CONFIG.cmd_channel_size;
-const X_AXIS: usize = 0;
-const Y_AXIS: usize = 1;
-const Z_AXIS: usize = 2;
 
 #[derive(Debug, Default, PartialEq)]
 pub enum RtState {
@@ -412,23 +410,17 @@ impl RtEngine {
         self.cycle_state
             .transition_cycle_phase(CyclePhase::ReceivedTpdo);
 
-        //   if (x-axis skew > large) -> ESTOP
-        debug!(system = "RtEngine", "Checking axis skew",);
-        let mut skew_detected = false;
-        for axis in self.gantry.get_axi_mut() {
-            if let Some(skew_mm) = axis.skew().map(|skew| skew.get::<millimeter>()) {
-                if skew_mm > RT_CONFIG.max_axis_skew_mm {
-                    error!(
-                        system = "RtEngine",
-                        "Excessive axis skew detected: {:?}mm > {:?}mm",
-                        skew_mm,
-                        RT_CONFIG.max_axis_skew_mm,
-                    );
-                    skew_detected = true;
-                }
-            }
-        }
-        if skew_detected {
+        // Calculate axis skew
+        let skew = self.gantry.get_axi_skew();
+        debug!(system = "RtEngine", "Axis skew: {}", skew);
+
+        // ESTOP if axis skew is too large
+        if skew.exceeds(Length::new::<millimeter>(RT_CONFIG.max_axis_skew_mm)) {
+            error!(
+                system = "RtEngine",
+                "Excessive axis skew detected: {} > {:?}mm", skew, RT_CONFIG.max_axis_skew_mm,
+            );
+
             self.gantry.do_e_stop();
             self.cycle_state
                 .transition_cycle_phase(CyclePhase::SdoWindow);
@@ -463,10 +455,13 @@ impl RtEngine {
         self.cycle_state
             .transition_cycle_phase(CyclePhase::SentRpdo);
 
-        // Construct CycleFeedback
-        todo!();
-        // Notify tokio of it somehow
-        todo!();
+        // Construct CycleFeedback for async consumption
+        let gantry_feedback = self.gantry.get_gantry_feedback();
+        let cycle_timing = self.cycle_state.get_cycle_timing();
+        let cycle_feedback = CycleFeedback::new(cycle_timing, skew, gantry_feedback);
+        self.event_tx.push(GantryEvent::Feedback(cycle_feedback));
+        // Notify async side
+        self.event_tx.notify();
 
         // Enter "SDO window" cycle phase
         self.cycle_state

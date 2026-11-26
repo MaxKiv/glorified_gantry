@@ -1,7 +1,9 @@
 pub mod cfg;
 pub mod ctx;
 pub mod error;
+pub mod feedback;
 pub mod limits;
+pub mod scaling;
 pub mod script;
 pub mod state;
 pub mod targets;
@@ -12,20 +14,20 @@ use crate::canopen::pdo::RawRpdo;
 use crate::canopen::pdo::mapping::PdoValue;
 use crate::canopen::sdo::action::SdoAction;
 use crate::canopen::sdo::manager::SdoPoll;
-use crate::consts::TEST_LIMITS;
-use crate::cw::ControlWord;
 use crate::motor::ControllerState::Faulted;
 use crate::motor::cfg::MotorConfig;
 use crate::motor::ctx::TickCtx;
-use crate::motor::limits::Cia402MotorLimits;
+use crate::motor::feedback::MotorFeedback;
+use crate::motor::limits::MotorLimits;
+use crate::motor::scaling::MotorScaling;
 use crate::motor::script::Purpose;
 use crate::motor::script::Script;
 use crate::motor::script::ScriptStep;
 use crate::motor::script::opmode_switch::get_pdo_remap_script;
 use crate::motor::script::parametrisation::get_parametrisation_script;
+use crate::motor::state::ControllerState;
+use crate::motor::state::MotorState;
 use crate::motor::targets::Cia402MotorTargets;
-use crate::rt::MotorFeedback;
-use crate::sw::StatusWord;
 use tracing::debug;
 use tracing::{error, info, trace, warn};
 use uom::si::length::millimeter;
@@ -39,93 +41,58 @@ use crate::{
     canopen::{
         MessageType,
         frame::CanOpenFrame,
-        nmt::{
-            NmtMonitorMessage,
-            NmtState::{self},
-        },
         pdo::{PdoType, mapping::OMSMotorPdoConfig},
         sdo::manager::SdoManager,
     },
     cia402::{Cia402Identifier, Cia402State},
     consts::pdo::MotorPdoConfig,
-    motor::{error::MotorError, state::MotorState},
+    motor::error::MotorError,
     oms::{OperationMode, setpoint::Setpoint},
 };
 
 pub struct Cia402Motor {
     pub id: Cia402Identifier,
+    targets: Cia402MotorTargets,                       // Profile targets
+    limits: MotorLimits,                               // Profile limits
+    scaling: MotorScaling, // Scaling from device specific quantity <-> SI units
+    default_parameters: &'static [SdoAction<'static>], // All configuration parameters
 
     sdo: SdoManager,
 
-    state: ControllerState,
-    tpdo_rx: [bool; 4],
+    active_setpoint: Setpoint,      // Active motor setpoint
+    control_state: ControllerState, // Current controller state
+    pub motor_state: MotorState,    // Current motor state
 
-    cia402_state: Cia402State,              // Current CiA402 state
-    nmt: NmtState,                          // Current NMT State
-    opmode: OperationMode,                  // Active operation mode
+    tpdo_rx: [bool; 4], // Tracks TPDO arrival per cycle
+
+    pdo_cfg: &'static MotorPdoConfig, // Required Pdo mapping per node
     active_cfg: &'static OMSMotorPdoConfig, // Current Pdo Mapping
-    pdo_cfg: &'static MotorPdoConfig,       // Required Pdo mapping per node
-
-    // TODO, these 2 seem similar?
-    pub motor_state: MotorState,
-    feedback: MotorFeedback,
 
     active_script: Option<Script>, // Active Configuration actions
-    active_setpoint: Setpoint,     // Active motor setpoint
-    controlword: ControlWord,      // Active controlword
-    statusword: StatusWord,        // Last received statusword
-
-    targets: Cia402MotorTargets,                       // Profile targets
-    limits: Cia402MotorLimits,                         // Profile limits
-    default_parameters: &'static [SdoAction<'static>], // All configuration parameters
-}
-
-/// State of the Cia402Motor Controller
-enum ControllerState {
-    Operating,           // Actively controlling motor
-    Configuring,         // Paused Operating to change motor configuration
-    Faulted(MotorError), // Something bad
 }
 
 impl Cia402Motor {
     pub fn start_parametrised(cfg: MotorConfig) -> Self {
-        let nmt = NmtState::Bootup;
-        let opmode = OperationMode::default();
-        let cia402_state = Cia402State::default();
-        let pdo_cfg = cfg.pdo;
-        let active_cfg = pdo_cfg.get_cfg_for_opmode(&opmode);
-        let limits = TEST_LIMITS.clone();
-
         let mut out = Self {
             id: cfg.id,
-            nmt,
-            opmode,
-            active_setpoint: Setpoint::default(),
-            cia402_state,
-            pdo_cfg,
-            active_cfg,
-            state: ControllerState::Configuring,
+            limits: cfg.limits,
+            scaling: cfg.scaling,
             default_parameters: cfg.default_parameters,
-            motor_state: MotorState::new(),
-            feedback: MotorFeedback::new(),
+            pdo_cfg: cfg.pdo,
+            active_cfg: cfg.pdo.get_cfg_for_opmode(&OperationMode::default()),
+            active_setpoint: Setpoint::default(),
+            control_state: ControllerState::Configuring,
             tpdo_rx: [false; 4],
             sdo: SdoManager::new(),
             targets: Cia402MotorTargets::new(),
-            limits,
-            controlword: ControlWord::default(),
-            statusword: StatusWord::default(),
             active_script: None,
+            motor_state: MotorState::new(),
         };
 
         // Start parametrised
         out.default_parametrisation();
 
         out
-    }
-
-    pub fn process_nmt_message(&mut self, msg: NmtMonitorMessage) {
-        debug_assert!(msg.node_id == self.id.node_id);
-        self.nmt = msg.current_state;
     }
 
     /// Sets new motor setpoint
@@ -184,7 +151,7 @@ impl Cia402Motor {
         self.sdo.tick(ctx);
 
         // Cia402Motor State machine
-        match &self.state {
+        match &self.control_state {
             Faulted(e) => {
                 // TODO: decide what to do here?
                 // GantryAxis should know about this for sure, to prevent skew
@@ -195,9 +162,12 @@ impl Cia402Motor {
             Operating => {
                 // Check if setpoint is new & requires opmode switch
                 let new_opmode = self.active_setpoint.required_opmode();
-                if self.opmode != new_opmode {
+                if self.motor_state.opmode != new_opmode {
                     // Does this opmode switch warrant a PDO remapping?
-                    if switching_opmode_requires_pdo_remapping(&self.opmode, &new_opmode) {
+                    if switching_opmode_requires_pdo_remapping(
+                        &self.motor_state.opmode,
+                        &new_opmode,
+                    ) {
                         // Get new opmode PDO mapping
                         let new_pdo_cfg = self.pdo_cfg.get_cfg_for_opmode(&new_opmode);
 
@@ -212,7 +182,7 @@ impl Cia402Motor {
                         self.run_script(script);
                     } else {
                         // No PDO remap required, plain switch -> updated through RPDO later
-                        self.opmode = new_opmode;
+                        self.motor_state.opmode = new_opmode;
                     }
                 }
             }
@@ -230,8 +200,8 @@ impl Cia402Motor {
 
                 let step = &script.steps[script.cursor];
                 let done = match step {
-                    ScriptStep::QuickStop => self.cia402_state.is_quick_stopped(),
-                    ScriptStep::Nmt { expect, .. } => self.nmt == *expect,
+                    ScriptStep::QuickStop => self.motor_state.cia402_state.is_quick_stopped(), // picked up in rpdo
+                    ScriptStep::Nmt { expect, .. } => self.motor_state.nmt == *expect,
                     ScriptStep::Sdo(_) => match self.sdo.poll() {
                         // non-blocking
                         SdoPoll::Done(Ok(_)) => true,
@@ -245,10 +215,10 @@ impl Cia402Motor {
                         SdoPoll::Idle => false,
                     },
                     ScriptStep::EnableOperation => {
-                        self.cia402_state == Cia402State::OperationEnabled
+                        self.motor_state.cia402_state == Cia402State::OperationEnabled // picked up in rpdo
                     }
                     ScriptStep::DisableOperation => {
-                        self.cia402_state == Cia402State::SwitchOnDisabled
+                        self.motor_state.cia402_state == Cia402State::SwitchOnDisabled // picked up in rpdo
                     }
                     ScriptStep::Settle(d) => ctx.now - script.started >= *d,
                 };
@@ -340,7 +310,7 @@ impl Cia402Motor {
                     "Got NMT MONITOR (feedback) MSG: {:?}", nmt_mon
                 );
 
-                self.nmt = nmt_mon.current_state;
+                self.motor_state.nmt = nmt_mon.current_state;
             }
 
             MessageType::RSDO(s) => {
@@ -369,7 +339,10 @@ impl Cia402Motor {
                     );
 
                     // Attempt to parse TPDO
-                    match self.active_cfg.parse_tpdo(&pdo, &mut self.feedback) {
+                    match self
+                        .active_cfg
+                        .parse_tpdo(&pdo, &mut self.motor_state, &self.scaling)
+                    {
                         Ok(_) => {
                             info!(
                                 system = "Cia402Motor",
@@ -377,9 +350,7 @@ impl Cia402Motor {
                                 self.id.node_id.u8()
                             );
 
-                            self.motor_state.update_from_motor_feedback(&self.feedback);
-
-                            if self.opmode.is_cyclic_synchronous() {
+                            if self.motor_state.opmode.is_cyclic_synchronous() {
                                 // Mark this RPDO as received for this cycle
                                 self.tpdo_rx[pdo.num] = true;
                             }
@@ -402,6 +373,10 @@ impl Cia402Motor {
                 );
             }
         }
+    }
+
+    pub fn get_feedback(&self) -> MotorFeedback {
+        MotorFeedback::from_motor_state(&self.motor_state)
     }
 
     pub fn on_cycle_start(&mut self) {
@@ -437,11 +412,11 @@ impl Cia402Motor {
             }
             PdoSemantic::Statusword => PdoValue {
                 semantic: semantic.clone(),
-                value: ODValue::U16(self.statusword.bits()),
+                value: ODValue::U16(self.motor_state.sw.bits()),
             },
             PdoSemantic::Controlword => PdoValue {
                 semantic: semantic.clone(),
-                value: ODValue::U16(self.controlword.bits()),
+                value: ODValue::U16(self.motor_state.cw.bits()),
             },
             PdoSemantic::ActualPosition => PdoValue {
                 semantic: semantic.clone(),
@@ -457,7 +432,7 @@ impl Cia402Motor {
             },
             PdoSemantic::ActualOperationMode => PdoValue {
                 semantic: semantic.clone(),
-                value: ODValue::I8(self.opmode.into()),
+                value: ODValue::I8(self.motor_state.opmode.into()),
             },
             PdoSemantic::TargetOperationMode => PdoValue {
                 semantic: semantic.clone(),
@@ -520,14 +495,14 @@ impl Cia402Motor {
             "{:?} -> Running script {:?}", script.purpose, script
         );
         self.active_script = Some(script);
-        self.state = ControllerState::Configuring;
+        self.control_state = ControllerState::Configuring;
     }
 
     fn fault(&mut self, error: MotorError) {
         error!(system = "Cia402Motor", "FAULT - {:?}", error);
         self.do_e_stop();
 
-        self.state = Faulted(error);
+        self.control_state = Faulted(error);
     }
 
     fn finish_script(&mut self) {
@@ -545,7 +520,7 @@ impl Cia402Motor {
             system = "Cia402Motor",
             "Finished {:?} script - Start Operating", script.purpose
         );
-        self.state = ControllerState::Operating;
+        self.control_state = ControllerState::Operating;
     }
 }
 
